@@ -177,7 +177,7 @@ function carregarLocal() {
 async function carregarDoSheets() {
   const setS=function(html){document.querySelectorAll("#sheets-status").forEach(function(d){d.innerHTML=html;});};
 
-  function carregarPagina(pagina, acumuladas) {
+  function carregarPagina(pagina) {
     return new Promise(function(resolve){
       const cb="bcs_cb_"+Date.now()+"_"+pagina;
       const s=document.createElement("script");
@@ -186,19 +186,22 @@ async function carregarDoSheets() {
       const t=setTimeout(function(){
         if(done)return; done=true;
         delete window[cb]; s.remove();
-        // Fallback fetch
-        fetch(SHEETS_URL+"?acao=ler&pagina="+pagina, {method:"GET",redirect:"follow"})
-          .then(function(r){return r.text();})
-          .then(function(txt){
-            try{
-              const json=txt.replace(/^[^(]+\(/,"").replace(/\);?\s*$/,"").trim();
-              resolve(JSON.parse(json));
-            }catch(e){ resolve(null); }
-          }).catch(function(){ resolve(null); });
-      }, 20000);
+        console.log("[BCS] Timeout pagina "+pagina);
+        resolve(null);
+      }, 30000);
 
-      window[cb]=function(rj){ if(done)return; done=true; clearTimeout(t); delete window[cb]; s.remove(); resolve(rj); };
-      s.onerror=function(){ if(done)return; done=true; clearTimeout(t); delete window[cb]; s.remove(); resolve(null); };
+      window[cb]=function(rj){
+        if(done)return; done=true;
+        clearTimeout(t); delete window[cb]; s.remove();
+        console.log("[BCS] Pagina "+pagina+" recebida: "+(rj&&rj.dados?rj.dados.ocorrencias.length+" ocs":"erro"));
+        resolve(rj);
+      };
+      s.onerror=function(){
+        if(done)return; done=true;
+        clearTimeout(t); delete window[cb]; s.remove();
+        console.log("[BCS] Erro script pagina "+pagina);
+        resolve(null);
+      };
       s.src=SHEETS_URL+"?acao=ler&pagina="+pagina+"&callback="+cb;
       document.head.appendChild(s);
     });
@@ -251,7 +254,7 @@ async function carregarDoSheets() {
       seen.add(k); return true;
     });
 
-    salvarLocal(); render();
+    salvarLocal();
     const n = state.db.ocorrencias.length;
     showToast(n+" ocorrência(s) carregadas!");
     setS("<span style='color:#6b8c42'>✓ "+n+" ocorrências · "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"</span>");
