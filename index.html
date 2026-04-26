@@ -428,15 +428,6 @@
             min-width: 100px;
         }
 
-        .btn-visualizar {
-            background: var(--cor-secundaria);
-            color: white;
-        }
-
-        .btn-visualizar:hover {
-            background: #2980b9;
-        }
-
         .btn-atender {
             background: var(--cor-sucesso);
             color: white;
@@ -444,15 +435,6 @@
 
         .btn-atender:hover {
             background: #229954;
-        }
-
-        .btn-historico {
-            background: var(--cor-info);
-            color: white;
-        }
-
-        .btn-historico:hover {
-            background: #138d75;
         }
 
         /* ═══════════════════════════════════════════════════════════════════ */
@@ -496,16 +478,6 @@
         .hot-spot-item.alto {
             border-left-color: var(--cor-aviso);
             background: #fffaf0;
-        }
-
-        .hot-spot-item.medio {
-            border-left-color: #f1c40f;
-            background: #fffef0;
-        }
-
-        .hot-spot-item.baixo {
-            border-left-color: var(--cor-sucesso);
-            background: #f0fdf4;
         }
 
         .hot-spot-nome {
@@ -579,41 +551,10 @@
             border-color: var(--cor-secundaria);
         }
 
-        .dia-calendario.com-agendamento {
-            background: #e3f2fd;
-            border-color: var(--cor-secundaria);
-            font-weight: 600;
-        }
-
         .numero-dia {
             font-weight: 600;
             color: var(--cor-primaria);
             margin-bottom: 5px;
-        }
-
-        .bolinhas-risco {
-            display: flex;
-            justify-content: center;
-            gap: 2px;
-            flex-wrap: wrap;
-        }
-
-        .bolinha {
-            width: 6px;
-            height: 6px;
-            border-radius: 50%;
-        }
-
-        .bolinha.elevado {
-            background: var(--cor-perigo);
-        }
-
-        .bolinha.medio {
-            background: var(--cor-aviso);
-        }
-
-        .bolinha.baixo {
-            background: var(--cor-sucesso);
         }
 
         /* ═══════════════════════════════════════════════════════════════════ */
@@ -640,24 +581,6 @@
         .secao-relatorio h3 {
             color: var(--cor-primaria);
             margin-bottom: 15px;
-        }
-
-        .resumo-ficha {
-            background: var(--cor-bg);
-            padding: 15px;
-            border-radius: 5px;
-            margin-bottom: 15px;
-        }
-
-        .resumo-item {
-            display: flex;
-            justify-content: space-between;
-            margin: 10px 0;
-            font-size: 14px;
-        }
-
-        .resumo-item strong {
-            color: var(--cor-primaria);
         }
 
         .botoes-relatorio {
@@ -891,71 +814,6 @@
         }
 
         /* ═══════════════════════════════════════════════════════════════════ */
-        /* MODALS */
-        /* ═══════════════════════════════════════════════════════════════════ */
-
-        .modal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.5);
-            z-index: 1000;
-            overflow-y: auto;
-        }
-
-        .modal.ativo {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal-conteudo {
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            max-width: 600px;
-            width: 95%;
-            max-height: 90vh;
-            overflow-y: auto;
-            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            border-bottom: 2px solid var(--cor-border);
-            padding-bottom: 15px;
-        }
-
-        .modal-header h2 {
-            color: var(--cor-primaria);
-            margin: 0;
-        }
-
-        .btn-fechar-modal {
-            background: none;
-            border: none;
-            font-size: 24px;
-            cursor: pointer;
-            color: var(--cor-texto-claro);
-        }
-
-        .modal-body {
-            margin-bottom: 20px;
-        }
-
-        .modal-footer {
-            display: flex;
-            gap: 10px;
-            justify-content: flex-end;
-        }
-
-        /* ═══════════════════════════════════════════════════════════════════ */
         /* MODAL FONAR */
         /* ═══════════════════════════════════════════════════════════════════ */
 
@@ -1112,7 +970,6 @@
 
             .tabs-gestor {
                 overflow-x: auto;
-                gap: 0;
             }
 
             .tab-btn {
@@ -1143,10 +1000,6 @@
             }
 
             .btn-card {
-                width: 100%;
-            }
-
-            .modal-conteudo {
                 width: 100%;
             }
 
@@ -1439,7 +1292,7 @@
                     <div class="form-visita-linha">
                         <div class="form-visita-item" style="grid-column: 1/-1;">
                             <label>Observações / Resultado da Visita</label>
-                            <textarea id="vc-observacoes" placeholder="Descreva o que foi observado, estado da vítima, atitudes do agressor, medidas necessárias, etc."></textarea>
+                            <textarea id="vc-observacoes" placeholder="Descreva o que foi observado..."></textarea>
                         </div>
                     </div>
                     
@@ -1513,7 +1366,7 @@
                     <div class="form-visita-linha">
                         <div class="form-visita-item" style="grid-column: 1/-1;">
                             <label>Observações / Situação Encontrada</label>
-                            <textarea id="vs-observacoes" placeholder="Descreva a situação encontrada, necessidades identificadas, ações realizadas, encaminhamentos feitos, etc."></textarea>
+                            <textarea id="vs-observacoes" placeholder="Descreva a situação encontrada..."></textarea>
                         </div>
                     </div>
                     
@@ -1567,8 +1420,8 @@
 <!-- ═══════════════════════════════════════════════════════════════════ -->
 
 <script>
-    // ⚙️ CONFIGURAÇÃO
-    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/SUA_URL_V10_AQUI/exec';
+    // ⚙️ CONFIGURAÇÃO - URL DO APPS SCRIPT v10
+    const GOOGLE_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxyAL5wi4qrFoxpImD3GE-vsn6ZReU97rZTJZkLVGbFTgr49eiWTmfyxgYRqo7GDtprtA/exec';
 
     // ═══════════════════════════════════════════════════════════════════
     // LOGIN
@@ -1702,7 +1555,7 @@
         sessionStorage.setItem('fonar-id', id);
         sessionStorage.setItem('fonar-nome', nome);
         document.getElementById('modal-fonar').classList.add('ativo');
-        console.log('FONAR iniciado para:', nome);
+        inicializarFONAR();
     }
 
     function fecharModalFONAR() {
@@ -1733,7 +1586,6 @@
             html += `
                 <div class="dia-calendario">
                     <div class="numero-dia">${dia}</div>
-                    <div class="bolinhas-risco"></div>
                 </div>
             `;
         }
@@ -1756,6 +1608,10 @@
         
         document.getElementById('kpi-elevado-pct').textContent = 
             ((dados.distribuicaoRisco?.elevado || 0) / total * 100).toFixed(1) + '%';
+        document.getElementById('kpi-medio-pct').textContent = 
+            ((dados.distribuicaoRisco?.medio || 0) / total * 100).toFixed(1) + '%';
+        document.getElementById('kpi-baixo-pct').textContent = 
+            ((dados.distribuicaoRisco?.baixo || 0) / total * 100).toFixed(1) + '%';
     }
 
     // ═══════════════════════════════════════════════════════════════════
@@ -1789,7 +1645,6 @@
         console.log('Visita Comunitária Registrada:', dados);
         alert('✓ Visita Comunitária Registrada com Sucesso!');
         
-        // Limpar formulário
         document.getElementById('vc-nome').value = '';
         document.getElementById('vc-data').value = '';
         document.getElementById('vc-observacoes').value = '';
@@ -1815,7 +1670,6 @@
         console.log('Visita Solidária Registrada:', dados);
         alert('✓ Visita Solidária Registrada com Sucesso!');
         
-        // Limpar formulário
         document.getElementById('vs-nome').value = '';
         document.getElementById('vs-data').value = '';
         document.getElementById('vs-observacoes').value = '';
@@ -1830,6 +1684,8 @@
     console.log('  Operador: 0000');
     console.log('  Gestor: 1234');
 </script>
+
+<script src="js/fonar.js"></script>
 
 </body>
 </html>
