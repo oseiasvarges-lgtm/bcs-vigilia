@@ -174,7 +174,10 @@ function carregarLocal() {
   return{ocorrencias:[],atendimentos:[],visitas:[],agendamentos:[]};
 }
 
+let _carregando = false;
 async function carregarDoSheets() {
+  if(_carregando){ console.log("[BCS] já carregando, ignorando chamada dupla"); return; }
+  _carregando = true;
   const setS=function(html){document.querySelectorAll("#sheets-status").forEach(function(d){d.innerHTML=html;});};
 
   function carregarPagina(pagina) {
@@ -186,20 +189,17 @@ async function carregarDoSheets() {
       const t=setTimeout(function(){
         if(done)return; done=true;
         delete window[cb]; s.remove();
-        console.log("[BCS] Timeout pagina "+pagina);
         resolve(null);
       }, 30000);
 
       window[cb]=function(rj){
         if(done)return; done=true;
         clearTimeout(t); delete window[cb]; s.remove();
-        console.log("[BCS] Pagina "+pagina+" recebida: "+(rj&&rj.dados?rj.dados.ocorrencias.length+" ocs":"erro"));
         resolve(rj);
       };
       s.onerror=function(){
         if(done)return; done=true;
         clearTimeout(t); delete window[cb]; s.remove();
-        console.log("[BCS] Erro script pagina "+pagina);
         resolve(null);
       };
       s.src=SHEETS_URL+"?acao=ler&pagina="+pagina+"&callback="+cb;
@@ -230,18 +230,22 @@ async function carregarDoSheets() {
     const totalReal = rj0.total || 0;
     const totalPaginas = totalReal > 0 ? Math.ceil(totalReal / 1500) : 10;
     const temMaisFlag = rj0.temMais !== undefined ? rj0.temMais : (todasOcs.length >= 1500);
-    console.log("[BCS] versao="+rj0.versao+" total="+totalReal+" temMais="+rj0.temMais+" ocs_p0="+todasOcs.length+" totalPaginas="+totalPaginas);
 
     if(temMaisFlag || (totalReal > todasOcs.length)) {
       for(let p = 1; p < Math.min(totalPaginas, 20); p++) {
         setS("<span style='color:#6a5a30'>Carregando página "+(p+1)+(totalReal?"/"+totalPaginas:"")+"...</span>");
-        const rjP = await carregarPagina(p, []);
-        if(!rjP || !rjP.ok || !rjP.dados || !(rjP.dados.ocorrencias||[]).length) break;
+        let rjP = null;
+        for(let t = 0; t < 3; t++) {
+          rjP = await carregarPagina(p);
+          if(rjP && rjP.ok && rjP.dados && (rjP.dados.ocorrencias||[]).length > 0) break;
+          await new Promise(function(r){ setTimeout(r, 1500); });
+        }
+        if(!rjP || !rjP.ok || !(rjP.dados||{}).ocorrencias || !rjP.dados.ocorrencias.length) {
+          break;
+        }
         todasOcs = todasOcs.concat(rjP.dados.ocorrencias);
         setS("<span style='color:#6a5a30'>"+todasOcs.length+(totalReal?"/"+totalReal:"")+" carregadas...</span>");
-        await new Promise(function(r){ setTimeout(r, 500); });
-        // Parar se página veio vazia ou menor que o esperado
-        if(rjP.dados.ocorrencias.length < 100) break;
+        await new Promise(function(r){ setTimeout(r, 800); });
       }
     }
 
@@ -258,8 +262,10 @@ async function carregarDoSheets() {
     const n = state.db.ocorrencias.length;
     showToast(n+" ocorrência(s) carregadas!");
     setS("<span style='color:#6b8c42'>✓ "+n+" ocorrências · "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"</span>");
+    _carregando = false;
 
   } catch(e) {
+    _carregando = false;
     setS("<span style='color:#ef4444'>⚠ "+e.message+"</span>");
   }
 }
@@ -1097,8 +1103,7 @@ function fazerLogin(tipo){
   if(pin===exp){
     state.perfil=tipo;
     render();
-    // Carrega dados atualizados da planilha em background
-    carregarDoSheets();
+    // Não recarregar do Sheets aqui para não sobrescrever os dados já carregados
   }
   else{const e=document.getElementById("pin-err");if(e)e.style.display="block";}
 }
