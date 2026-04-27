@@ -1692,6 +1692,102 @@ function atualizarMapa(){
   const periodo=document.getElementById("mapa-periodo")?.value||"hoje";
   renderMapaCalor(document.getElementById("mapa-calor-bairros"), tipo, periodo);
 }
+// ── Cache de geocodificação ──────────────────────────
+const _geoCache = (function(){
+  try{ return JSON.parse(localStorage.getItem("bcs_geo_cache")||"{}"); }catch(e){ return {}; }
+})();
+function _salvarGeoCache(){ try{ localStorage.setItem("bcs_geo_cache", JSON.stringify(_geoCache)); }catch(e){} }
+
+async function _geocodificar(endereco, cidade){
+  const chave = (endereco+"|"+cidade).toLowerCase().trim();
+  if(_geoCache[chave]) return _geoCache[chave];
+  try{
+    const q = encodeURIComponent(endereco+", "+cidade+", Bahia, Brasil");
+    const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+q;
+    const r = await fetch(url, {headers:{"Accept-Language":"pt-BR","User-Agent":"BCS-Vigilia/1.0"}});
+    const data = await r.json();
+    if(data && data[0]){
+      const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
+      _geoCache[chave] = coords;
+      _salvarGeoCache();
+      return coords;
+    }
+  }catch(e){}
+  return null;
+}
+
+function _corTipo(tipo, descricao){
+  const t = ((tipo||"")+" "+(descricao||"")).toLowerCase();
+  if(/homicídio|homicidio|latrocínio|feminicídio|feminicidio/.test(t)) return "#ef4444";
+  if(/tentativa de homicídio|tentativa/.test(t)) return "#f97316";
+  if(/roubo/.test(t)) return "#f97316";
+  if(/furto/.test(t)) return "#eab308";
+  if(/violência doméstica|violencia domestica|maria da penha/.test(t)) return "#a855f7";
+  if(/tráfico|trafico/.test(t)) return "#06b6d4";
+  if(/lesão|lesao|ameaça|ameaca/.test(t)) return "#10b981";
+  return "#c8a84b";
+}
+
+function _iconeOc(cor, tam){
+  tam = tam||14;
+  return L.divIcon({
+    html:"<div class='marcador-crime' style='width:"+tam+"px;height:"+tam+"px'>"+
+         "<div class='anel' style='background:"+cor+";width:"+tam+"px;height:"+tam+"px'></div>"+
+         "<div class='ponto' style='background:"+cor+";width:"+(tam*0.55)+"px;height:"+(tam*0.55)+"px;z-index:2;position:relative'></div></div>",
+    className:"", iconSize:[tam,tam], iconAnchor:[tam/2,tam/2]
+  });
+}
+
+function _popupOc(o, cor){
+  const end = o.vitima_endereco||o.bairro||"—";
+  return "<div style='min-width:200px;font-family:sans-serif'>"+
+    "<p style='font-weight:700;font-size:12px;color:"+cor+";margin-bottom:4px'>"+((o.tipo||"—").toUpperCase())+"</p>"+
+    "<p style='color:#ccc;font-size:11px;margin-bottom:2px'>📍 "+end+"</p>"+
+    (o.vitima_nome?"<p style='color:#aaa;font-size:11px'>👤 "+o.vitima_nome+(o.vitima_idade?" ("+o.vitima_idade+"a)":"")+"</p>":"")+
+    (o.suspeito_nome&&o.suspeito_nome!=="Não identificado"?"<p style='color:#f87171;font-size:11px'>⚠ "+o.suspeito_nome+"</p>":"")+
+    "<p style='color:#555;font-size:10px;margin-top:4px'>"+fmtData(o.data)+" "+(fmtHora(o.hora)||"")+"</p>"+
+    "</div>";
+}
+
+async function _renderPontosRua(mapa, ocs, BAIRROS, matchB){
+  const CIDADE = "Vitória da Conquista";
+  const delay = ms => new Promise(r=>setTimeout(r,ms));
+  let geocodificados = 0, fallbacks = 0;
+
+  for(let i=0; i<ocs.length; i++){
+    const o = ocs[i];
+    const cor = _corTipo(o.tipo, o.descricao);
+    let coords = null;
+
+    // Tenta geocodificar pelo endereço
+    if(o.vitima_endereco && o.vitima_endereco.trim().length > 5){
+      coords = await _geocodificar(o.vitima_endereco, CIDADE);
+      if(coords) geocodificados++;
+      await delay(1100); // respeita 1 req/s do Nominatim
+    }
+
+    // Fallback: centro do bairro com offset aleatório para não empilhar
+    if(!coords){
+      const bNome = matchB(o.bairro);
+      if(bNome && BAIRROS[bNome]){
+        const base = BAIRROS[bNome];
+        coords = [base[0]+(Math.random()-0.5)*0.004, base[1]+(Math.random()-0.5)*0.004];
+        fallbacks++;
+      }
+    }
+
+    if(!coords) continue;
+
+    // Verifica se mapa ainda existe (usuário pode ter trocado de tela)
+    if(!window._mapa || window._mapa !== mapa) break;
+
+    const tam = 14;
+    const marker = L.marker(coords, {icon:_iconeOc(cor, tam)}).addTo(mapa);
+    marker.bindPopup(_popupOc(o, cor), {maxWidth:240});
+  }
+  console.log("[BCS] Mapa: "+geocodificados+" geocodificados, "+fallbacks+" por bairro");
+}
+
 function renderMapaCalor(el, tipoFiltro, periodoFiltro){
   if(!el)return;
   tipoFiltro=tipoFiltro||"todos";
@@ -1775,56 +1871,33 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
     return palavras.some(function(p){return tN.includes(p);});
   });
 
-  const cnt={};Object.keys(BAIRROS).forEach(function(b){cnt[b]=[];});
-  ocs.forEach(function(o){
-    const b=matchB(o.bairro);
-    if(b)cnt[b].push(o);
-  });
-  const mx=Math.max.apply(null,Object.values(cnt).map(function(v){return v.length;}).concat([1]));
   const totalOcs=ocs.length;
 
   el.style.padding="0";
-  el.style.height="340px";
-  el.style.minHeight="340px";
-  el.innerHTML="<div id='mapa-leaflet' style='height:340px;width:100%;min-height:340px'></div>";
+  el.style.height="380px";
+  el.style.minHeight="380px";
+  el.innerHTML=
+    "<div style='padding:6px 12px;background:#141208;border-bottom:1px solid #2a2818;display:flex;align-items:center;justify-content:space-between'>"+
+    "<span style='color:#5a5535;font-size:10px'>📍 "+totalOcs+" ocorrência(s) · pontos por rua (cache local)</span>"+
+    "<div style='display:flex;gap:8px;align-items:center;font-size:9px'>"+
+    "<span style='color:#ef4444'>● Homicídio</span><span style='color:#f97316'>● Roubo</span>"+
+    "<span style='color:#eab308'>● Furto</span><span style='color:#a855f7'>● VD</span>"+
+    "<span style='color:#06b6d4'>● Tráfico</span><span style='color:#10b981'>● Outros</span></div></div>"+
+    "<div id='mapa-leaflet' style='height:340px;width:100%;min-height:340px'></div>";
+
   if(window._mapa){window._mapa.remove();window._mapa=null;}
-  // Garantir que o DOM atualizou antes de inicializar o Leaflet
+
   requestAnimationFrame(function(){setTimeout(function(){
     const mel=document.getElementById("mapa-leaflet");if(!mel)return;
-    const mapa=L.map("mapa-leaflet",{center:[-14.852,-40.839],zoom:14,zoomControl:true,scrollWheelZoom:false});
+    const mapa=L.map("mapa-leaflet",{center:[-14.852,-40.839],zoom:14,zoomControl:true,scrollWheelZoom:true});
     window._mapa=mapa;
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"© CARTO",maxZoom:19}).addTo(mapa);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"© CARTO © OSM",maxZoom:19}).addTo(mapa);
+
+    // Limites da 77ª CIPM
     L.circle([-14.852,-40.839],{radius:1800,color:"#c8a84b",fillColor:"#c8a84b",fillOpacity:0.04,weight:1,dashArray:"4 4"}).addTo(mapa);
 
-    Object.keys(cnt).forEach(function(bairro){
-      const ocB=cnt[bairro],n=ocB.length,coords=BAIRROS[bairro];
-      const pct=n/mx,tam=n===0?8:Math.min(12+n*5,34);
-      const cor=n===0?"#2a4a2a":pct>0.7?"#ef4444":pct>0.4?"#f97316":pct>0.1?"#eab308":"#10b981";
-      const vel=pct>0.5?"0.7s":"1.3s";
-      const html=n===0
-        ?"<div style='width:8px;height:8px;border-radius:50%;background:#2a3828;border:1px solid #3a5a3a;opacity:0.4'></div>"
-        :"<div class='marcador-crime' style='width:"+tam+"px;height:"+tam+"px'><div class='anel' style='background:"+cor+";animation-duration:"+vel+";width:"+tam+"px;height:"+tam+"px'></div><div class='ponto' style='background:"+cor+";animation-duration:"+vel+";width:"+(tam*0.55)+"px;height:"+(tam*0.55)+"px;z-index:2;position:relative'></div></div>";
-      const icone=L.divIcon({html:html,className:"",iconSize:[tam,tam],iconAnchor:[tam/2,tam/2]});
-      const marker=L.marker(coords,{icon:icone}).addTo(mapa);
-      var pop="<div style='min-width:200px;font-family:sans-serif'><p style='font-weight:700;font-size:13px;margin-bottom:4px;color:"+cor+"'>"+bairro+"</p>";
-      if(n===0){pop+="<p style='color:#888;font-size:12px'>Sem ocorrências no período</p>";}
-      else{
-        pop+="<p style='color:#ccc;font-size:11px;margin-bottom:6px'>"+n+" ocorrência(s)</p>";
-        ocB.slice(0,5).forEach(function(o){
-          pop+="<div style='border-left:2px solid "+cor+";padding:3px 8px;margin-bottom:3px;background:#1a1a1a;border-radius:0 4px 4px 0'>";
-          pop+="<p style='font-size:10px;font-weight:700;color:#ddd'>"+((o.tipo||"—").toUpperCase())+"</p>";
-          pop+="<p style='font-size:10px;color:#888'>"+fmtData(o.data)+" "+(fmtHora(o.hora)||"")+" · "+(o.vitima_nome||"—")+"</p></div>";
-        });
-        if(n>5)pop+="<p style='color:#666;font-size:10px;margin-top:4px'>+"+(n-5)+" mais</p>";
-      }
-      pop+="</div>";
-      marker.bindPopup(pop,{maxWidth:230});
-      if(n>0){
-        L.tooltip({permanent:true,direction:"top",offset:[0,-(tam/2+4)],className:""})
-          .setContent("<span style='font-size:10px;font-weight:700;color:"+cor+";background:rgba(0,0,0,0.75);padding:2px 6px;border-radius:4px'>"+bairro+" ("+n+")</span>")
-          .setLatLng(coords).addTo(mapa);
-      }
-    });
+    // Renderiza pontos com geocodificação async
+    _renderPontosRua(mapa, ocs, BAIRROS, matchB);
 
     // Legenda
     const leg=L.control({position:"bottomright"});
@@ -2164,43 +2237,4 @@ function renderDashboardOperador(main,ocs,hoje_){
       h+="<span style='font-size:18px'>🚗</span><div style='flex:1;min-width:0'>";
       h+="<p style='color:#d4a830;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+o.veiculo+"</p>";
       h+="<p style='color:#5a4a10;font-size:10px'>"+badge+" · "+(o.bairro||"—")+"</p>";
-      h+="<p style='color:#3a2e08;font-size:10px'>"+fmtData(o.data)+"</p></div></div>";
-    });
-  }
-  h+="</div></div>";
-
-  h+="<div style='background:#1a1808;border:1px solid #3a4a28;border-radius:14px;overflow:hidden;margin-bottom:16px'>";
-  h+="<div style='padding:10px 16px;border-bottom:1px solid #2a3818'><p style='color:#6a8a50;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>📝 Recados ao Próximo Turno</p></div>";
-  h+="<div style='padding:14px 16px;border-bottom:1px solid #1e2818'>";
-  h+="<textarea id='recado-input' rows='3' placeholder='Registre um aviso ou pendência para o próximo operador...' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:11px 13px;border-radius:9px;font-size:13px;resize:vertical;line-height:1.7;outline:none;font-family:inherit;margin-bottom:10px' onfocus=\"this.style.borderColor='#6a8a50'\" onblur=\"this.style.borderColor='#2a3818'\"></textarea>";
-  h+="<button onclick='salvarRecado()' style='background:linear-gradient(135deg,#3a5a28,#2a4a18);border:none;color:#a8d890;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📨 Registrar Recado</button>";
-  h+="</div><div id='recados-container' style='padding:12px 16px;max-height:240px;overflow-y:auto'></div></div>";
-
-
-
-  h+="<div id='rec-op-banner' style='margin-bottom:16px'>";
-  h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px'>";
-  h+="<span class='spin' style='border-top-color:#c8a84b;width:14px;height:14px;border-width:2px'></span>";
-  h+="<span style='color:#5a4a20;font-size:12px'>Verificando alertas de veículos...</span></div></div>";
-  h+="</div>";
-
-  main.innerHTML=h;
-  // Inserir campo de lançar no INÍCIO do main
-  if(divLancar && main.firstChild){
-    main.insertBefore(divLancar, main.firstChild);
-  } else if(divLancar){
-    main.appendChild(divLancar);
-  }
-  // Eventos do textarea
-  var ta=document.getElementById("paste-area");
-  if(ta){
-    ta.addEventListener("focus",function(){this.style.borderColor="#c8a84b";});
-    ta.addEventListener("blur",function(){this.style.borderColor="#3a3818";});
-  }
-}
-
-render();
-if(SHEETS_URL){carregarDoSheets();}
-</script>
-</body>
-</html>
+      h+="<p style='color:#3a2e08;font-siz
