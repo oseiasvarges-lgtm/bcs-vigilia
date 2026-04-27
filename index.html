@@ -1844,7 +1844,7 @@ const BAIRROS={
   "Alto Maron":[-14.8527,-40.8326],
   "Felicia":[-14.8730,-40.8330],
   "Cruzeiro":[-14.8401,-40.8344],
-  "Primavera":[-14.8560,-40.8390],
+  "Primavera":[-14.8545,-40.8023],
   "Boa Vista":[-14.8660,-40.8240],
   "Vila America":[-14.8740,-40.8190],
   "Guarani":[-14.8418,-40.8419],
@@ -1925,10 +1925,7 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairrosFiltro){
     var bMatch=matchB(o.bairro);
     if(!bMatch)return false;
     if(bairrosFiltro.length>0 && !bairrosFiltro.some(function(bf){return normB(bMatch)===normB(bf);}))return false;
-    if(tipoFiltro==="todos"){
-      var tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
-      return["roubo","furto","homicidio","tentativa","arrombamento","trafico","latrocinio","estupro","lesao","ameaca","violencia","maria da penha","medida protetiva"].some(function(cr){return tN.includes(cr);});
-    }
+    if(tipoFiltro==="todos"){ return true; }
     var palavras=GRUPOS[tipoFiltro]||[];
     var tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
     return palavras.some(function(p){return tN.includes(p);});
