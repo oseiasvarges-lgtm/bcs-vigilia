@@ -176,21 +176,17 @@ function carregarLocal() {
 
 let _carregando = false;
 
-// JSONP completamente isolado do DOM — usa document.head fixo, não depende de render()
 function _jsonpPagina(pagina) {
   return new Promise(function(resolve){
-    const cb = "bcs_cb_" + Date.now() + "_" + Math.floor(Math.random()*9999);
-    const s = document.createElement("script");
-    let done = false;
-
-    const timer = setTimeout(function(){
+    var cb = "bcs_cb_" + Date.now() + "_" + Math.floor(Math.random()*9999);
+    var s = document.createElement("script");
+    var done = false;
+    var timer = setTimeout(function(){
       if(done) return; done = true;
       try{ delete window[cb]; }catch(e){}
       try{ if(s.parentNode) s.parentNode.removeChild(s); }catch(e){}
-      console.log("[BCS] timeout pag"+pagina);
       resolve(null);
     }, 45000);
-
     window[cb] = function(rj){
       if(done) return; done = true;
       clearTimeout(timer);
@@ -198,17 +194,13 @@ function _jsonpPagina(pagina) {
       try{ if(s.parentNode) s.parentNode.removeChild(s); }catch(e){}
       resolve(rj);
     };
-
     s.onerror = function(){
       if(done) return; done = true;
       clearTimeout(timer);
       try{ delete window[cb]; }catch(e){}
       try{ if(s.parentNode) s.parentNode.removeChild(s); }catch(e){}
-      console.log("[BCS] erro script pag"+pagina);
       resolve(null);
     };
-
-    // Sempre usa document.head — nunca é destruído pelo render()
     s.src = SHEETS_URL + "?acao=ler&pagina=" + pagina + "&callback=" + cb;
     document.head.appendChild(s);
   });
@@ -218,85 +210,64 @@ function _setStatus(html){
   document.querySelectorAll("#sheets-status").forEach(function(d){ d.innerHTML = html; });
 }
 
-// Filtra linhas de cabeçalho/lixo da planilha
 function _isOcValida(o){
   if(!o || typeof o !== "object") return false;
-  const id = String(o.id || "").trim();
-  // Rejeita linhas de cabeçalho e entradas sem ID real
+  var id = String(o.id || "").trim();
   if(!id || id === "ID" || id.length > 60) return false;
-  // Rejeita se não tem nenhum campo real preenchido
   if(!o.tipo && !o.bairro && !o.vitima_nome && !o.data) return false;
   return true;
 }
 
 async function carregarDoSheets() {
-  if(_carregando){ console.log("[BCS] já carregando, ignorando chamada dupla"); return; }
+  if(_carregando){ console.log("[BCS] ja carregando, ignorando"); return; }
   _carregando = true;
   _setStatus("<span style='color:#6a5a30'>Conectando...</span>");
-
   try {
-    // ── Página 0 ──
-    const rj0 = await _jsonpPagina(0);
+    var rj0 = await _jsonpPagina(0);
     if(!rj0 || !rj0.ok || !rj0.dados){
-      _setStatus("<span style='color:#ef4444'>⚠ Falha ao conectar</span>");
-      _carregando = false; return;
+      _setStatus("<span style='color:#ef4444'>Falha ao conectar</span>");
+      return;
     }
-
     if((rj0.dados.atendimentos||[]).length) state.db.atendimentos = rj0.dados.atendimentos;
-    if((rj0.dados.visitas||[]).length)      state.db.visitas       = rj0.dados.visitas;
-    if((rj0.dados.agendamentos||[]).length) state.db.agendamentos  = rj0.dados.agendamentos;
-
-    const totalReal   = rj0.total || 0;
-    const totalPaginas = totalReal > 0 ? Math.ceil(totalReal / 1500) : 10;
-    let todasOcs = (rj0.dados.ocorrencias || []).filter(_isOcValida);
-
-    console.log("[BCS] pag0: "+todasOcs.length+" válidas | total servidor: "+totalReal);
-    _setStatus("<span style='color:#6a5a30'>"+todasOcs.length+(totalReal?"/"+totalReal:"")+" carregadas...</span>");
-
-    // ── Páginas 1..N ──
-    const temMais = rj0.temMais !== undefined ? rj0.temMais : (rj0.total > todasOcs.length);
+    if((rj0.dados.visitas||[]).length) state.db.visitas = rj0.dados.visitas;
+    if((rj0.dados.agendamentos||[]).length) state.db.agendamentos = rj0.dados.agendamentos;
+    var totalReal = rj0.total || 0;
+    var totalPaginas = totalReal > 0 ? Math.ceil(totalReal / 1500) : 10;
+    var todasOcs = (rj0.dados.ocorrencias || []).filter(_isOcValida);
+    console.log("[BCS] pag0: " + todasOcs.length + " | total: " + totalReal);
+    _setStatus("<span style='color:#6a5a30'>" + todasOcs.length + (totalReal ? "/" + totalReal : "") + " carregadas...</span>");
+    var temMais = rj0.temMais !== undefined ? rj0.temMais : (totalReal > todasOcs.length);
     if(temMais || totalReal > todasOcs.length){
-      for(let p = 1; p < Math.min(totalPaginas, 20); p++){
-        _setStatus("<span style='color:#6a5a30'>Pág "+(p+1)+"/"+totalPaginas+" · "+todasOcs.length+(totalReal?"/"+totalReal:"")+"...</span>");
-
-        let rjP = null;
-        for(let tentativa = 0; tentativa < 3; tentativa++){
+      for(var p = 1; p < Math.min(totalPaginas, 20); p++){
+        _setStatus("<span style='color:#6a5a30'>Pag " + (p+1) + "/" + totalPaginas + "...</span>");
+        var rjP = null;
+        for(var t = 0; t < 3; t++){
           rjP = await _jsonpPagina(p);
           if(rjP && rjP.ok && rjP.dados && (rjP.dados.ocorrencias||[]).length > 0) break;
-          console.log("[BCS] pag"+p+" tentativa "+(tentativa+1)+" falhou, aguardando...");
           await new Promise(function(r){ setTimeout(r, 2000); });
         }
-
-        const novas = rjP && rjP.ok && rjP.dados ? (rjP.dados.ocorrencias||[]).filter(_isOcValida) : [];
-        console.log("[BCS] pag"+p+": "+novas.length+" válidas");
-
-        if(!novas.length){ console.log("[BCS] pag"+p+" vazia, encerrando loop"); break; }
-
+        var novas = rjP && rjP.ok && rjP.dados ? (rjP.dados.ocorrencias||[]).filter(_isOcValida) : [];
+        console.log("[BCS] pag" + p + ": " + novas.length);
+        if(!novas.length) break;
         todasOcs = todasOcs.concat(novas);
-        _setStatus("<span style='color:#6a5a30'>"+todasOcs.length+(totalReal?"/"+totalReal:"")+" carregadas...</span>");
-
-        // Pequena pausa para não sobrecarregar o Apps Script
+        _setStatus("<span style='color:#6a5a30'>" + todasOcs.length + (totalReal ? "/" + totalReal : "") + " carregadas...</span>");
         await new Promise(function(r){ setTimeout(r, 600); });
       }
     }
-
-    // ── Deduplicar por ID ──
-    const seen = new Set();
+    var seen = new Set();
     state.db.ocorrencias = todasOcs.filter(function(o){
-      const k = String(o.id).trim();
+      var k = String(o.id).trim();
       if(seen.has(k)) return false;
       seen.add(k); return true;
     });
-
     salvarLocal();
-    const n = state.db.ocorrencias.length;
-    console.log("[BCS] carregamento concluído: "+n+" ocorrências únicas");
-    showToast(n + " ocorrência(s) carregadas!");
-    _setStatus("<span style='color:#6b8c42'>✓ "+n+" ocorrências · "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"</span>");
-
+    var n = state.db.ocorrencias.length;
+    console.log("[BCS] concluido: " + n);
+    showToast(n + " ocorrencias carregadas!");
+    _setStatus("<span style='color:#6b8c42'>v " + n + " ocorrencias</span>");
   } catch(e) {
     console.log("[BCS] erro:", e);
-    _setStatus("<span style='color:#ef4444'>⚠ "+e.message+"</span>");
+    _setStatus("<span style='color:#ef4444'>Erro: " + e.message + "</span>");
   } finally {
     _carregando = false;
   }
@@ -324,13 +295,12 @@ let state = {
 // UTILS
 // ══════════════════════════════════════════════════
 const hoje = () => new Date().toISOString().split("T")[0];
-// Converte qualquer formato de data para objeto Date (global)
 function parseData(s){
   if(!s) return null;
-  const str=String(s).trim();
-  const dt=new Date(str);
-  if(!isNaN(dt)) return dt;
-  if(/^\d{2}\/\d{2}\/\d{4}$/.test(str)){const p=str.split("/");return new Date(p[2]+"-"+p[1]+"-"+p[0]+"T12:00");}
+  var str = String(s).trim();
+  var dt = new Date(str);
+  if(!isNaN(dt.getTime())) return dt;
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(str)){var p=str.split("/");return new Date(p[2]+"-"+p[1]+"-"+p[0]+"T12:00");}
   if(/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str+"T12:00");
   return null;
 }
@@ -511,7 +481,7 @@ async function gerarRelatorio(tipo) {
 
   const ocs=state.db.ocorrencias, ats=state.db.atendimentos, vis=state.db.visitas, ags=state.db.agendamentos;
   const sem=new Date(); sem.setDate(sem.getDate()-7);
-  const ocSem=ocs.filter(o=>{const dt=parseData(o.data);return dt&&dt>=sem;});
+  const ocSem=ocs.filter(o=>{var _dt=parseData(o.data);return _dt&&_dt>=sem;});
   const bC={}; ocs.forEach(o=>{bC[o.bairro]=(bC[o.bairro]||0)+1;});
   const topB=Object.entries(bC).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>`• ${e[0]}: ${e[1]}`).join("\n");
 
@@ -557,7 +527,7 @@ function renderCharts() {
   if(pc){if(state.charts.tipo)state.charts.tipo.destroy();state.charts.tipo=new Chart(pc,{type:"doughnut",data:{labels:tData.map(e=>e[0].split(" ")[0]),datasets:[{data:tData.map(e=>e[1]),backgroundColor:CORES}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{color:"#a89860",font:{size:10}}}}}});}
 
   // Line - tendência
-  const dC={}; ocs.forEach(o=>{const dt=parseData(o.data);if(!dt)return;const k=dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});dC[k]=(dC[k]||0)+1;});
+  const dC={}; ocs.forEach(o=>{var _dt=parseData(o.data);if(!_dt)return;var k=_dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});dC[k]=(dC[k]||0)+1;});
   const dData=Object.entries(dC).slice(-12);
   const lc=document.getElementById("chart-tend");
   if(lc){if(state.charts.tend)state.charts.tend.destroy();state.charts.tend=new Chart(lc,{type:"line",data:{labels:dData.map(e=>e[0]),datasets:[{data:dData.map(e=>e[1]),borderColor:"#c8a84b",backgroundColor:"rgba(194,124,42,0.1)",borderWidth:2,pointBackgroundColor:"#c8a84b",tension:0.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#8a6545",font:{size:10}},grid:{color:"#3a3820"}},y:{ticks:{color:"#8a6545",font:{size:10}},grid:{color:"#3a3820"}}}}});}
@@ -643,7 +613,7 @@ function renderTela() {
   const {tela, db, perfil} = state;
   const ocs=db.ocorrencias, ats=db.atendimentos, vis=db.visitas, ags=db.agendamentos;
   const semAgo=new Date(); semAgo.setDate(semAgo.getDate()-7);
-  const ocSem=ocs.filter(o=>{const dt=parseData(o.data);return dt&&dt>=semAgo;}).length;
+  const ocSem=ocs.filter(o=>{var _dt=parseData(o.data);return _dt&&_dt>=semAgo;}).length;
   const totalVD=ocs.filter(o=>o.violencia_domestica).length;
   const pendVisita=ocs.filter(o=>o.requer_visita).length;
   const proxVis=ags.filter(a=>a.data>=hoje()&&a.status==="Agendado").length;
@@ -1692,102 +1662,6 @@ function atualizarMapa(){
   const periodo=document.getElementById("mapa-periodo")?.value||"hoje";
   renderMapaCalor(document.getElementById("mapa-calor-bairros"), tipo, periodo);
 }
-// ── Cache de geocodificação ──────────────────────────
-const _geoCache = (function(){
-  try{ return JSON.parse(localStorage.getItem("bcs_geo_cache")||"{}"); }catch(e){ return {}; }
-})();
-function _salvarGeoCache(){ try{ localStorage.setItem("bcs_geo_cache", JSON.stringify(_geoCache)); }catch(e){} }
-
-async function _geocodificar(endereco, cidade){
-  const chave = (endereco+"|"+cidade).toLowerCase().trim();
-  if(_geoCache[chave]) return _geoCache[chave];
-  try{
-    const q = encodeURIComponent(endereco+", "+cidade+", Bahia, Brasil");
-    const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q="+q;
-    const r = await fetch(url, {headers:{"Accept-Language":"pt-BR","User-Agent":"BCS-Vigilia/1.0"}});
-    const data = await r.json();
-    if(data && data[0]){
-      const coords = [parseFloat(data[0].lat), parseFloat(data[0].lon)];
-      _geoCache[chave] = coords;
-      _salvarGeoCache();
-      return coords;
-    }
-  }catch(e){}
-  return null;
-}
-
-function _corTipo(tipo, descricao){
-  const t = ((tipo||"")+" "+(descricao||"")).toLowerCase();
-  if(/homicídio|homicidio|latrocínio|feminicídio|feminicidio/.test(t)) return "#ef4444";
-  if(/tentativa de homicídio|tentativa/.test(t)) return "#f97316";
-  if(/roubo/.test(t)) return "#f97316";
-  if(/furto/.test(t)) return "#eab308";
-  if(/violência doméstica|violencia domestica|maria da penha/.test(t)) return "#a855f7";
-  if(/tráfico|trafico/.test(t)) return "#06b6d4";
-  if(/lesão|lesao|ameaça|ameaca/.test(t)) return "#10b981";
-  return "#c8a84b";
-}
-
-function _iconeOc(cor, tam){
-  tam = tam||14;
-  return L.divIcon({
-    html:"<div class='marcador-crime' style='width:"+tam+"px;height:"+tam+"px'>"+
-         "<div class='anel' style='background:"+cor+";width:"+tam+"px;height:"+tam+"px'></div>"+
-         "<div class='ponto' style='background:"+cor+";width:"+(tam*0.55)+"px;height:"+(tam*0.55)+"px;z-index:2;position:relative'></div></div>",
-    className:"", iconSize:[tam,tam], iconAnchor:[tam/2,tam/2]
-  });
-}
-
-function _popupOc(o, cor){
-  const end = o.vitima_endereco||o.bairro||"—";
-  return "<div style='min-width:200px;font-family:sans-serif'>"+
-    "<p style='font-weight:700;font-size:12px;color:"+cor+";margin-bottom:4px'>"+((o.tipo||"—").toUpperCase())+"</p>"+
-    "<p style='color:#ccc;font-size:11px;margin-bottom:2px'>📍 "+end+"</p>"+
-    (o.vitima_nome?"<p style='color:#aaa;font-size:11px'>👤 "+o.vitima_nome+(o.vitima_idade?" ("+o.vitima_idade+"a)":"")+"</p>":"")+
-    (o.suspeito_nome&&o.suspeito_nome!=="Não identificado"?"<p style='color:#f87171;font-size:11px'>⚠ "+o.suspeito_nome+"</p>":"")+
-    "<p style='color:#555;font-size:10px;margin-top:4px'>"+fmtData(o.data)+" "+(fmtHora(o.hora)||"")+"</p>"+
-    "</div>";
-}
-
-async function _renderPontosRua(mapa, ocs, BAIRROS, matchB){
-  const CIDADE = "Vitória da Conquista";
-  const delay = ms => new Promise(r=>setTimeout(r,ms));
-  let geocodificados = 0, fallbacks = 0;
-
-  for(let i=0; i<ocs.length; i++){
-    const o = ocs[i];
-    const cor = _corTipo(o.tipo, o.descricao);
-    let coords = null;
-
-    // Tenta geocodificar pelo endereço
-    if(o.vitima_endereco && o.vitima_endereco.trim().length > 5){
-      coords = await _geocodificar(o.vitima_endereco, CIDADE);
-      if(coords) geocodificados++;
-      await delay(1100); // respeita 1 req/s do Nominatim
-    }
-
-    // Fallback: centro do bairro com offset aleatório para não empilhar
-    if(!coords){
-      const bNome = matchB(o.bairro);
-      if(bNome && BAIRROS[bNome]){
-        const base = BAIRROS[bNome];
-        coords = [base[0]+(Math.random()-0.5)*0.004, base[1]+(Math.random()-0.5)*0.004];
-        fallbacks++;
-      }
-    }
-
-    if(!coords) continue;
-
-    // Verifica se mapa ainda existe (usuário pode ter trocado de tela)
-    if(!window._mapa || window._mapa !== mapa) break;
-
-    const tam = 14;
-    const marker = L.marker(coords, {icon:_iconeOc(cor, tam)}).addTo(mapa);
-    marker.bindPopup(_popupOc(o, cor), {maxWidth:240});
-  }
-  console.log("[BCS] Mapa: "+geocodificados+" geocodificados, "+fallbacks+" por bairro");
-}
-
 function renderMapaCalor(el, tipoFiltro, periodoFiltro){
   if(!el)return;
   tipoFiltro=tipoFiltro||"todos";
@@ -1797,7 +1671,7 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
     "Centro":[-14.8619,-40.8444],
     "Candeias":[-14.8510,-40.8310],
     "Alto Maron":[-14.8390,-40.8560],
-    "Felícia":[-14.8730,-40.8330],
+    "Felicia":[-14.8730,-40.8330],
     "Cruzeiro":[-14.8700,-40.8510],
     "Primavera":[-14.8560,-40.8390],
     "Boa Vista":[-14.8660,-40.8240],
@@ -1811,14 +1685,14 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
     "Morada Real":[-14.8710,-40.8430],
     "Ayrton Senna":[-14.8750,-40.8290],
     "Alto do Panorama":[-14.8500,-40.8490],
-    "Morada dos Pássaros III":[-14.8830,-40.8270],
+    "Morada dos Passaros III":[-14.8830,-40.8270],
     "Santa Marta":[-14.8580,-40.8450],
-    "Sumaré":[-14.8480,-40.8350],
+    "Sumare":[-14.8480,-40.8350],
     "Alto da Colina":[-14.8430,-40.8500],
     "Urbis I":[-14.8820,-40.8420],
     "Vila Sul":[-14.8780,-40.8470],
     "Iracema":[-14.8620,-40.8290],
-    "Nova Esperança":[-14.8700,-40.8550],
+    "Nova Esperanca":[-14.8700,-40.8550],
     "Ibirapuera":[-14.8530,-40.8310],
     "Lagoa das Flores":[-14.8450,-40.8380],
     "Brasil":[-14.8590,-40.8200]
@@ -1828,23 +1702,19 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
   const agora=new Date();
   let dataLimite=null;
   if(periodoFiltro==="hoje"){
-    const hj=hoje();
-    dataLimite=function(o){
-      const dt=parseData(o.data);
-      if(!dt) return false;
-      return dt.toISOString().split("T")[0]===hj;
-    };
+    var hj=hoje();
+    dataLimite=function(o){var dt=parseData(o.data);if(!dt)return false;return dt.toISOString().split("T")[0]===hj;};
   } else if(periodoFiltro==="24h"){
-    const lim=new Date(agora-24*60*60*1000);
-    dataLimite=function(o){const dt=parseData(o.data);return dt&&dt>=lim;};
+    var lim24=new Date(agora-24*60*60*1000);
+    dataLimite=function(o){var dt=parseData(o.data);return dt&&dt>=lim24;};
   } else if(periodoFiltro==="7d"){
-    const lim=new Date(agora-7*24*60*60*1000);
-    dataLimite=function(o){const dt=parseData(o.data);return dt&&dt>=lim;};
+    var lim7=new Date(agora-7*24*60*60*1000);
+    dataLimite=function(o){var dt=parseData(o.data);return dt&&dt>=lim7;};
   } else if(periodoFiltro==="30d"){
-    const lim=new Date(agora-30*24*60*60*1000);
-    dataLimite=function(o){const dt=parseData(o.data);return dt&&dt>=lim;};
+    var lim30=new Date(agora-30*24*60*60*1000);
+    dataLimite=function(o){var dt=parseData(o.data);return dt&&dt>=lim30;};
   } else {
-    dataLimite=function(){return true;}; // todos os períodos
+    dataLimite=function(){return true;};
   }
 
   // Filtro de tipo
@@ -1857,84 +1727,79 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
     "outros":["lesão","lesao","ameaça","ameaca","arrombamento","sequestro","estupro"]
   };
 
-  // Normaliza para matching tolerante a acentos e variações
-  function normB(s){return(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}
-  const BNORM={};Object.keys(BAIRROS).forEach(function(b){BNORM[normB(b)]=b;});
+  function normB(s){return(s||"").toLowerCase().normalize("NFD").replace(/[^a-z0-9 ]/g,"").replace(/\s+/g," ").trim();}
+  var BNORM={};Object.keys(BAIRROS).forEach(function(b){BNORM[normB(b)]=b;});
   function matchB(ocB){
-    const bn=normB(ocB);
+    var bn=normB(ocB);
     if(BNORM[bn])return BNORM[bn];
-    const k=Object.keys(BNORM).find(function(k){return bn.includes(k)||k.includes(bn);});
-    return k?BNORM[k]:null;
+    var keys=Object.keys(BNORM);
+    var found=keys.find(function(k){return bn.includes(k)||k.includes(bn);});
+    return found?BNORM[found]:null;
   }
 
-  const ocs=state.db.ocorrencias.filter(function(o){
+  var ocs=state.db.ocorrencias.filter(function(o){
     if(!dataLimite(o))return false;
     if(!matchB(o.bairro))return false;
     if(tipoFiltro==="todos"){
-      const tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
-      return["roubo","furto","homicidio","homicídio","tentativa","arrombamento","trafico","tráfico","latrocinio","estupro","lesao","ameaca","violencia","maria da penha","medida protetiva"].some(function(cr){return tN.includes(cr);});
+      var tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
+      return["roubo","furto","homicidio","tentativa","arrombamento","trafico","latrocinio","estupro","lesao","ameaca","violencia","maria da penha","medida protetiva"].some(function(cr){return tN.includes(cr);});
     }
-    const palavras=GRUPOS[tipoFiltro]||[];
-    const tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
+    var palavras=GRUPOS[tipoFiltro]||[];
+    var tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
     return palavras.some(function(p){return tN.includes(p);});
   });
 
-  const cnt={};Object.keys(BAIRROS).forEach(function(b){cnt[b]=[];});
-  ocs.forEach(function(o){const b=matchB(o.bairro);if(b)cnt[b].push(o);});
-  const mx=Math.max.apply(null,Object.values(cnt).map(function(v){return v.length;}).concat([1]));
-  const totalOcs=ocs.length;
+  var cnt={};Object.keys(BAIRROS).forEach(function(b){cnt[b]=[];});
+  ocs.forEach(function(o){
+    var b=matchB(o.bairro);
+    if(b)cnt[b].push(o);
+  });
+  var mx=Math.max.apply(null,Object.values(cnt).map(function(v){return v.length;}).concat([1]));
+  var totalOcs=ocs.length;
 
   el.style.padding="0";
   el.style.height="340px";
   el.style.minHeight="340px";
   el.innerHTML="<div id='mapa-leaflet' style='height:340px;width:100%;min-height:340px'></div>";
   if(window._mapa){window._mapa.remove();window._mapa=null;}
-
   requestAnimationFrame(function(){setTimeout(function(){
-    const mel=document.getElementById("mapa-leaflet");if(!mel)return;
-    const mapa=L.map("mapa-leaflet",{center:[-14.852,-40.839],zoom:13,zoomControl:true,scrollWheelZoom:false});
+    var mel=document.getElementById("mapa-leaflet");if(!mel)return;
+    var mapa=L.map("mapa-leaflet",{center:[-14.862,-40.844],zoom:13,zoomControl:true,scrollWheelZoom:false});
     window._mapa=mapa;
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"© CARTO",maxZoom:19}).addTo(mapa);
-    L.circle([-14.852,-40.839],{radius:2200,color:"#c8a84b",fillColor:"#c8a84b",fillOpacity:0.04,weight:1,dashArray:"4 4"}).addTo(mapa);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"CARTO",maxZoom:19}).addTo(mapa);
 
     Object.keys(BAIRROS).forEach(function(bairro){
-      const ocB=cnt[bairro]||[], n=ocB.length, coords=BAIRROS[bairro];
-      const pct=n/mx;
-      const cor=n===0?"#2a4a2a":pct>0.7?"#ef4444":pct>0.4?"#f97316":pct>0.15?"#eab308":"#10b981";
-      const tam=n===0?8:Math.max(18,Math.min(12+n*4,42));
-      const vel=pct>0.5?"0.8s":"1.5s";
-
-      const html=n===0
-        ?"<div style='width:8px;height:8px;border-radius:50%;background:#2a3828;border:1px solid #3a5a3a;opacity:0.3'></div>"
-        :"<div style='position:relative;width:"+tam+"px;height:"+tam+"px;display:flex;align-items:center;justify-content:center'>"+
-          "<div style='position:absolute;width:"+tam+"px;height:"+tam+"px;border-radius:50%;background:"+cor+";opacity:0.25;animation:pulsarAnel "+vel+" infinite'></div>"+
-          "<div style='width:"+(tam*0.65)+"px;height:"+(tam*0.65)+"px;border-radius:50%;background:"+cor+";display:flex;align-items:center;justify-content:center;z-index:2'>"+
-          "<span style='color:#000;font-size:"+(n>99?8:n>9?9:10)+"px;font-weight:900;line-height:1'>"+n+"</span></div></div>";
-
-      const icone=L.divIcon({html:html,className:"",iconSize:[tam,tam],iconAnchor:[tam/2,tam/2]});
-      const marker=L.marker(coords,{icon:icone}).addTo(mapa);
-
-      var pop="<div style='min-width:210px;font-family:sans-serif'>";
-      pop+="<p style='font-weight:700;font-size:13px;margin-bottom:4px;color:"+cor+"'>"+bairro+"</p>";
-      if(n===0){pop+="<p style='color:#888;font-size:12px'>Sem ocorrências no período</p>";}
+      var ocB=cnt[bairro]||[], n=ocB.length, coords=BAIRROS[bairro];
+      var pct=n/mx;
+      var cor=n===0?"#2a4a2a":pct>0.7?"#ef4444":pct>0.4?"#f97316":pct>0.15?"#eab308":"#10b981";
+      var tam=n===0?8:Math.max(20,Math.min(14+n*3,44));
+      var vel=pct>0.5?"0.8s":"1.5s";
+      var numStr=n>0?String(n):"";
+      var fSize=n>99?8:n>9?9:11;
+      var html=n===0
+        ?"<div style='width:8px;height:8px;border-radius:50%;background:#1a2a1a;border:1px solid #2a4a2a;opacity:0.4'></div>"
+        :"<div style='position:relative;width:"+tam+"px;height:"+tam+"px;display:flex;align-items:center;justify-content:center'>"
+        +"<div style='position:absolute;inset:0;border-radius:50%;background:"+cor+";opacity:0.2;animation:pulsarAnel "+vel+" infinite ease-out'></div>"
+        +"<div style='width:"+(tam*0.7)+"px;height:"+(tam*0.7)+"px;border-radius:50%;background:"+cor+";display:flex;align-items:center;justify-content:center;position:relative;z-index:2'>"
+        +"<span style='color:#000;font-size:"+fSize+"px;font-weight:900;line-height:1'>"+numStr+"</span></div></div>";
+      var icone=L.divIcon({html:html,className:"",iconSize:[tam,tam],iconAnchor:[tam/2,tam/2]});
+      var marker=L.marker(coords,{icon:icone}).addTo(mapa);
+      var pop="<div style='min-width:210px;font-family:sans-serif'><p style='font-weight:700;font-size:13px;color:"+cor+";margin-bottom:4px'>"+bairro+"</p>";
+      if(n===0){pop+="<p style='color:#888;font-size:12px'>Sem ocorrencias no periodo</p>";}
       else{
-        pop+="<p style='color:#aaa;font-size:11px;margin-bottom:6px'>"+n+" ocorrência(s)</p>";
+        pop+="<p style='color:#aaa;font-size:11px;margin-bottom:5px'>"+n+" ocorrencia(s)</p>";
         ocB.slice(0,5).forEach(function(o){
-          const c=_corTipo(o.tipo,o.descricao);
-          pop+="<div style='border-left:2px solid "+c+";padding:3px 8px;margin-bottom:3px;background:#111;border-radius:0 4px 4px 0'>";
-          pop+="<p style='font-size:10px;font-weight:700;color:#ddd'>"+((o.tipo||"—").toUpperCase())+"</p>";
-          pop+="<p style='font-size:10px;color:#777'>"+fmtData(o.data)+(fmtHora(o.hora)?" "+fmtHora(o.hora):"")+(o.vitima_nome?" · "+o.vitima_nome:"")+"</p>";
-          if(o.vitima_endereco)pop+="<p style='font-size:9px;color:#555'>📍 "+o.vitima_endereco.slice(0,40)+"</p>";
-          pop+="</div>";
+          pop+="<div style='border-left:2px solid "+cor+";padding:3px 8px;margin-bottom:3px;background:#111;border-radius:0 4px 4px 0'>";
+          pop+="<p style='font-size:10px;font-weight:700;color:#ddd'>"+((o.tipo||"?").toUpperCase())+"</p>";
+          pop+="<p style='font-size:10px;color:#777'>"+fmtData(o.data)+(o.vitima_nome?" - "+o.vitima_nome:"")+"</p></div>";
         });
-        if(n>5)pop+="<p style='color:#555;font-size:10px;margin-top:4px'>+"+(n-5)+" mais</p>";
+        if(n>5)pop+="<p style='color:#555;font-size:10px'>+"+(n-5)+" mais</p>";
       }
       pop+="</div>";
-      marker.bindPopup(pop,{maxWidth:240});
-
+      marker.bindPopup(pop,{maxWidth:230});
       if(n>0){
         L.tooltip({permanent:true,direction:"top",offset:[0,-(tam/2+3)],className:""})
-          .setContent("<span style='font-size:10px;font-weight:700;color:"+cor+";background:rgba(0,0,0,0.8);padding:2px 6px;border-radius:4px;white-space:nowrap'>"+bairro+"</span>")
+          .setContent("<span style='font-size:9px;font-weight:700;color:"+cor+";background:rgba(0,0,0,0.8);padding:2px 5px;border-radius:3px;white-space:nowrap'>"+bairro+"</span>")
           .setLatLng(coords).addTo(mapa);
       }
     });
@@ -2191,7 +2056,7 @@ function renderDashboardOperador(main,ocs,hoje_){
     }, 400);
   },150);
 
-  const ocs24=ocs.filter(function(o){const _dt=parseData(o.data);return _dt&&_dt>=new Date(new Date()-24*60*60*1000);});
+  const ocs24=ocs.filter(function(o){return parseData(o.data)>=new Date(new Date()-24*60*60*1000);});
   const nL=state.alertasGraves.filter(function(a){return!a.lido;}).length;
 
   const veiculosAlerta=ocs.filter(function(o){
@@ -2246,4 +2111,74 @@ function renderDashboardOperador(main,ocs,hoje_){
   h+="<select id='mapa-tipo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
   h+="<option value='todos'>Todos os crimes</option>";
   h+="<option value='roubo'>🔴 Roubos</option>";
-  h+="<option value='furto'>🟡 Furtos</
+  h+="<option value='furto'>🟡 Furtos</option>";
+  h+="<option value='homicidio'>💀 Homicídios / Tentativas</option>";
+  h+="<option value='vd'>🛡 Violência Doméstica</option>";
+  h+="<option value='trafico'>⚠️ Tráfico</option>";
+  h+="<option value='outros'>📋 Outros</option>";
+  h+="</select>";
+  h+="<select id='mapa-periodo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
+  h+="<option value='hoje'>Hoje</option>";
+  h+="<option value='24h'>Últimas 24h</option>";
+  h+="<option value='7d'>Últimos 7 dias</option>";
+  h+="<option value='30d'>Últimos 30 dias</option>";
+  h+="<option value='todos'>Todo o período</option>";
+  h+="</select>";
+  h+="</div></div>";
+  h+="<div id='mapa-calor-bairros' style='height:340px;overflow:hidden'></div></div>";
+
+  h+="<div style='background:#1a1808;border:1px solid #4a3a10;border-radius:12px;overflow:hidden;margin-bottom:16px'>";
+  h+="<div style='padding:10px 14px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#1e1500,#1a1200)'>";
+  h+="<p style='color:#7a6010;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>🚗 Veículos com Restrição</p>";
+  h+="<span style='background:#eab30818;color:#eab308;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700'>"+veiculosUnicos.length+"</span></div>";
+  h+="<div style='max-height:200px;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:0'>";
+  if(veiculosUnicos.length===0){
+    h+="<p style='color:#3a3010;font-size:12px;text-align:center;padding:18px;grid-column:1/-1'>Nenhum veículo com restrição.</p>";
+  } else {
+    veiculosUnicos.forEach(function(o){
+      const tipo=(o.tipo||"").toLowerCase();
+      const badge=tipo.includes("roubo")?"🔴 ROUBO":tipo.includes("furto")?"🟡 FURTO":"⚠️ CRIME";
+      h+="<div onclick=\"verDetalheAlerta('"+o.id+"')\" style='display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid #1e1800;border-right:1px solid #1e1800;cursor:pointer' onmouseover=\"this.style.background='#1e1600'\" onmouseout=\"this.style.background='transparent'\">";
+      h+="<span style='font-size:18px'>🚗</span><div style='flex:1;min-width:0'>";
+      h+="<p style='color:#d4a830;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+o.veiculo+"</p>";
+      h+="<p style='color:#5a4a10;font-size:10px'>"+badge+" · "+(o.bairro||"—")+"</p>";
+      h+="<p style='color:#3a2e08;font-size:10px'>"+fmtData(o.data)+"</p></div></div>";
+    });
+  }
+  h+="</div></div>";
+
+  h+="<div style='background:#1a1808;border:1px solid #3a4a28;border-radius:14px;overflow:hidden;margin-bottom:16px'>";
+  h+="<div style='padding:10px 16px;border-bottom:1px solid #2a3818'><p style='color:#6a8a50;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>📝 Recados ao Próximo Turno</p></div>";
+  h+="<div style='padding:14px 16px;border-bottom:1px solid #1e2818'>";
+  h+="<textarea id='recado-input' rows='3' placeholder='Registre um aviso ou pendência para o próximo operador...' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:11px 13px;border-radius:9px;font-size:13px;resize:vertical;line-height:1.7;outline:none;font-family:inherit;margin-bottom:10px' onfocus=\"this.style.borderColor='#6a8a50'\" onblur=\"this.style.borderColor='#2a3818'\"></textarea>";
+  h+="<button onclick='salvarRecado()' style='background:linear-gradient(135deg,#3a5a28,#2a4a18);border:none;color:#a8d890;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📨 Registrar Recado</button>";
+  h+="</div><div id='recados-container' style='padding:12px 16px;max-height:240px;overflow-y:auto'></div></div>";
+
+
+
+  h+="<div id='rec-op-banner' style='margin-bottom:16px'>";
+  h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px'>";
+  h+="<span class='spin' style='border-top-color:#c8a84b;width:14px;height:14px;border-width:2px'></span>";
+  h+="<span style='color:#5a4a20;font-size:12px'>Verificando alertas de veículos...</span></div></div>";
+  h+="</div>";
+
+  main.innerHTML=h;
+  // Inserir campo de lançar no INÍCIO do main
+  if(divLancar && main.firstChild){
+    main.insertBefore(divLancar, main.firstChild);
+  } else if(divLancar){
+    main.appendChild(divLancar);
+  }
+  // Eventos do textarea
+  var ta=document.getElementById("paste-area");
+  if(ta){
+    ta.addEventListener("focus",function(){this.style.borderColor="#c8a84b";});
+    ta.addEventListener("blur",function(){this.style.borderColor="#3a3818";});
+  }
+}
+
+render();
+if(SHEETS_URL){carregarDoSheets();}
+</script>
+</body>
+</html>
