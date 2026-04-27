@@ -511,7 +511,7 @@ async function gerarRelatorio(tipo) {
 
   const ocs=state.db.ocorrencias, ats=state.db.atendimentos, vis=state.db.visitas, ags=state.db.agendamentos;
   const sem=new Date(); sem.setDate(sem.getDate()-7);
-  const ocSem=ocs.filter(o=>parseData(o.data)>=sem);
+  const ocSem=ocs.filter(o=>{const dt=parseData(o.data);return dt&&dt>=sem;});
   const bC={}; ocs.forEach(o=>{bC[o.bairro]=(bC[o.bairro]||0)+1;});
   const topB=Object.entries(bC).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>`• ${e[0]}: ${e[1]}`).join("\n");
 
@@ -557,7 +557,7 @@ function renderCharts() {
   if(pc){if(state.charts.tipo)state.charts.tipo.destroy();state.charts.tipo=new Chart(pc,{type:"doughnut",data:{labels:tData.map(e=>e[0].split(" ")[0]),datasets:[{data:tData.map(e=>e[1]),backgroundColor:CORES}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{color:"#a89860",font:{size:10}}}}}});}
 
   // Line - tendência
-  const dC={}; ocs.forEach(o=>{const k=parseData(o.data).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});dC[k]=(dC[k]||0)+1;});
+  const dC={}; ocs.forEach(o=>{const dt=parseData(o.data);if(!dt)return;const k=dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});dC[k]=(dC[k]||0)+1;});
   const dData=Object.entries(dC).slice(-12);
   const lc=document.getElementById("chart-tend");
   if(lc){if(state.charts.tend)state.charts.tend.destroy();state.charts.tend=new Chart(lc,{type:"line",data:{labels:dData.map(e=>e[0]),datasets:[{data:dData.map(e=>e[1]),borderColor:"#c8a84b",backgroundColor:"rgba(194,124,42,0.1)",borderWidth:2,pointBackgroundColor:"#c8a84b",tension:0.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#8a6545",font:{size:10}},grid:{color:"#3a3820"}},y:{ticks:{color:"#8a6545",font:{size:10}},grid:{color:"#3a3820"}}}}});}
@@ -643,7 +643,7 @@ function renderTela() {
   const {tela, db, perfil} = state;
   const ocs=db.ocorrencias, ats=db.atendimentos, vis=db.visitas, ags=db.agendamentos;
   const semAgo=new Date(); semAgo.setDate(semAgo.getDate()-7);
-  const ocSem=ocs.filter(o=>parseData(o.data)>=semAgo).length;
+  const ocSem=ocs.filter(o=>{const dt=parseData(o.data);return dt&&dt>=semAgo;}).length;
   const totalVD=ocs.filter(o=>o.violencia_domestica).length;
   const pendVisita=ocs.filter(o=>o.requer_visita).length;
   const proxVis=ags.filter(a=>a.data>=hoje()&&a.status==="Agendado").length;
@@ -2078,7 +2078,7 @@ function renderDashboardOperador(main,ocs,hoje_){
     }, 400);
   },150);
 
-  const ocs24=ocs.filter(function(o){return parseData(o.data)>=new Date(new Date()-24*60*60*1000);});
+  const ocs24=ocs.filter(function(o){const _dt=parseData(o.data);return _dt&&_dt>=new Date(new Date()-24*60*60*1000);});
   const nL=state.alertasGraves.filter(function(a){return!a.lido;}).length;
 
   const veiculosAlerta=ocs.filter(function(o){
@@ -2179,4 +2179,28 @@ function renderDashboardOperador(main,ocs,hoje_){
 
 
   h+="<div id='rec-op-banner' style='margin-bottom:16px'>";
-  h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-i
+  h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px'>";
+  h+="<span class='spin' style='border-top-color:#c8a84b;width:14px;height:14px;border-width:2px'></span>";
+  h+="<span style='color:#5a4a20;font-size:12px'>Verificando alertas de veículos...</span></div></div>";
+  h+="</div>";
+
+  main.innerHTML=h;
+  // Inserir campo de lançar no INÍCIO do main
+  if(divLancar && main.firstChild){
+    main.insertBefore(divLancar, main.firstChild);
+  } else if(divLancar){
+    main.appendChild(divLancar);
+  }
+  // Eventos do textarea
+  var ta=document.getElementById("paste-area");
+  if(ta){
+    ta.addEventListener("focus",function(){this.style.borderColor="#c8a84b";});
+    ta.addEventListener("blur",function(){this.style.borderColor="#3a3818";});
+  }
+}
+
+render();
+if(SHEETS_URL){carregarDoSheets();}
+</script>
+</body>
+</html>
