@@ -1871,33 +1871,65 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
     return palavras.some(function(p){return tN.includes(p);});
   });
 
+  const cnt={};Object.keys(BAIRROS).forEach(function(b){cnt[b]=[];});
+  ocs.forEach(function(o){const b=matchB(o.bairro);if(b)cnt[b].push(o);});
+  const mx=Math.max.apply(null,Object.values(cnt).map(function(v){return v.length;}).concat([1]));
   const totalOcs=ocs.length;
 
   el.style.padding="0";
-  el.style.height="380px";
-  el.style.minHeight="380px";
-  el.innerHTML=
-    "<div style='padding:6px 12px;background:#141208;border-bottom:1px solid #2a2818;display:flex;align-items:center;justify-content:space-between'>"+
-    "<span style='color:#5a5535;font-size:10px'>📍 "+totalOcs+" ocorrência(s) · pontos por rua (cache local)</span>"+
-    "<div style='display:flex;gap:8px;align-items:center;font-size:9px'>"+
-    "<span style='color:#ef4444'>● Homicídio</span><span style='color:#f97316'>● Roubo</span>"+
-    "<span style='color:#eab308'>● Furto</span><span style='color:#a855f7'>● VD</span>"+
-    "<span style='color:#06b6d4'>● Tráfico</span><span style='color:#10b981'>● Outros</span></div></div>"+
-    "<div id='mapa-leaflet' style='height:340px;width:100%;min-height:340px'></div>";
-
+  el.style.height="340px";
+  el.style.minHeight="340px";
+  el.innerHTML="<div id='mapa-leaflet' style='height:340px;width:100%;min-height:340px'></div>";
   if(window._mapa){window._mapa.remove();window._mapa=null;}
 
   requestAnimationFrame(function(){setTimeout(function(){
     const mel=document.getElementById("mapa-leaflet");if(!mel)return;
-    const mapa=L.map("mapa-leaflet",{center:[-14.852,-40.839],zoom:14,zoomControl:true,scrollWheelZoom:true});
+    const mapa=L.map("mapa-leaflet",{center:[-14.852,-40.839],zoom:13,zoomControl:true,scrollWheelZoom:false});
     window._mapa=mapa;
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"© CARTO © OSM",maxZoom:19}).addTo(mapa);
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"© CARTO",maxZoom:19}).addTo(mapa);
+    L.circle([-14.852,-40.839],{radius:2200,color:"#c8a84b",fillColor:"#c8a84b",fillOpacity:0.04,weight:1,dashArray:"4 4"}).addTo(mapa);
 
-    // Limites da 77ª CIPM
-    L.circle([-14.852,-40.839],{radius:1800,color:"#c8a84b",fillColor:"#c8a84b",fillOpacity:0.04,weight:1,dashArray:"4 4"}).addTo(mapa);
+    Object.keys(BAIRROS).forEach(function(bairro){
+      const ocB=cnt[bairro]||[], n=ocB.length, coords=BAIRROS[bairro];
+      const pct=n/mx;
+      const cor=n===0?"#2a4a2a":pct>0.7?"#ef4444":pct>0.4?"#f97316":pct>0.15?"#eab308":"#10b981";
+      const tam=n===0?8:Math.max(18,Math.min(12+n*4,42));
+      const vel=pct>0.5?"0.8s":"1.5s";
 
-    // Renderiza pontos com geocodificação async
-    _renderPontosRua(mapa, ocs, BAIRROS, matchB);
+      const html=n===0
+        ?"<div style='width:8px;height:8px;border-radius:50%;background:#2a3828;border:1px solid #3a5a3a;opacity:0.3'></div>"
+        :"<div style='position:relative;width:"+tam+"px;height:"+tam+"px;display:flex;align-items:center;justify-content:center'>"+
+          "<div style='position:absolute;width:"+tam+"px;height:"+tam+"px;border-radius:50%;background:"+cor+";opacity:0.25;animation:pulsarAnel "+vel+" infinite'></div>"+
+          "<div style='width:"+(tam*0.65)+"px;height:"+(tam*0.65)+"px;border-radius:50%;background:"+cor+";display:flex;align-items:center;justify-content:center;z-index:2'>"+
+          "<span style='color:#000;font-size:"+(n>99?8:n>9?9:10)+"px;font-weight:900;line-height:1'>"+n+"</span></div></div>";
+
+      const icone=L.divIcon({html:html,className:"",iconSize:[tam,tam],iconAnchor:[tam/2,tam/2]});
+      const marker=L.marker(coords,{icon:icone}).addTo(mapa);
+
+      var pop="<div style='min-width:210px;font-family:sans-serif'>";
+      pop+="<p style='font-weight:700;font-size:13px;margin-bottom:4px;color:"+cor+"'>"+bairro+"</p>";
+      if(n===0){pop+="<p style='color:#888;font-size:12px'>Sem ocorrências no período</p>";}
+      else{
+        pop+="<p style='color:#aaa;font-size:11px;margin-bottom:6px'>"+n+" ocorrência(s)</p>";
+        ocB.slice(0,5).forEach(function(o){
+          const c=_corTipo(o.tipo,o.descricao);
+          pop+="<div style='border-left:2px solid "+c+";padding:3px 8px;margin-bottom:3px;background:#111;border-radius:0 4px 4px 0'>";
+          pop+="<p style='font-size:10px;font-weight:700;color:#ddd'>"+((o.tipo||"—").toUpperCase())+"</p>";
+          pop+="<p style='font-size:10px;color:#777'>"+fmtData(o.data)+(fmtHora(o.hora)?" "+fmtHora(o.hora):"")+(o.vitima_nome?" · "+o.vitima_nome:"")+"</p>";
+          if(o.vitima_endereco)pop+="<p style='font-size:9px;color:#555'>📍 "+o.vitima_endereco.slice(0,40)+"</p>";
+          pop+="</div>";
+        });
+        if(n>5)pop+="<p style='color:#555;font-size:10px;margin-top:4px'>+"+(n-5)+" mais</p>";
+      }
+      pop+="</div>";
+      marker.bindPopup(pop,{maxWidth:240});
+
+      if(n>0){
+        L.tooltip({permanent:true,direction:"top",offset:[0,-(tam/2+3)],className:""})
+          .setContent("<span style='font-size:10px;font-weight:700;color:"+cor+";background:rgba(0,0,0,0.8);padding:2px 6px;border-radius:4px;white-space:nowrap'>"+bairro+"</span>")
+          .setLatLng(coords).addTo(mapa);
+      }
+    });
 
     // Legenda
     const leg=L.control({position:"bottomright"});
@@ -2212,29 +2244,4 @@ function renderDashboardOperador(main,ocs,hoje_){
   h+="<option value='trafico'>⚠️ Tráfico</option>";
   h+="<option value='outros'>📋 Outros</option>";
   h+="</select>";
-  h+="<select id='mapa-periodo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
-  h+="<option value='hoje'>Hoje</option>";
-  h+="<option value='24h'>Últimas 24h</option>";
-  h+="<option value='7d'>Últimos 7 dias</option>";
-  h+="<option value='30d'>Últimos 30 dias</option>";
-  h+="<option value='todos'>Todo o período</option>";
-  h+="</select>";
-  h+="</div></div>";
-  h+="<div id='mapa-calor-bairros' style='height:340px;overflow:hidden'></div></div>";
-
-  h+="<div style='background:#1a1808;border:1px solid #4a3a10;border-radius:12px;overflow:hidden;margin-bottom:16px'>";
-  h+="<div style='padding:10px 14px;border-bottom:1px solid #2a2010;display:flex;align-items:center;justify-content:space-between;background:linear-gradient(90deg,#1e1500,#1a1200)'>";
-  h+="<p style='color:#7a6010;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>🚗 Veículos com Restrição</p>";
-  h+="<span style='background:#eab30818;color:#eab308;padding:2px 8px;border-radius:8px;font-size:10px;font-weight:700'>"+veiculosUnicos.length+"</span></div>";
-  h+="<div style='max-height:200px;overflow-y:auto;display:grid;grid-template-columns:1fr 1fr;gap:0'>";
-  if(veiculosUnicos.length===0){
-    h+="<p style='color:#3a3010;font-size:12px;text-align:center;padding:18px;grid-column:1/-1'>Nenhum veículo com restrição.</p>";
-  } else {
-    veiculosUnicos.forEach(function(o){
-      const tipo=(o.tipo||"").toLowerCase();
-      const badge=tipo.includes("roubo")?"🔴 ROUBO":tipo.includes("furto")?"🟡 FURTO":"⚠️ CRIME";
-      h+="<div onclick=\"verDetalheAlerta('"+o.id+"')\" style='display:flex;gap:10px;align-items:center;padding:10px 14px;border-bottom:1px solid #1e1800;border-right:1px solid #1e1800;cursor:pointer' onmouseover=\"this.style.background='#1e1600'\" onmouseout=\"this.style.background='transparent'\">";
-      h+="<span style='font-size:18px'>🚗</span><div style='flex:1;min-width:0'>";
-      h+="<p style='color:#d4a830;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+o.veiculo+"</p>";
-      h+="<p style='color:#5a4a10;font-size:10px'>"+badge+" · "+(o.bairro||"—")+"</p>";
-      h+="<p style='color:#3a2e08;font-siz
+  h+="<select id='mapa-periodo' onchange='atual
