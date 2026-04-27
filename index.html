@@ -265,6 +265,8 @@ async function carregarDoSheets() {
     console.log("[BCS] concluido: " + n);
     showToast(n + " ocorrencias carregadas!");
     _setStatus("<span style='color:#6b8c42'>v " + n + " ocorrencias</span>");
+    // Atualizar mapa automaticamente após carregar dados
+    setTimeout(function(){ if(typeof atualizarMapa==="function") atualizarMapa(); }, 300);
   } catch(e) {
     console.log("[BCS] erro:", e);
     _setStatus("<span style='color:#ef4444'>Erro: " + e.message + "</span>");
@@ -391,10 +393,28 @@ function verificarReincidencia(nova) {
     const found = hist.filter(o=>{ const oh=norm(o.suspeito_nome); return oh&&oh!=="não identificado"&&oh.split(" ")[0]===sn.split(" ")[0]; });
     if(found.length) alertas.push({tipo:"suspeito",cor:"#ef4444",icone:"🔴",titulo:"SUSPEITO REINCIDENTE",msg:`"${nova.suspeito_nome}" já consta em ${found.length} ocorrência(s).`,ocs:found});
   }
-  const vp = norm(nova.vitima_nome).split(" ").filter(p=>p.length>2);
-  if(vp.length>=2){
-    const found = hist.filter(o=>{const vh=norm(o.vitima_nome);return vh&&vh.includes(vp[0])&&vh.includes(vp[vp.length-1]);});
-    if(found.length) alertas.push({tipo:"vitima",cor:"#f97316",icone:"🟠",titulo:"VÍTIMA REINCIDENTE",msg:`"${nova.vitima_nome}" já registrada em ${found.length} ocorrência(s).`,ocs:found});
+  // Reincidência por CPF (prioritário) ou nome completo + idade
+  const novaCpf = (nova.vitima_cpf||"").replace(/\D/g,"");
+  if(novaCpf.length>=11){
+    // CPF disponível — busca exata
+    const found=hist.filter(o=>(o.vitima_cpf||"").replace(/\D/g,"")===novaCpf);
+    if(found.length) alertas.push({tipo:"vitima",cor:"#f97316",icone:"🟠",titulo:"VÍTIMA REINCIDENTE",msg:"CPF "+nova.vitima_cpf+" já registrado em "+found.length+" ocorrência(s).",ocs:found});
+  } else {
+    // Sem CPF — exige nome completo (mín 3 partes) + idade igual para evitar falsos positivos
+    const vp=norm(nova.vitima_nome).split(" ").filter(p=>p.length>2);
+    if(vp.length>=3){
+      const found=hist.filter(o=>{
+        const vh=norm(o.vitima_nome).split(" ").filter(p=>p.length>2);
+        if(vh.length<3) return false;
+        // Precisa bater pelo menos 3 palavras do nome
+        const matches=vp.filter(p=>vh.includes(p)).length;
+        if(matches<3) return false;
+        // Se tiver idade, deve bater também (evita homônimos)
+        if(nova.vitima_idade&&o.vitima_idade&&nova.vitima_idade!==o.vitima_idade) return false;
+        return true;
+      });
+      if(found.length) alertas.push({tipo:"vitima",cor:"#f97316",icone:"🟠",titulo:"VÍTIMA REINCIDENTE",msg:nova.vitima_nome+" já registrada em "+found.length+" ocorrência(s).",ocs:found});
+    }
   }
   if(nova.veiculo&&nova.veiculo.length>3){
     const pm=nova.veiculo.match(/[A-Za-z]{3}[\-\s]?[0-9A-Za-z]{4,5}/);
@@ -1767,8 +1787,92 @@ function renderDetalheAlerta(oc){
   if(oc.reincidente)h+="<span style='background:#f9731618;color:#f97316;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700'>⚠ Reincidente</span>";
   if(oc.violencia_domestica)h+="<span style='background:#ef444418;color:#ef4444;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700'>🛡 Violência Doméstica</span>";
   if(oc.requer_visita)h+="<span style='background:#10b98118;color:#10b981;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700'>🤝 Requer Visita</span>";
+  h+="</div>";
+  h+="<div style='display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #2a2818'>";
+  state._pdfOcId = oc.id;
+  h+="<div style='display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid #2a2818'>";
+  h+="<button onclick='exportarPDFReincidentes()' style='background:#1a0800;border:1px solid #f97316;color:#f97316;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;flex:1'>PDF Reincidentes</button>";
+  h+="</div>";
   h+="</div></div></div></div>";
   return h;
+}
+
+// ── Brasão Base Comunitária (SVG embutido) ──
+const BRASAO_SVG = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTIwIj48cG9seWdvbiBwb2ludHM9IjUwLDUgOTUsMjUgOTUsNzUgNTAsMTE1IDUsNzUgNSwyNSIgZmlsbD0iIzFhMTQwMCIgc3Ryb2tlPSIjYzhhODRiIiBzdHJva2Utd2lkdGg9IjMiLz48dGV4dCB4PSI1MCIgeT0iNDUiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNjOGE4NGIiIGZvbnQtc2l6ZT0iMTAiIGZvbnQtd2VpZ2h0PSJib2xkIj43NyBDSVBNPC90ZXh0Pjx0ZXh0IHg9IjUwIiB5PSI1OCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2M4YTg0YiIgZm9udC1zaXplPSI3Ij5CQVNFIENPTVVOSVRBUklBPC90ZXh0Pjx0ZXh0IHg9IjUwIiB5PSI3MCIgdGV4dC1hbmNob3I9Im1pZGRsZSIgZmlsbD0iI2M4YTg0YiIgZm9udC1zaXplPSI2Ij5TRUcuIE5PVkEgQ0lEQURFPC90ZXh0PjxjaXJjbGUgY3g9IjUwIiBjeT0iODgiIHI9IjgiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI2M4YTg0YiIgc3Ryb2tlLXdpZHRoPSIxLjUiLz48dGV4dCB4PSI1MCIgeT0iOTIiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNjOGE4NGIiIGZvbnQtc2l6ZT0iOSI+KjwvdGV4dD48L3N2Zz4=";
+
+function _gerarHTMLPDF(titulo, ocorrencias){
+  var linhas = ocorrencias.map(function(o){
+    var reincs = state.db.ocorrencias.filter(function(r){
+      if(r.id===o.id) return false;
+      if(o.vitima_cpf&&r.vitima_cpf&&o.vitima_cpf.replace(/\D/g,"")===r.vitima_cpf.replace(/\D/g,"")) return true;
+      var vp=norm(o.vitima_nome).split(" ").filter(function(p){return p.length>2;});
+      var vh=norm(r.vitima_nome).split(" ").filter(function(p){return p.length>2;});
+      return vp.length>=3&&vh.length>=3&&vp.filter(function(p){return vh.includes(p);}).length>=3;
+    });
+    return "<tr style='border-bottom:1px solid #ddd'>"+
+      "<td style='padding:6px 8px;font-size:11px'>"+fmtData(o.data)+" "+(fmtHora(o.hora)||"")+"</td>"+
+      "<td style='padding:6px 8px;font-size:11px;font-weight:700;color:#8b0000'>"+(o.tipo||"—")+"</td>"+
+      "<td style='padding:6px 8px;font-size:11px'>"+(o.bairro||"—")+"</td>"+
+      "<td style='padding:6px 8px;font-size:11px'>"+(o.vitima_nome||"—")+(o.vitima_idade?" ("+o.vitima_idade+"a)":"")+"</td>"+
+      "<td style='padding:6px 8px;font-size:11px'>"+(o.vitima_cpf||"—")+"</td>"+
+      "<td style='padding:6px 8px;font-size:11px'>"+(o.suspeito_nome&&o.suspeito_nome!=="Não identificado"?o.suspeito_nome:"—")+"</td>"+
+      "<td style='padding:6px 8px;font-size:11px;color:"+(reincs.length>0?"#c8501a":"#555")+"'>"+(reincs.length>0?reincs.length+" oc.":"—")+"</td>"+
+    "</tr>";
+  }).join("");
+
+  return "<!DOCTYPE html><html><head><meta charset='UTF-8'>"+
+    "<title>"+titulo+"</title>"+
+    "<style>body{font-family:Arial,sans-serif;margin:24px;color:#111}"+
+    "h1{font-size:16px;color:#1a1400;margin:0}h2{font-size:12px;color:#555;margin:4px 0 0}"+
+    "table{width:100%;border-collapse:collapse;margin-top:16px}"+
+    "th{background:#1a1400;color:#c8a84b;padding:7px 8px;font-size:11px;text-align:left}"+
+    "tr:nth-child(even){background:#f9f6ef}"+
+    ".header{display:flex;align-items:center;gap:16px;border-bottom:3px solid #c8a84b;padding-bottom:12px;margin-bottom:8px}"+
+    ".badge{background:#8b0000;color:#fff;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700}"+
+    "@media print{body{margin:10px}}</style></head><body>"+
+    "<div class='header'>"+
+    "<img src='"+BRASAO_SVG+"' style='width:60px;height:72px'/>"+
+    "<div><h1>77ª CIPM — Base Comunitária de Segurança Nova Cidade</h1>"+
+    "<h2>"+titulo+"</h2>"+
+    "<p style='font-size:10px;color:#888;margin:4px 0 0'>Gerado em: "+new Date().toLocaleString("pt-BR")+" | Total: "+ocorrencias.length+" registros</p></div>"+
+    "</div>"+
+    "<table><thead><tr>"+
+    "<th>Data/Hora</th><th>Tipo</th><th>Bairro</th><th>Vítima</th><th>CPF</th><th>Suspeito</th><th>Reincid.</th>"+
+    "</tr></thead><tbody>"+linhas+"</tbody></table>"+
+    "<p style='font-size:9px;color:#aaa;margin-top:20px;text-align:center'>Documento gerado automaticamente pela Central de Inteligências BCS — CONFIDENCIAL</p>"+
+    "</body></html>";
+}
+
+function exportarPDFOcorrencia(id){
+  id=id||state._pdfOcId;
+  var oc=state.db.ocorrencias.find(function(o){return o.id===id;});
+  if(!oc){showToast("Ocorrência não encontrada","error");return;}
+  var html=_gerarHTMLPDF("Relatório de Ocorrência — "+( oc.tipo||"—"),[oc]);
+  var w=window.open("","_blank");
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){w.print();},800);
+}
+
+function exportarPDFReincidentes(id){
+  id=id||state._pdfOcId;
+  var oc=state.db.ocorrencias.find(function(o){return o.id===id;});
+  if(!oc){showToast("Ocorrência não encontrada","error");return;}
+  // Buscar todas as ocorrências com mesma vítima
+  var cpf=(oc.vitima_cpf||"").replace(/\D/g,"");
+  var vp=norm(oc.vitima_nome).split(" ").filter(function(p){return p.length>2;});
+  var relacionadas=state.db.ocorrencias.filter(function(o){
+    if(cpf.length>=11) return (o.vitima_cpf||"").replace(/\D/g,"")===cpf;
+    if(vp.length<3) return false;
+    var vh=norm(o.vitima_nome).split(" ").filter(function(p){return p.length>2;});
+    return vh.length>=3&&vp.filter(function(p){return vh.includes(p);}).length>=3;
+  });
+  if(relacionadas.length<=1){showToast("Nenhuma reincidência encontrada para esta vítima","error");return;}
+  var html=_gerarHTMLPDF("Relatório de Reincidências — "+(oc.vitima_nome||"—"),relacionadas);
+  var w=window.open("","_blank");
+  w.document.write(html);
+  w.document.close();
+  setTimeout(function(){w.print();},800);
 }
 
 // ══════════════════════════════════════════════
@@ -1834,8 +1938,10 @@ function selecionarTodosBairrosMapa(marcar){
 }
 function atualizarMapa(){
   var tipo=document.getElementById("mapa-tipo")?.value||"todos";
-  var periodo=document.getElementById("mapa-periodo")?.value||"hoje";
+  var periodo=document.getElementById("mapa-periodo")?.value||"24h";
   var bairrosSel=[...document.querySelectorAll(".mapa-bairro-chk:checked")].map(c=>c.value);
+  // Salvar estado para restaurar após render
+  state.mapaFiltros={tipo:tipo,periodo:periodo,bairros:bairrosSel};
   renderMapaCalor(document.getElementById("mapa-calor-bairros"), tipo, periodo, bairrosSel);
 }
 const BAIRROS={
@@ -2290,21 +2396,15 @@ function renderDashboardOperador(main,ocs,hoje_){
   h+="<button onclick='atualizarMapa()' style='background:transparent;border:1px solid #3a3820;color:#5a5535;padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer'>↻</button>";
   h+="</div>";
   h+="<div style='display:flex;gap:8px;flex-wrap:wrap'>";
+  var _mf=state.mapaFiltros||{tipo:"todos",periodo:"24h",bairros:[]};
+  var _tipos=["todos","roubo","furto","homicidio","vd","trafico","outros"];
+  var _tiposLabel={"todos":"Todos os crimes","roubo":"🔴 Roubos","furto":"🟡 Furtos","homicidio":"💀 Homicídios","vd":"🛡 Viol. Doméstica","trafico":"⚠️ Tráfico","outros":"📋 Outros"};
   h+="<select id='mapa-tipo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
-  h+="<option value='todos'>Todos os crimes</option>";
-  h+="<option value='roubo'>🔴 Roubos</option>";
-  h+="<option value='furto'>🟡 Furtos</option>";
-  h+="<option value='homicidio'>💀 Homicídios / Tentativas</option>";
-  h+="<option value='vd'>🛡 Violência Doméstica</option>";
-  h+="<option value='trafico'>⚠️ Tráfico</option>";
-  h+="<option value='outros'>📋 Outros</option>";
+  _tipos.forEach(function(t){ h+="<option value='"+t+"'"+(_mf.tipo===t?" selected":"")+">"+_tiposLabel[t]+"</option>"; });
   h+="</select>";
+  var _periodos=[["hoje","Hoje"],["24h","Últimas 24h"],["7d","Últimos 7 dias"],["30d","Últimos 30 dias"],["todos","Todo o período"]];
   h+="<select id='mapa-periodo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
-  h+="<option value='hoje'>Hoje</option>";
-  h+="<option value='24h' selected>Últimas 24h</option>";
-  h+="<option value='7d'>Últimos 7 dias</option>";
-  h+="<option value='30d'>Últimos 30 dias</option>";
-  h+="<option value='todos'>Todo o período</option>";
+  _periodos.forEach(function(p){ h+="<option value='"+p[0]+"'"+(_mf.periodo===p[0]?" selected":"")+">"+p[1]+"</option>"; });
   h+="</select>";
   var _bairrosMapaHtml = "<div style='position:relative'>";
   _bairrosMapaHtml += "<button onclick='toggleMapaBairros()' id='btn-mapa-bairros' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;cursor:pointer'>📍 Bairros ▾</button>";
@@ -2314,7 +2414,8 @@ function renderDashboardOperador(main,ocs,hoje_){
   _bairrosMapaHtml += "<button onclick='selecionarTodosBairrosMapa(false)' style='background:#1e1c12;border:1px solid #2a2818;color:#7a7050;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button></div>";
   ["Centro","Candeias","Alto Maron","Felicia","Cruzeiro","Primavera","Boa Vista","Vila America","Guarani","Recreio","Jurema","Vila Elisa","Urbis VI","Nova Cidade","Morada Real","Ayrton Senna","Alto do Panorama","Santa Marta","Sumare","Alto da Colina","Urbis I","Vila Sul","Iracema","Brasil"].forEach(function(b){
     _bairrosMapaHtml += "<label style='display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer'>";
-    _bairrosMapaHtml += "<input type='checkbox' value='" + b + "' checked onchange='atualizarMapa()' class='mapa-bairro-chk' style='accent-color:#c8a84b;cursor:pointer'/>";
+    var _chkd=(_mf.bairros.length===0||_mf.bairros.indexOf(b)>=0)?" checked":"";
+    _bairrosMapaHtml += "<input type='checkbox' value='" + b + "'" + _chkd + " onchange='atualizarMapa()' class='mapa-bairro-chk' style='accent-color:#c8a84b;cursor:pointer'/>";
     _bairrosMapaHtml += "<span style='color:#a0906a;font-size:12px'>" + b + "</span></label>";
   });
   _bairrosMapaHtml += "</div></div>";
