@@ -1795,25 +1795,33 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
   if(typeof L==="undefined"){el.innerHTML="<p style='color:#5a5535;font-size:12px;text-align:center;padding:18px'>Mapa carregando...</p>";return;}
   const BAIRROS={
     "Centro":[-14.8619,-40.8444],
-    "Candeias":[-14.8558,-40.8302],
-    "Alto Maron":[-14.8481,-40.8615],
-    "Felícia":[-14.8720,-40.8390],
-    "Cruzeiro":[-14.8664,-40.8512],
-    "Primavera":[-14.8442,-40.8478],
-    "Boa Vista":[-14.8780,-40.8350],
-    "Vila America":[-14.8695,-40.8280],
-    "Guarani":[-14.8510,-40.8390],
-    "Recreio":[-14.8600,-40.8560],
-    "Jurema":[-14.8730,-40.8460],
-    "Vila Elisa":[-14.8640,-40.8200],
-    "Urbis VI":[-14.8820,-40.8420],
-    "Nova Cidade":[-14.8760,-40.8310],
-    "Morada Real":[-14.8680,-40.8180],
-    "Ayrton Senna":[-14.8840,-40.8260],
-    "Alto do Panorama":[-14.8530,-40.8550],
-    "Morada dos Pássaros III":[-14.8900,-40.8350],
-    "Santa Marta":[-14.8750,-40.8490],
-    "Sumaré":[-14.8580,-40.8650]
+    "Candeias":[-14.8510,-40.8310],
+    "Alto Maron":[-14.8390,-40.8560],
+    "Felícia":[-14.8730,-40.8330],
+    "Cruzeiro":[-14.8700,-40.8510],
+    "Primavera":[-14.8560,-40.8390],
+    "Boa Vista":[-14.8660,-40.8240],
+    "Vila America":[-14.8740,-40.8190],
+    "Guarani":[-14.8460,-40.8410],
+    "Recreio":[-14.8590,-40.8160],
+    "Jurema":[-14.8650,-40.8170],
+    "Vila Elisa":[-14.8550,-40.8260],
+    "Urbis VI":[-14.8800,-40.8360],
+    "Nova Cidade":[-14.8640,-40.8380],
+    "Morada Real":[-14.8710,-40.8430],
+    "Ayrton Senna":[-14.8750,-40.8290],
+    "Alto do Panorama":[-14.8500,-40.8490],
+    "Morada dos Pássaros III":[-14.8830,-40.8270],
+    "Santa Marta":[-14.8580,-40.8450],
+    "Sumaré":[-14.8480,-40.8350],
+    "Alto da Colina":[-14.8430,-40.8500],
+    "Urbis I":[-14.8820,-40.8420],
+    "Vila Sul":[-14.8780,-40.8470],
+    "Iracema":[-14.8620,-40.8290],
+    "Nova Esperança":[-14.8700,-40.8550],
+    "Ibirapuera":[-14.8530,-40.8310],
+    "Lagoa das Flores":[-14.8450,-40.8380],
+    "Brasil":[-14.8590,-40.8200]
   };
 
   // Filtro de período
@@ -2238,10 +2246,4 @@ function renderDashboardOperador(main,ocs,hoje_){
   h+="<select id='mapa-tipo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
   h+="<option value='todos'>Todos os crimes</option>";
   h+="<option value='roubo'>🔴 Roubos</option>";
-  h+="<option value='furto'>🟡 Furtos</option>";
-  h+="<option value='homicidio'>💀 Homicídios / Tentativas</option>";
-  h+="<option value='vd'>🛡 Violência Doméstica</option>";
-  h+="<option value='trafico'>⚠️ Tráfico</option>";
-  h+="<option value='outros'>📋 Outros</option>";
-  h+="</select>";
-  h+="<select id='mapa-periodo' onchange='atual
+  h+="<option value='furto'>🟡 Furtos</
