@@ -1838,6 +1838,40 @@ function atualizarMapa(){
   var bairrosSel=[...document.querySelectorAll(".mapa-bairro-chk:checked")].map(c=>c.value);
   renderMapaCalor(document.getElementById("mapa-calor-bairros"), tipo, periodo, bairrosSel);
 }
+const BAIRROS={
+  "Centro":[-14.8619,-40.8444],
+  "Candeias":[-14.8510,-40.8310],
+  "Alto Maron":[-14.8527,-40.8326],
+  "Felicia":[-14.8730,-40.8330],
+  "Cruzeiro":[-14.8401,-40.8344],
+  "Primavera":[-14.8560,-40.8390],
+  "Boa Vista":[-14.8660,-40.8240],
+  "Vila America":[-14.8740,-40.8190],
+  "Guarani":[-14.8418,-40.8419],
+  "Recreio":[-14.8590,-40.8160],
+  "Jurema":[-14.8650,-40.8170],
+  "Vila Elisa":[-14.8550,-40.8260],
+  "Urbis VI":[-14.8800,-40.8360],
+  "Nova Cidade":[-14.8489,-40.8129],
+  "Morada Real":[-14.8710,-40.8430],
+  "Ayrton Senna":[-14.8750,-40.8290],
+  "Alto do Panorama":[-14.8457,-40.8236],
+  "Panorama":[-14.8457,-40.8236],
+  "Morada dos Passaros III":[-14.8830,-40.8270],
+  "Santa Marta":[-14.8580,-40.8450],
+  "Sumare":[-14.8480,-40.8350],
+  "Alto da Colina":[-14.8430,-40.8500],
+  "Urbis I":[-14.8820,-40.8420],
+  "Vila Sul":[-14.8780,-40.8470],
+  "Europa Unida":[-14.8519,-40.8044],
+  "Iracema":[-14.8620,-40.8290],
+  "Nova Esperanca":[-14.8700,-40.8550],
+  "Pedrinhas":[-14.8427,-40.8315],
+  "Ibirapuera":[-14.8530,-40.8310],
+  "Lagoa das Flores":[-14.8450,-40.8380],
+  "Brasil":[-14.8590,-40.8200]
+};
+
 function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairrosFiltro){
   if(!el)return;
   tipoFiltro=tipoFiltro||"todos";
@@ -1845,39 +1879,7 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairrosFiltro){
   // bairrosFiltro: array de nomes ou vazio = todos
   var bairrosFiltro=bairrosFiltro||[];
   if(typeof L==="undefined"){el.innerHTML="<p style='color:#5a5535;font-size:12px;text-align:center;padding:18px'>Mapa carregando...</p>";return;}
-  const BAIRROS={
-    "Centro":[-14.8619,-40.8444],
-    "Candeias":[-14.8510,-40.8310],
-    "Alto Maron":[-14.8527,-40.8326],
-    "Felicia":[-14.8730,-40.8330],
-    "Cruzeiro":[-14.8401,-40.8344],
-    "Primavera":[-14.8560,-40.8390],
-    "Boa Vista":[-14.8660,-40.8240],
-    "Vila America":[-14.8740,-40.8190],
-    "Guarani":[-14.8418,-40.8419],
-    "Recreio":[-14.8590,-40.8160],
-    "Jurema":[-14.8650,-40.8170],
-    "Vila Elisa":[-14.8550,-40.8260],
-    "Urbis VI":[-14.8800,-40.8360],
-    "Nova Cidade":[-14.8489,-40.8129],
-    "Morada Real":[-14.8710,-40.8430],
-    "Ayrton Senna":[-14.8750,-40.8290],
-    "Alto do Panorama":[-14.8457,-40.8236],
-    "Panorama":[-14.8457,-40.8236],
-    "Morada dos Passaros III":[-14.8830,-40.8270],
-    "Santa Marta":[-14.8580,-40.8450],
-    "Sumare":[-14.8480,-40.8350],
-    "Alto da Colina":[-14.8430,-40.8500],
-    "Urbis I":[-14.8820,-40.8420],
-    "Vila Sul":[-14.8780,-40.8470],
-    "Europa Unida":[-14.8519,-40.8044],
-    "Iracema":[-14.8620,-40.8290],
-    "Nova Esperanca":[-14.8700,-40.8550],
-    "Pedrinhas":[-14.8427,-40.8315],
-    "Ibirapuera":[-14.8530,-40.8310],
-    "Lagoa das Flores":[-14.8450,-40.8380],
-    "Brasil":[-14.8590,-40.8200]
-  };
+  // BAIRROS definido no escopo global
 
   // Filtro de período
   const agora=new Date();
