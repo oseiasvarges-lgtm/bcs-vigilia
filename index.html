@@ -324,6 +324,16 @@ let state = {
 // UTILS
 // ══════════════════════════════════════════════════
 const hoje = () => new Date().toISOString().split("T")[0];
+// Converte qualquer formato de data para objeto Date (global)
+function parseData(s){
+  if(!s) return null;
+  const str=String(s).trim();
+  const dt=new Date(str);
+  if(!isNaN(dt)) return dt;
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(str)){const p=str.split("/");return new Date(p[2]+"-"+p[1]+"-"+p[0]+"T12:00");}
+  if(/^\d{4}-\d{2}-\d{2}$/.test(str)) return new Date(str+"T12:00");
+  return null;
+}
 const agora = () => new Date().toTimeString().slice(0,5);
 const norm=s=>(s||"").toLowerCase().trim().replace(/\s+/g," ");
 function fmtData(d){if(!d)return"";const s=String(d).trim();if(/^\d{2}\/\d{2}\/\d{4}$/.test(s))return s;const m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return m[3]+"/"+m[2]+"/"+m[1];try{const dt=new Date(s);if(!isNaN(dt))return dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){}return s;}
@@ -501,7 +511,7 @@ async function gerarRelatorio(tipo) {
 
   const ocs=state.db.ocorrencias, ats=state.db.atendimentos, vis=state.db.visitas, ags=state.db.agendamentos;
   const sem=new Date(); sem.setDate(sem.getDate()-7);
-  const ocSem=ocs.filter(o=>new Date(o.data+"T12:00")>=sem);
+  const ocSem=ocs.filter(o=>parseData(o.data)>=sem);
   const bC={}; ocs.forEach(o=>{bC[o.bairro]=(bC[o.bairro]||0)+1;});
   const topB=Object.entries(bC).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e=>`• ${e[0]}: ${e[1]}`).join("\n");
 
@@ -547,7 +557,7 @@ function renderCharts() {
   if(pc){if(state.charts.tipo)state.charts.tipo.destroy();state.charts.tipo=new Chart(pc,{type:"doughnut",data:{labels:tData.map(e=>e[0].split(" ")[0]),datasets:[{data:tData.map(e=>e[1]),backgroundColor:CORES}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"bottom",labels:{color:"#a89860",font:{size:10}}}}}});}
 
   // Line - tendência
-  const dC={}; ocs.forEach(o=>{const k=new Date(o.data+"T12:00").toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});dC[k]=(dC[k]||0)+1;});
+  const dC={}; ocs.forEach(o=>{const k=parseData(o.data).toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"});dC[k]=(dC[k]||0)+1;});
   const dData=Object.entries(dC).slice(-12);
   const lc=document.getElementById("chart-tend");
   if(lc){if(state.charts.tend)state.charts.tend.destroy();state.charts.tend=new Chart(lc,{type:"line",data:{labels:dData.map(e=>e[0]),datasets:[{data:dData.map(e=>e[1]),borderColor:"#c8a84b",backgroundColor:"rgba(194,124,42,0.1)",borderWidth:2,pointBackgroundColor:"#c8a84b",tension:0.3,fill:true}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#8a6545",font:{size:10}},grid:{color:"#3a3820"}},y:{ticks:{color:"#8a6545",font:{size:10}},grid:{color:"#3a3820"}}}}});}
@@ -633,7 +643,7 @@ function renderTela() {
   const {tela, db, perfil} = state;
   const ocs=db.ocorrencias, ats=db.atendimentos, vis=db.visitas, ags=db.agendamentos;
   const semAgo=new Date(); semAgo.setDate(semAgo.getDate()-7);
-  const ocSem=ocs.filter(o=>new Date(o.data+"T12:00")>=semAgo).length;
+  const ocSem=ocs.filter(o=>parseData(o.data)>=semAgo).length;
   const totalVD=ocs.filter(o=>o.violencia_domestica).length;
   const pendVisita=ocs.filter(o=>o.requer_visita).length;
   const proxVis=ags.filter(a=>a.data>=hoje()&&a.status==="Agendado").length;
@@ -1407,7 +1417,7 @@ function gerarRecomendacoes() {
     const desc = (o.descricao||"").toLowerCase();
     const naoRecuperado = !recuperado(o);
     const naoEhRecuperacao = !tipo.includes("recuper");
-    const dataReal = o.data ? new Date(o.data+"T12:00") : new Date(o.criadoEm);
+    const dataReal = o.data ? parseData(o.data) : new Date(o.criadoEm);
     const recente = !isNaN(dataReal) && dataReal >= h72;
     const roubouOuFurtou = tipo.includes("roubo") || tipo.includes("furto");
     const usadoEmCrime = desc.includes("veículo") || desc.includes("veiculo") || 
@@ -1715,16 +1725,20 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
   let dataLimite=null;
   if(periodoFiltro==="hoje"){
     const hj=hoje();
-    dataLimite=function(o){const d=(o.data||"").trim(),iso=d.includes("/")?d.split("/").reverse().join("-"):d.split("T")[0];return iso===hj;};
+    dataLimite=function(o){
+      const dt=parseData(o.data);
+      if(!dt) return false;
+      return dt.toISOString().split("T")[0]===hj;
+    };
   } else if(periodoFiltro==="24h"){
     const lim=new Date(agora-24*60*60*1000);
-    dataLimite=function(o){const d=new Date(((o.data||"").includes("/")?((o.data||"").split("/").reverse().join("-")):((o.data||"").split("T")[0]))+"T12:00");return d>=lim;};
+    dataLimite=function(o){const dt=parseData(o.data);return dt&&dt>=lim;};
   } else if(periodoFiltro==="7d"){
     const lim=new Date(agora-7*24*60*60*1000);
-    dataLimite=function(o){const d=new Date(((o.data||"").includes("/")?((o.data||"").split("/").reverse().join("-")):((o.data||"").split("T")[0]))+"T12:00");return d>=lim;};
+    dataLimite=function(o){const dt=parseData(o.data);return dt&&dt>=lim;};
   } else if(periodoFiltro==="30d"){
     const lim=new Date(agora-30*24*60*60*1000);
-    dataLimite=function(o){const d=new Date(((o.data||"").includes("/")?((o.data||"").split("/").reverse().join("-")):((o.data||"").split("T")[0]))+"T12:00");return d>=lim;};
+    dataLimite=function(o){const dt=parseData(o.data);return dt&&dt>=lim;};
   } else {
     dataLimite=function(){return true;}; // todos os períodos
   }
@@ -2064,7 +2078,7 @@ function renderDashboardOperador(main,ocs,hoje_){
     }, 400);
   },150);
 
-  const ocs24=ocs.filter(function(o){return new Date(o.data+"T12:00")>=new Date(new Date()-24*60*60*1000);});
+  const ocs24=ocs.filter(function(o){return parseData(o.data)>=new Date(new Date()-24*60*60*1000);});
   const nL=state.alertasGraves.filter(function(a){return!a.lido;}).length;
 
   const veiculosAlerta=ocs.filter(function(o){
@@ -2165,5 +2179,4 @@ function renderDashboardOperador(main,ocs,hoje_){
 
 
   h+="<div id='rec-op-banner' style='margin-bottom:16px'>";
-  h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px'>";
-  h+="<span class='spin' style='bo
+  h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-i
