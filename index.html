@@ -697,6 +697,16 @@ function renderTela() {
           </div>
         </div>
 
+        <!-- Seletor de bairros -->
+        <div style="border-top:1px solid #3a3820;padding-top:14px;margin-bottom:14px">
+          <p style="color:#5a5535;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:8px">Bairro</p>
+          <select id="filtro-bairro" onchange="executarFiltro()"
+            style="width:100%;background:#141208;border:1px solid #4a4530;color:#e8e0cc;padding:10px 13px;border-radius:8px;font-size:13px;outline:none;cursor:pointer">
+            <option value="">Todos os bairros</option>
+            ${["Centro","Candeias","Alto Maron","Felícia","Cruzeiro","Primavera","Boa Vista","Vila America","Guarani","Recreio","Jurema","Vila Elisa","Urbis VI","Nova Cidade","Morada Real","Ayrton Senna","Alto do Panorama","Morada dos Pássaros III","Santa Marta","Sumaré","Alto da Colina","Urbis I","Vila Sul","Iracema","Nova Esperança","Ibirapuera","Lagoa das Flores","Brasil"].map(b=>`<option value="${b}">${b}</option>`).join("")}
+          </select>
+        </div>
+
         <!-- Seletor de período -->
         <div style="border-top:1px solid #3a3820;padding-top:14px;margin-bottom:4px">
           <p style="color:#5a5535;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Período</p>
@@ -1165,6 +1175,8 @@ function selecionarPeriodo(val, silent) {
 function limparFiltro() {
   const inp = document.getElementById("filtro-input");
   if(inp) inp.value="";
+  const sb = document.getElementById("filtro-bairro");
+  if(sb) sb.value="";
   state.ultimaBusca="";
   const div = document.getElementById("filtro-resultado");
   if(div){ div.innerHTML=""; div.style.display="none"; }
@@ -1201,6 +1213,12 @@ function executarFiltro() {
     if(range.ate && d > range.ate) return false;
     return true;
   });
+
+  // Filtra por bairro
+  const bairroSel = document.getElementById("filtro-bairro")?.value||"";
+  if(bairroSel){
+    ocs = ocs.filter(o=>(o.bairro||"").toLowerCase().includes(bairroSel.toLowerCase()));
+  }
 
   // Filtra por texto
   if(q && q.length>=2){
@@ -1658,14 +1676,16 @@ function renderRecados(){
 // MAPA LEAFLET
 // ══════════════════════════════════════════════
 function atualizarMapa(){
-  const tipo=document.getElementById("mapa-tipo")?.value||"todos";
-  const periodo=document.getElementById("mapa-periodo")?.value||"hoje";
-  renderMapaCalor(document.getElementById("mapa-calor-bairros"), tipo, periodo);
+  var tipo=document.getElementById("mapa-tipo")?.value||"todos";
+  var periodo=document.getElementById("mapa-periodo")?.value||"hoje";
+  var bairro=document.getElementById("mapa-bairro")?.value||"todos";
+  renderMapaCalor(document.getElementById("mapa-calor-bairros"), tipo, periodo, bairro);
 }
-function renderMapaCalor(el, tipoFiltro, periodoFiltro){
+function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairroFiltro){
   if(!el)return;
   tipoFiltro=tipoFiltro||"todos";
   periodoFiltro=periodoFiltro||"hoje";
+  bairroFiltro=bairroFiltro||"todos";
   if(typeof L==="undefined"){el.innerHTML="<p style='color:#5a5535;font-size:12px;text-align:center;padding:18px'>Mapa carregando...</p>";return;}
   const BAIRROS={
     "Centro":[-14.8619,-40.8444],
@@ -1739,7 +1759,9 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
 
   var ocs=state.db.ocorrencias.filter(function(o){
     if(!dataLimite(o))return false;
-    if(!matchB(o.bairro))return false;
+    var bMatch=matchB(o.bairro);
+    if(!bMatch)return false;
+    if(bairroFiltro!=="todos" && normB(bMatch)!==normB(bairroFiltro))return false;
     if(tipoFiltro==="todos"){
       var tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
       return["roubo","furto","homicidio","tentativa","arrombamento","trafico","latrocinio","estupro","lesao","ameaca","violencia","maria da penha","medida protetiva"].some(function(cr){return tN.includes(cr);});
@@ -2124,6 +2146,12 @@ function renderDashboardOperador(main,ocs,hoje_){
   h+="<option value='30d'>Últimos 30 dias</option>";
   h+="<option value='todos'>Todo o período</option>";
   h+="</select>";
+  h+="<select id='mapa-bairro' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
+  h+="<option value='todos'>Todos os bairros</option>";
+  ["Centro","Candeias","Alto Maron","Felicia","Cruzeiro","Primavera","Boa Vista","Vila America","Guarani","Recreio","Jurema","Vila Elisa","Urbis VI","Nova Cidade","Morada Real","Ayrton Senna","Alto do Panorama","Morada dos Passaros III","Santa Marta","Sumare","Alto da Colina","Urbis I","Vila Sul","Iracema","Nova Esperanca","Ibirapuera","Lagoa das Flores","Brasil"].forEach(function(b){
+    h+="<option value='"+b+"'>"+b+"</option>";
+  });
+  h+="</select>";
   h+="</div></div>";
   h+="<div id='mapa-calor-bairros' style='height:340px;overflow:hidden'></div></div>";
 
@@ -2142,43 +2170,4 @@ function renderDashboardOperador(main,ocs,hoje_){
       h+="<span style='font-size:18px'>🚗</span><div style='flex:1;min-width:0'>";
       h+="<p style='color:#d4a830;font-size:12px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+o.veiculo+"</p>";
       h+="<p style='color:#5a4a10;font-size:10px'>"+badge+" · "+(o.bairro||"—")+"</p>";
-      h+="<p style='color:#3a2e08;font-size:10px'>"+fmtData(o.data)+"</p></div></div>";
-    });
-  }
-  h+="</div></div>";
-
-  h+="<div style='background:#1a1808;border:1px solid #3a4a28;border-radius:14px;overflow:hidden;margin-bottom:16px'>";
-  h+="<div style='padding:10px 16px;border-bottom:1px solid #2a3818'><p style='color:#6a8a50;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>📝 Recados ao Próximo Turno</p></div>";
-  h+="<div style='padding:14px 16px;border-bottom:1px solid #1e2818'>";
-  h+="<textarea id='recado-input' rows='3' placeholder='Registre um aviso ou pendência para o próximo operador...' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:11px 13px;border-radius:9px;font-size:13px;resize:vertical;line-height:1.7;outline:none;font-family:inherit;margin-bottom:10px' onfocus=\"this.style.borderColor='#6a8a50'\" onblur=\"this.style.borderColor='#2a3818'\"></textarea>";
-  h+="<button onclick='salvarRecado()' style='background:linear-gradient(135deg,#3a5a28,#2a4a18);border:none;color:#a8d890;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📨 Registrar Recado</button>";
-  h+="</div><div id='recados-container' style='padding:12px 16px;max-height:240px;overflow-y:auto'></div></div>";
-
-
-
-  h+="<div id='rec-op-banner' style='margin-bottom:16px'>";
-  h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px'>";
-  h+="<span class='spin' style='border-top-color:#c8a84b;width:14px;height:14px;border-width:2px'></span>";
-  h+="<span style='color:#5a4a20;font-size:12px'>Verificando alertas de veículos...</span></div></div>";
-  h+="</div>";
-
-  main.innerHTML=h;
-  // Inserir campo de lançar no INÍCIO do main
-  if(divLancar && main.firstChild){
-    main.insertBefore(divLancar, main.firstChild);
-  } else if(divLancar){
-    main.appendChild(divLancar);
-  }
-  // Eventos do textarea
-  var ta=document.getElementById("paste-area");
-  if(ta){
-    ta.addEventListener("focus",function(){this.style.borderColor="#c8a84b";});
-    ta.addEventListener("blur",function(){this.style.borderColor="#3a3818";});
-  }
-}
-
-render();
-if(SHEETS_URL){carregarDoSheets();}
-</script>
-</body>
-</html>
+      h+="<p style='color:#3a2e08;f
