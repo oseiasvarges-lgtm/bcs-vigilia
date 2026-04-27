@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>Central de Inteligências BCS</title>
+<title>Central de Inteligências BCS v2</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -1841,36 +1841,39 @@ function atualizarMapa(){
 function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairrosFiltro){
   if(!el)return;
   tipoFiltro=tipoFiltro||"todos";
-  periodoFiltro=periodoFiltro||"hoje";
+  periodoFiltro=periodoFiltro||"24h";
   // bairrosFiltro: array de nomes ou vazio = todos
   var bairrosFiltro=bairrosFiltro||[];
   if(typeof L==="undefined"){el.innerHTML="<p style='color:#5a5535;font-size:12px;text-align:center;padding:18px'>Mapa carregando...</p>";return;}
   const BAIRROS={
     "Centro":[-14.8619,-40.8444],
     "Candeias":[-14.8510,-40.8310],
-    "Alto Maron":[-14.8390,-40.8560],
+    "Alto Maron":[-14.8527,-40.8326],
     "Felicia":[-14.8730,-40.8330],
-    "Cruzeiro":[-14.8700,-40.8510],
+    "Cruzeiro":[-14.8401,-40.8344],
     "Primavera":[-14.8560,-40.8390],
     "Boa Vista":[-14.8660,-40.8240],
     "Vila America":[-14.8740,-40.8190],
-    "Guarani":[-14.8460,-40.8410],
+    "Guarani":[-14.8418,-40.8419],
     "Recreio":[-14.8590,-40.8160],
     "Jurema":[-14.8650,-40.8170],
     "Vila Elisa":[-14.8550,-40.8260],
     "Urbis VI":[-14.8800,-40.8360],
-    "Nova Cidade":[-14.8640,-40.8380],
+    "Nova Cidade":[-14.8489,-40.8129],
     "Morada Real":[-14.8710,-40.8430],
     "Ayrton Senna":[-14.8750,-40.8290],
-    "Alto do Panorama":[-14.8500,-40.8490],
+    "Alto do Panorama":[-14.8457,-40.8236],
+    "Panorama":[-14.8457,-40.8236],
     "Morada dos Passaros III":[-14.8830,-40.8270],
     "Santa Marta":[-14.8580,-40.8450],
     "Sumare":[-14.8480,-40.8350],
     "Alto da Colina":[-14.8430,-40.8500],
     "Urbis I":[-14.8820,-40.8420],
     "Vila Sul":[-14.8780,-40.8470],
+    "Europa Unida":[-14.8519,-40.8044],
     "Iracema":[-14.8620,-40.8290],
     "Nova Esperanca":[-14.8700,-40.8550],
+    "Pedrinhas":[-14.8427,-40.8315],
     "Ibirapuera":[-14.8530,-40.8310],
     "Lagoa das Flores":[-14.8450,-40.8380],
     "Brasil":[-14.8590,-40.8200]
@@ -1944,7 +1947,7 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairrosFiltro){
   if(window._mapa){window._mapa.remove();window._mapa=null;}
   requestAnimationFrame(function(){setTimeout(function(){
     var mel=document.getElementById("mapa-leaflet");if(!mel)return;
-    var mapa=L.map("mapa-leaflet",{center:[-14.862,-40.844],zoom:13,zoomControl:true,scrollWheelZoom:false});
+    var mapa=L.map("mapa-leaflet",{center:[-14.848,-40.825],zoom:14,zoomControl:true,scrollWheelZoom:false});
     window._mapa=mapa;
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"CARTO",maxZoom:19}).addTo(mapa);
 
@@ -2299,23 +2302,24 @@ function renderDashboardOperador(main,ocs,hoje_){
   h+="</select>";
   h+="<select id='mapa-periodo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
   h+="<option value='hoje'>Hoje</option>";
-  h+="<option value='24h'>Últimas 24h</option>";
+  h+="<option value='24h' selected>Últimas 24h</option>";
   h+="<option value='7d'>Últimos 7 dias</option>";
   h+="<option value='30d'>Últimos 30 dias</option>";
   h+="<option value='todos'>Todo o período</option>";
   h+="</select>";
-  h+="<div style='position:relative'>";
-  h+="<button onclick='toggleMapaBairros()' id='btn-mapa-bairros' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;cursor:pointer;white-space:nowrap'>📍 Bairros ▾</button>";
-  h+="<div id='mapa-bairros-panel' style='display:none;position:absolute;top:100%;left:0;z-index:1000;background:#1a1808;border:1px solid #3a3820;border-radius:9px;min-width:180px;max-height:220px;overflow-y:auto;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.6)'>";
-  h+="<div style='padding:6px 8px;border-bottom:1px solid #2a2818;display:flex;gap:6px'>";
-  h+="<button onclick=\"selecionarTodosBairrosMapa(true)\" style='background:#1e1c12;border:1px solid #2a2818;color:#c8a84b;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer'>✓ Todos</button>";
-  h+="<button onclick=\"selecionarTodosBairrosMapa(false)\" style='background:#1e1c12;border:1px solid #2a2818;color:#7a7050;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer'>✕ Limpar</button></div>";
-  ["Centro","Candeias","Alto Maron","Felícia","Cruzeiro","Primavera","Boa Vista","Vila America","Guarani","Recreio","Jurema","Vila Elisa","Urbis VI","Nova Cidade","Morada Real","Ayrton Senna","Alto do Panorama","Morada dos Pássaros III","Santa Marta","Sumaré","Alto da Colina","Urbis I","Vila Sul","Iracema","Nova Esperança","Ibirapuera","Lagoa das Flores","Brasil"].forEach(function(b){
-    h+="<label style='display:flex;align-items:center;gap:8px;padding:6px 10px;cursor:pointer' onmouseover=\"this.style.background='#242214'\" onmouseout=\"this.style.background='transparent'\">";
-    h+="<input type='checkbox' value='"+b+"' checked onchange='atualizarMapa()' class='mapa-bairro-chk' style='accent-color:#c8a84b;cursor:pointer'/>";
-    h+="<span style='color:#a0906a;font-size:12px'>"+b+"</span></label>";
+  var _bairrosMapaHtml = "<div style='position:relative'>";
+  _bairrosMapaHtml += "<button onclick='toggleMapaBairros()' id='btn-mapa-bairros' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;cursor:pointer'>📍 Bairros ▾</button>";
+  _bairrosMapaHtml += "<div id='mapa-bairros-panel' style='display:none;position:absolute;top:100%;left:0;z-index:1000;background:#1a1808;border:1px solid #3a3820;border-radius:9px;min-width:180px;max-height:220px;overflow-y:auto;margin-top:4px;box-shadow:0 8px 24px rgba(0,0,0,0.5)'>";
+  _bairrosMapaHtml += "<div style='padding:6px 8px;border-bottom:1px solid #2a2818;display:flex;gap:6px'>";
+  _bairrosMapaHtml += "<button onclick='selecionarTodosBairrosMapa(true)' style='background:#1e1c12;border:1px solid #2a2818;color:#c8a84b;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Todos</button>";
+  _bairrosMapaHtml += "<button onclick='selecionarTodosBairrosMapa(false)' style='background:#1e1c12;border:1px solid #2a2818;color:#7a7050;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button></div>";
+  ["Centro","Candeias","Alto Maron","Felicia","Cruzeiro","Primavera","Boa Vista","Vila America","Guarani","Recreio","Jurema","Vila Elisa","Urbis VI","Nova Cidade","Morada Real","Ayrton Senna","Alto do Panorama","Santa Marta","Sumare","Alto da Colina","Urbis I","Vila Sul","Iracema","Brasil"].forEach(function(b){
+    _bairrosMapaHtml += "<label style='display:flex;align-items:center;gap:8px;padding:5px 10px;cursor:pointer'>";
+    _bairrosMapaHtml += "<input type='checkbox' value='" + b + "' checked onchange='atualizarMapa()' class='mapa-bairro-chk' style='accent-color:#c8a84b;cursor:pointer'/>";
+    _bairrosMapaHtml += "<span style='color:#a0906a;font-size:12px'>" + b + "</span></label>";
   });
-  h+="</div></div>";
+  _bairrosMapaHtml += "</div></div>";
+  h += _bairrosMapaHtml;
   h+="</div></div>";
   h+="<div id='mapa-calor-bairros' style='height:340px;overflow:hidden'></div></div>";
 
