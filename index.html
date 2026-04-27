@@ -1687,7 +1687,28 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
   tipoFiltro=tipoFiltro||"todos";
   periodoFiltro=periodoFiltro||"hoje";
   if(typeof L==="undefined"){el.innerHTML="<p style='color:#5a5535;font-size:12px;text-align:center;padding:18px'>Mapa carregando...</p>";return;}
-  const BAIRROS={"Primavera":[-14.852,-40.829],"Veloso":[-14.848,-40.835],"Universidade":[-14.861,-40.842],"Panorama":[-14.855,-40.848],"Alto Marom":[-14.844,-40.852],"Pedrinas":[-14.839,-40.846],"Nova Cidade":[-14.846,-40.839],"Cruzeiro":[-14.858,-40.834],"Flamengo":[-14.851,-40.825],"Guarani":[-14.843,-40.830]};
+  const BAIRROS={
+    "Centro":[-14.8619,-40.8444],
+    "Candeias":[-14.8558,-40.8302],
+    "Alto Maron":[-14.8481,-40.8615],
+    "Felícia":[-14.8720,-40.8390],
+    "Cruzeiro":[-14.8664,-40.8512],
+    "Primavera":[-14.8442,-40.8478],
+    "Boa Vista":[-14.8780,-40.8350],
+    "Vila America":[-14.8695,-40.8280],
+    "Guarani":[-14.8510,-40.8390],
+    "Recreio":[-14.8600,-40.8560],
+    "Jurema":[-14.8730,-40.8460],
+    "Vila Elisa":[-14.8640,-40.8200],
+    "Urbis VI":[-14.8820,-40.8420],
+    "Nova Cidade":[-14.8760,-40.8310],
+    "Morada Real":[-14.8680,-40.8180],
+    "Ayrton Senna":[-14.8840,-40.8260],
+    "Alto do Panorama":[-14.8530,-40.8550],
+    "Morada dos Pássaros III":[-14.8900,-40.8350],
+    "Santa Marta":[-14.8750,-40.8490],
+    "Sumaré":[-14.8580,-40.8650]
+  };
 
   // Filtro de período
   const agora=new Date();
@@ -1718,13 +1739,22 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
     "outros":["lesão","lesao","ameaça","ameaca","arrombamento","sequestro","estupro"]
   };
 
+  // Normaliza para matching tolerante a acentos e variações
+  function normB(s){return(s||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/\s+/g," ").trim();}
+  const BNORM={};Object.keys(BAIRROS).forEach(function(b){BNORM[normB(b)]=b;});
+  function matchB(ocB){
+    const bn=normB(ocB);
+    if(BNORM[bn])return BNORM[bn];
+    const k=Object.keys(BNORM).find(function(k){return bn.includes(k)||k.includes(bn);});
+    return k?BNORM[k]:null;
+  }
+
   const ocs=state.db.ocorrencias.filter(function(o){
     if(!dataLimite(o))return false;
-    const bN=(o.bairro||"").toLowerCase();
-    if(!Object.keys(BAIRROS).some(function(b){return bN.includes(b.toLowerCase());}))return false;
+    if(!matchB(o.bairro))return false;
     if(tipoFiltro==="todos"){
       const tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
-      return["roubo","furto","homicídio","homicidio","tentativa","arrombamento","tráfico","trafico","latrocínio","estupro","lesão","ameaça","violência","maria da penha","medida protetiva"].some(function(cr){return tN.includes(cr);});
+      return["roubo","furto","homicidio","homicídio","tentativa","arrombamento","trafico","tráfico","latrocinio","estupro","lesao","ameaca","violencia","maria da penha","medida protetiva"].some(function(cr){return tN.includes(cr);});
     }
     const palavras=GRUPOS[tipoFiltro]||[];
     const tN=((o.tipo||"")+" "+(o.descricao||"")).toLowerCase();
@@ -1733,8 +1763,7 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro){
 
   const cnt={};Object.keys(BAIRROS).forEach(function(b){cnt[b]=[];});
   ocs.forEach(function(o){
-    const bN=(o.bairro||"").toLowerCase();
-    const b=Object.keys(BAIRROS).find(function(b){return bN.includes(b.toLowerCase());});
+    const b=matchB(o.bairro);
     if(b)cnt[b].push(o);
   });
   const mx=Math.max.apply(null,Object.values(cnt).map(function(v){return v.length;}).concat([1]));
@@ -2137,27 +2166,4 @@ function renderDashboardOperador(main,ocs,hoje_){
 
   h+="<div id='rec-op-banner' style='margin-bottom:16px'>";
   h+="<div style='background:#1e1a08;border:1px solid #3a3010;border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px'>";
-  h+="<span class='spin' style='border-top-color:#c8a84b;width:14px;height:14px;border-width:2px'></span>";
-  h+="<span style='color:#5a4a20;font-size:12px'>Verificando alertas de veículos...</span></div></div>";
-  h+="</div>";
-
-  main.innerHTML=h;
-  // Inserir campo de lançar no INÍCIO do main
-  if(divLancar && main.firstChild){
-    main.insertBefore(divLancar, main.firstChild);
-  } else if(divLancar){
-    main.appendChild(divLancar);
-  }
-  // Eventos do textarea
-  var ta=document.getElementById("paste-area");
-  if(ta){
-    ta.addEventListener("focus",function(){this.style.borderColor="#c8a84b";});
-    ta.addEventListener("blur",function(){this.style.borderColor="#3a3818";});
-  }
-}
-
-render();
-if(SHEETS_URL){carregarDoSheets();}
-</script>
-</body>
-</html>
+  h+="<span class='spin' style='bo
