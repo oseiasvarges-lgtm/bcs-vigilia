@@ -684,6 +684,9 @@ function renderTela() {
     renderDashboardOperador(main,ocs,hoje());
     return;
   }
+  // AVISOS
+  if(tela==="avisos"){ renderAvisos(main); return; }
+
   // SUPER FILTRO
   if(tela==="filtro"){
     const hoje2 = hoje();
@@ -1184,6 +1187,13 @@ function updateNavBtns(){
 // ══════════════════════════════════════════════════
 // RENDER PRINCIPAL
 // ══════════════════════════════════════════════════
+function _badgeAvisos(){
+  try{
+    var lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+    var n=lista.filter(function(r){return !r.leituras||r.leituras.length===0;}).length;
+    return n>0?"<span style='position:absolute;top:4px;right:6px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;padding:0 3px'>"+n+"</span>":"";
+  }catch(e){return "";}
+}
 function render(){
   const app=document.getElementById("app");
 
@@ -1226,6 +1236,7 @@ function render(){
     ${state.perfil==="operador"?`
       <button class="nav-btn${state.tela==="dashboard"||state.tela==="lancar"?" active":""}" data-tela="dashboard" onclick="setTela('dashboard')">🛡 Painel Operacional</button>
       <button class="nav-btn${state.tela==="filtro"?" active":""}" data-tela="filtro" onclick="setTela('filtro')">🔍 Super Filtro</button>
+      <button class="nav-btn${state.tela==="avisos"?" active":""}" data-tela="avisos" onclick="setTela('avisos')" id="btn-nav-avisos" style="position:relative">📝 Avisos${_badgeAvisos()}</button>
     `:`
       <button class="nav-btn${state.tela==="dashboard"?" active":""}" data-tela="dashboard" onclick="setTela('dashboard')">📊 Painel</button>
       <button class="nav-btn${state.tela==="lancar"?" active":""}" data-tela="lancar" onclick="setTela('lancar')">📋 Ocorrências</button>
@@ -1876,8 +1887,32 @@ function exportarPDFReincidentes(id){
 }
 
 // ══════════════════════════════════════════════
-// RECADOS ENTRE TURNOS
+// AVISOS ENTRE TURNOS
 // ══════════════════════════════════════════════
+function renderAvisos(el){
+  if(!el)return;
+  el.innerHTML="";
+  var h="<div style='max-width:600px;margin:0 auto;padding:8px 0'>";
+  h+="<div style='display:flex;align-items:center;gap:10px;margin-bottom:20px'>";
+  h+="<span style='font-size:22px'>📝</span>";
+  h+="<div><h2 style='font-size:20px;font-weight:700;color:#e8ddd0;margin:0'>Avisos</h2>";
+  h+="<p style='color:#4a4530;font-size:12px;margin:2px 0 0'>Recados e pendências entre turnos</p></div></div>";
+  h+="<div style='background:#1a1808;border:1px solid #3a4a28;border-radius:14px;overflow:hidden;margin-bottom:16px'>";
+  h+="<div style='padding:12px 16px;border-bottom:1px solid #2a3818'>";
+  h+="<p style='color:#6a8a50;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>✉ Novo Aviso</p></div>";
+  h+="<div style='padding:16px'>";
+  h+="<textarea id='recado-input' rows='4' placeholder='Registre um aviso para o proximo operador...' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:11px 13px;border-radius:9px;font-size:13px;resize:vertical;line-height:1.7;outline:none;font-family:inherit;margin-bottom:10px;box-sizing:border-box'></textarea>";
+  h+="<button onclick='salvarRecado()' style='background:linear-gradient(135deg,#3a5a28,#2a4a18);border:none;color:#a8d890;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%'>📨 Registrar Aviso</button>";
+  h+="</div></div>";
+  h+="<div style='background:#141208;border:1px solid #3a3820;border-radius:14px;overflow:hidden'>";
+  h+="<div style='padding:12px 16px;border-bottom:1px solid #2a2818'>";
+  h+="<p style='color:#5a5535;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>📋 Avisos Registrados</p></div>";
+  h+="<div id='recados-container' style='padding:12px 16px;max-height:500px;overflow-y:auto'></div>";
+  h+="</div></div>";
+  el.innerHTML=h;
+  setTimeout(renderRecados,50);
+}
+
 function salvarRecado(){
   const txt=document.getElementById("recado-input")?.value?.trim();
   if(!txt){showToast("Digite o recado","error");return;}
@@ -1900,25 +1935,35 @@ function confirmarLeituraRecado(id){
   renderRecados();
 }
 function renderRecados(){
-  const div=document.getElementById("recados-container");
+  var div=document.getElementById("recados-container");
   if(!div)return;
-  const lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
-  if(!lista.length){div.innerHTML="<p style='color:#3a3820;font-size:12px;text-align:center;padding:14px'>Nenhum recado registrado.</p>";return;}
-  div.innerHTML=lista.map(function(r){
-    const dt=new Date(r.criadoEm);
-    const dh=dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+dt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
-    const lido=r.leituras.length>0;
-    return "<div style='background:#0e0c06;border:1px solid "+(lido?"#2a3820":"#4a3a10")+";border-left:3px solid "+(lido?"#10b981":"#c8a84b")+";border-radius:8px;padding:12px 14px;margin-bottom:8px'>"+
-      "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'>"+
-        "<span style='color:"+(lido?"#10b981":"#c8a84b")+";font-size:10px;font-weight:700;text-transform:uppercase'>"+(lido?"✓ Lido":"⏳ Aguardando leitura")+"</span>"+
-        "<span style='color:#3a3820;font-size:10px'>"+dh+"</span>"+
-      "</div>"+
-      "<p style='color:#e8ddd0;font-size:13px;line-height:1.7;margin-bottom:8px'>"+r.texto+"</p>"+
-      "<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px'>"+
-        "<span style='color:#3a3820;font-size:10px'>"+(r.leituras.length?"Confirmado às: "+r.leituras.join(", "):"")+"</span>"+
-        (!lido?"<button onclick=\"confirmarLeituraRecado("+r.id+")\" style='background:#1a2810;border:1px solid #2a4a1a;color:#10b981;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>✓ Confirmar Leitura</button>":"<span style='background:#0a1a08;color:#10b981;padding:3px 10px;border-radius:5px;font-size:10px;font-weight:700'>✓ Confirmada</span>")+
-      "</div></div>";
-  }).join("");
+  var lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+  if(!lista.length){div.innerHTML="<p style='color:#3a3820;font-size:12px;text-align:center;padding:14px'>Nenhum aviso registrado.</p>";return;}
+  var html="";
+  lista.forEach(function(r){
+    var dt=new Date(r.criadoEm);
+    var dh=dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+dt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+    var lido=r.leituras.length>0;
+    var corB=lido?"#2a3820":"#4a3a10";
+    var corL=lido?"#10b981":"#c8a84b";
+    html+="<div style='background:#0e0c06;border:1px solid "+corB+";border-left:3px solid "+corL+";border-radius:8px;padding:12px 14px;margin-bottom:8px'>";
+    html+="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'>";
+    html+="<span style='color:"+corL+";font-size:10px;font-weight:700;text-transform:uppercase'>"+(lido?"Lido":"Aguardando leitura")+"</span>";
+    html+="<span style='color:#3a3820;font-size:10px'>"+dh+"</span></div>";
+    html+="<p style='color:#e8ddd0;font-size:13px;line-height:1.7;margin-bottom:8px'>"+r.texto+"</p>";
+    html+="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px'>";
+    html+="<span style='color:#3a3820;font-size:10px'>"+(r.leituras.length?"Confirmado as: "+r.leituras.join(", "):"")+"</span>";
+    if(!lido){
+      html+="<button class='btn-confirmar-recado' data-rid='"+r.id+"' style='background:#1a2810;border:1px solid #2a4a1a;color:#10b981;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>Confirmar Leitura</button>";
+    }else{
+      html+="<span style='color:#10b981;font-size:10px;font-weight:700'>Confirmada</span>";
+    }
+    html+="</div></div>";
+  });
+  div.innerHTML=html;
+  div.querySelectorAll(".btn-confirmar-recado").forEach(function(btn){
+    btn.onclick=function(){ confirmarLeituraRecado(parseInt(this.dataset.rid)); };
+  });
 }
 
 // ══════════════════════════════════════════════
@@ -2336,7 +2381,6 @@ function renderDashboardOperador(main,ocs,hoje_){
   setTimeout(function(){gerarRecomendacoes();},150);
   setTimeout(function(){
     renderAlertas(document.getElementById("alertas-graves-list"));
-    renderRecados();
     startTurnoWatch();
     // Mapa precisa de mais tempo para o DOM estar pronto
     setTimeout(function(){
@@ -2443,12 +2487,7 @@ function renderDashboardOperador(main,ocs,hoje_){
   }
   h+="</div></div>";
 
-  h+="<div style='background:#1a1808;border:1px solid #3a4a28;border-radius:14px;overflow:hidden;margin-bottom:16px'>";
-  h+="<div style='padding:10px 16px;border-bottom:1px solid #2a3818'><p style='color:#6a8a50;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>📝 Recados ao Próximo Turno</p></div>";
-  h+="<div style='padding:14px 16px;border-bottom:1px solid #1e2818'>";
-  h+="<textarea id='recado-input' rows='3' placeholder='Registre um aviso ou pendência para o próximo operador...' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:11px 13px;border-radius:9px;font-size:13px;resize:vertical;line-height:1.7;outline:none;font-family:inherit;margin-bottom:10px' onfocus=\"this.style.borderColor='#6a8a50'\" onblur=\"this.style.borderColor='#2a3818'\"></textarea>";
-  h+="<button onclick='salvarRecado()' style='background:linear-gradient(135deg,#3a5a28,#2a4a18);border:none;color:#a8d890;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📨 Registrar Recado</button>";
-  h+="</div><div id='recados-container' style='padding:12px 16px;max-height:240px;overflow-y:auto'></div></div>";
+
 
 
 
