@@ -689,6 +689,7 @@ function renderTela() {
     return;
   }
   // AVISOS
+  if(tela==="alertas"){ renderTelaAlertas(main); return; }
   if(tela==="avisos"){ renderAvisos(main); return; }
 
   // SUPER FILTRO
@@ -1240,6 +1241,7 @@ function render(){
     ${state.perfil==="operador"?`
       <button class="nav-btn${state.tela==="dashboard"||state.tela==="lancar"?" active":""}" data-tela="dashboard" onclick="setTela('dashboard')">🛡 Painel Operacional</button>
       <button class="nav-btn${state.tela==="filtro"?" active":""}" data-tela="filtro" onclick="setTela('filtro')">🔍 Super Filtro</button>
+      <button class="nav-btn${state.tela==="alertas"?" active":""}" data-tela="alertas" onclick="setTela('alertas')" style="position:relative">🚨 Alertas${_badgeAlertas()}</button>
       <button class="nav-btn${state.tela==="avisos"?" active":""}" data-tela="avisos" onclick="setTela('avisos')" id="btn-nav-avisos" style="position:relative">📝 Avisos${_badgeAvisos()}</button>
     `:`
       <button class="nav-btn${state.tela==="dashboard"?" active":""}" data-tela="dashboard" onclick="setTela('dashboard')">📊 Painel</button>
@@ -1713,7 +1715,7 @@ function renderMobileNav(){
 // ══════════════════════════════════════════════
 // ALERTAS GRAVES
 // ══════════════════════════════════════════════
-const TIPOS_GRAVES=["roubo","furto","homicídio","homicidio","tentativa de homicídio","latrocínio","estupro","sequestro","tráfico","trafico","ameaça","maria da penha","violência doméstica","medida protetiva","feminicídio"];
+const TIPOS_GRAVES=["roubo","furto","arrombamento","homicídio","homicidio","tentativa de homicídio","tentativa","latrocínio","estupro","sequestro","tráfico","trafico","ameaça","maria da penha","violência doméstica","violencia domestica","medida protetiva","feminicídio","feminicidio"];
 function ehOcorrenciaGrave(oc){
   const txt=((oc.tipo||"")+" "+(oc.descricao||"")+" "+(oc.medida_protetiva==="Sim"?"medida protetiva":"")).toLowerCase();
   return TIPOS_GRAVES.some(function(t){return txt.includes(t);});
@@ -1888,6 +1890,172 @@ function exportarPDFReincidentes(id){
   w.document.write(html);
   w.document.close();
   setTimeout(function(){w.print();},800);
+}
+
+// ══════════════════════════════════════════════
+// ALERTAS OPERACIONAIS
+// ══════════════════════════════════════════════
+function _badgeAlertas(){
+  try{
+    var n=(state.alertasGraves||[]).filter(function(a){return !a.lido;}).length;
+    return n>0?"<span style='position:absolute;top:4px;right:6px;background:#ef4444;color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center;padding:0 3px'>"+n+"</span>":"";
+  }catch(e){return "";}
+}
+
+function _corAlerta(tipo){
+  var t=(tipo||"").toLowerCase();
+  if(/homicídio|homicidio|latrocínio|latrocinio|feminicídio|feminicidio/.test(t)) return "#ef4444";
+  if(/tentativa/.test(t)) return "#f97316";
+  if(/roubo|arrombamento/.test(t)) return "#f97316";
+  if(/furto/.test(t)) return "#eab308";
+  if(/violência doméstica|violencia domestica|maria da penha|medida protetiva|feminicídio/.test(t)) return "#a855f7";
+  if(/tráfico|trafico/.test(t)) return "#06b6d4";
+  return "#c8a84b";
+}
+
+function _iconeAlerta(tipo){
+  var t=(tipo||"").toLowerCase();
+  if(/homicídio|homicidio|latrocínio|feminicídio/.test(t)) return "💀";
+  if(/tentativa/.test(t)) return "🔫";
+  if(/roubo/.test(t)) return "🔴";
+  if(/furto|arrombamento/.test(t)) return "🟡";
+  if(/violência doméstica|violencia domestica|maria da penha|medida protetiva/.test(t)) return "🛡";
+  if(/tráfico|trafico/.test(t)) return "💊";
+  return "⚠️";
+}
+
+function _reincidentesOc(oc){
+  var cpf=(oc.vitima_cpf||"").replace(/\D/g,"");
+  var vp=norm(oc.vitima_nome).split(" ").filter(function(p){return p.length>2;});
+  return state.db.ocorrencias.filter(function(o){
+    if(o.id===oc.id) return false;
+    if(cpf.length>=11) return (o.vitima_cpf||"").replace(/\D/g,"")===cpf;
+    if(vp.length<3) return false;
+    var vh=norm(o.vitima_nome).split(" ").filter(function(p){return p.length>2;});
+    return vh.length>=3 && vp.filter(function(p){return vh.includes(p);}).length>=3;
+  });
+}
+
+function renderTelaAlertas(el){
+  if(!el)return;
+  var lim7=new Date(new Date()-7*24*60*60*1000);
+  // Buscar ocorrências graves dos últimos 7 dias
+  var graves=state.db.ocorrencias.filter(function(o){
+    var dt=parseData(o.data);
+    if(!dt||dt<lim7) return false;
+    return ehOcorrenciaGrave(o);
+  });
+  // Ordenar: mais recentes primeiro
+  graves.sort(function(a,b){
+    var da=parseData(a.data)||new Date(0);
+    var db=parseData(b.data)||new Date(0);
+    return db-da;
+  });
+
+  // Agrupar por tipo
+  var homicidios=graves.filter(function(o){return /homicídio|homicidio|latrocínio|feminicídio|tentativa/i.test(o.tipo||"");});
+  var roubos=graves.filter(function(o){return /roubo|arrombamento/i.test(o.tipo||"");});
+  var furtos=graves.filter(function(o){return /furto/i.test(o.tipo||"");});
+  var vd=graves.filter(function(o){return /violência doméstica|violencia domestica|maria da penha|medida protetiva/i.test((o.tipo||"")+(o.medida_protetiva==="Sim"?"medida protetiva":""));});
+  var reincidentes=graves.filter(function(o){return _reincidentesOc(o).length>0;});
+
+  var h="<div style='max-width:640px;margin:0 auto;padding:8px 0'>";
+  // Cabeçalho
+  h+="<div style='display:flex;align-items:center;gap:10px;margin-bottom:16px'>";
+  h+="<span style='font-size:22px'>🚨</span>";
+  h+="<div><h2 style='font-size:20px;font-weight:700;color:#e8ddd0;margin:0'>Alertas Operacionais</h2>";
+  h+="<p style='color:#4a4530;font-size:12px;margin:2px 0 0'>Últimos 7 dias · "+graves.length+" ocorrências graves</p></div></div>";
+
+  // Cards de resumo
+  h+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px'>";
+  [
+    {label:"Homicídios/Tentativas",val:homicidios.length,cor:"#ef4444",icone:"💀"},
+    {label:"Roubos/Arrombamentos",val:roubos.length,cor:"#f97316",icone:"🔴"},
+    {label:"Furtos",val:furtos.length,cor:"#eab308",icone:"🟡"},
+    {label:"Violência Doméstica",val:vd.length,cor:"#a855f7",icone:"🛡"},
+    {label:"Reincidentes",val:reincidentes.length,cor:"#f97316",icone:"⚠️"},
+    {label:"Total Graves 7d",val:graves.length,cor:"#c8a84b",icone:"📊"}
+  ].forEach(function(item){
+    h+="<div style='background:#141208;border:1px solid #2a2818;border-radius:10px;padding:12px 14px'>";
+    h+="<div style='display:flex;align-items:center;gap:8px;margin-bottom:4px'>";
+    h+="<span style='font-size:16px'>"+item.icone+"</span>";
+    h+="<span style='font-size:22px;font-weight:900;color:"+item.cor+"'>"+item.val+"</span></div>";
+    h+="<p style='color:#5a5535;font-size:10px;text-transform:uppercase;letter-spacing:1px'>"+item.label+"</p>";
+    h+="</div>";
+  });
+  h+="</div>";
+
+  if(!graves.length){
+    h+="<div style='background:#141208;border:1px solid #2a2818;border-radius:14px;padding:40px;text-align:center'>";
+    h+="<p style='font-size:32px;margin-bottom:12px'>✅</p>";
+    h+="<p style='color:#3a3820;font-size:14px'>Nenhum alerta grave nos últimos 7 dias.</p></div>";
+    h+="</div>";el.innerHTML=h;return;
+  }
+
+  // Reincidentes em destaque
+  if(reincidentes.length){
+    h+="<div style='background:#1a0a00;border:1px solid #5a2a00;border-radius:14px;overflow:hidden;margin-bottom:16px'>";
+    h+="<div style='padding:10px 16px;border-bottom:1px solid #3a1800;background:linear-gradient(90deg,#1e0800,#1a0a00)'>";
+    h+="<p style='color:#f97316;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>⚠️ Reincidentes ("+reincidentes.length+")</p></div>";
+    reincidentes.forEach(function(oc){ h+=_cardAlertaOc(oc,true); });
+    h+="</div>";
+  }
+
+  // Lista completa por tipo
+  var grupos=[
+    {label:"💀 Homicídios e Tentativas",lista:homicidios,cor:"#ef4444"},
+    {label:"🛡 Violência Doméstica / VCM",lista:vd,cor:"#a855f7"},
+    {label:"🔴 Roubos e Arrombamentos",lista:roubos,cor:"#f97316"},
+    {label:"🟡 Furtos",lista:furtos,cor:"#eab308"}
+  ];
+  grupos.forEach(function(g){
+    if(!g.lista.length) return;
+    h+="<div style='background:#141208;border:1px solid #2a2818;border-radius:14px;overflow:hidden;margin-bottom:12px'>";
+    h+="<div style='padding:10px 16px;border-bottom:1px solid #2a2818'>";
+    h+="<p style='color:"+g.cor+";font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>"+g.label+" ("+g.lista.length+")</p></div>";
+    g.lista.forEach(function(oc){ h+=_cardAlertaOc(oc,false); });
+    h+="</div>";
+  });
+  h+="</div>";
+  el.innerHTML=h;
+
+  el.querySelectorAll(".btn-ver-alerta").forEach(function(btn){
+    btn.onclick=function(){ verDetalheAlerta(this.dataset.id); };
+  });
+  el.querySelectorAll(".btn-pdf-alerta").forEach(function(btn){
+    btn.onclick=function(){ state._pdfOcId=this.dataset.id; exportarPDFOcorrencia(); };
+  });
+}
+
+function _cardAlertaOc(oc,destaque){
+  var cor=_corAlerta(oc.tipo);
+  var icone=_iconeAlerta(oc.tipo);
+  var reincs=_reincidentesOc(oc);
+  var h="<div style='padding:12px 16px;border-bottom:1px solid #1a1808;background:"+(destaque?"rgba(249,115,22,0.04)":"transparent")+"'>";
+  h+="<div style='display:flex;align-items:flex-start;gap:10px'>";
+  h+="<span style='font-size:18px;flex-shrink:0;margin-top:2px'>"+icone+"</span>";
+  h+="<div style='flex:1;min-width:0'>";
+  // Tipo + data
+  h+="<div style='display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:4px'>";
+  h+="<span style='background:"+cor+"18;color:"+cor+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+((oc.tipo||"—").toUpperCase())+"</span>";
+  if(reincs.length>0) h+="<span style='background:#f9731618;color:#f97316;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>⚠ REINCIDENTE ("+reincs.length+"x)</span>";
+  h+="<span style='color:#3a3820;font-size:10px'>"+fmtData(oc.data)+(fmtHora(oc.hora)?" "+fmtHora(oc.hora):"")+"</span>";
+  h+="</div>";
+  // Vítima + endereço
+  if(oc.vitima_nome) h+="<p style='color:#c8c0b0;font-size:12px;margin-bottom:2px'>👤 "+oc.vitima_nome+(oc.vitima_idade?" ("+oc.vitima_idade+"a)":"")+"</p>";
+  if(oc.vitima_endereco||oc.bairro) h+="<p style='color:#5a5535;font-size:11px;margin-bottom:6px'>📍 "+(oc.vitima_endereco||oc.bairro)+"</p>";
+  // Botões
+  h+="<div style='display:flex;gap:6px;flex-wrap:wrap'>";
+  h+="<button class='btn-ver-alerta' data-id='"+oc.id+"' style='background:#141208;border:1px solid "+cor+";color:"+cor+";padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>Ver detalhes</button>";
+  h+="<button class='btn-pdf-alerta' data-id='"+oc.id+"' style='background:#141208;border:1px solid #c8a84b;color:#c8a84b;padding:4px 10px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>📄 PDF</button>";
+  h+="</div></div></div></div>";
+  return h;
+}
+
+function marcarTodosLidos(){
+  (state.alertasGraves||[]).forEach(function(a){a.lido=true;});
+  salvarLocal();
+  render();
 }
 
 // ══════════════════════════════════════════════
