@@ -2125,13 +2125,20 @@ function renderRecados(){
       window._avisosCarregando=false;
       delete window[cb]; s.remove();
       if(d&&d.ok&&d.avisos){
-        // Mesclar: remoto + local (local tem prioridade para novos não sincronizados)
         var remotos=d.avisos;
         var local=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+        // NUNCA sobrescrever local com lista vazia do servidor
+        if(remotos.length===0 && local.length>0){
+          // Servidor vazio mas temos dados locais — não faz nada
+          return;
+        }
+        // Mesclar: remoto + local (local tem prioridade para novos não sincronizados)
         var idsRemotos=new Set(remotos.map(function(a){return String(a.id);}));
         var apenasLocal=local.filter(function(a){return !idsRemotos.has(String(a.id));});
         var merged=remotos.concat(apenasLocal);
-        localStorage.setItem("bcs_recados",JSON.stringify(merged));
+        if(merged.length>0){
+          localStorage.setItem("bcs_recados",JSON.stringify(merged));
+        }
         renderRecados();
       }
     };
@@ -2325,6 +2332,32 @@ function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairrosFiltro){
     var mapa=L.map("mapa-leaflet",{center:[-14.848,-40.825],zoom:14,zoomControl:true,scrollWheelZoom:false});
     window._mapa=mapa;
     L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png",{attribution:"CARTO",maxZoom:19}).addTo(mapa);
+
+    // ── Quadrante da 77ª CIPM ─────────────────────────────
+    // Polígono cobrindo a área de atuação: Guarani → Alto Maron → Panorama → Nova Cidade → Primavera → Pedrinhas → Veloso → Guarani
+    var quadrante = [
+      [-14.8418, -40.8419], // Guarani
+      [-14.8390, -40.8560], // Alto Maron (extremo oeste)
+      [-14.8427, -40.8315], // Pedrinhas
+      [-14.8457, -40.8236], // Panorama
+      [-14.8489, -40.8129], // Nova Cidade (extremo leste)
+      [-14.8545, -40.8023], // Primavera (extremo leste-sul)
+      [-14.8560, -40.8200], // Veloso (estimado — atualize quando tiver coord)
+      [-14.8527, -40.8326], // Alto Maron (sul)
+      [-14.8401, -40.8344], // Cruzeiro
+      [-14.8418, -40.8419]  // Guarani (fecha o polígono)
+    ];
+    L.polygon(quadrante, {
+      color: "#c8a84b",
+      weight: 2,
+      dashArray: "8 5",
+      fillColor: "#c8a84b",
+      fillOpacity: 0.06
+    }).addTo(mapa).bindTooltip(
+      "<span style='font-size:11px;font-weight:700;color:#c8a84b'>77ª CIPM — Área de Atuação</span>",
+      {permanent:false, direction:"center", className:""}
+    );
+    // ──────────────────────────────────────────────────────
 
     Object.keys(BAIRROS).forEach(function(bairro){
       var ocB=cnt[bairro]||[], n=ocB.length, coords=BAIRROS[bairro];
