@@ -2215,7 +2215,7 @@ function selecionarTodosBairrosMapa(marcar){
 }
 function atualizarMapa(){
   var tipo=document.getElementById("mapa-tipo")?.value||"todos";
-  var periodo=document.getElementById("mapa-periodo")?.value||"24h";
+  var periodo=document.getElementById("mapa-periodo")?.value||"7d";
   var bairrosSel=[...document.querySelectorAll(".mapa-bairro-chk:checked")].map(c=>c.value);
   // Salvar estado para restaurar após render
   state.mapaFiltros={tipo:tipo,periodo:periodo,bairros:bairrosSel};
@@ -2258,7 +2258,7 @@ const BAIRROS={
 function renderMapaCalor(el, tipoFiltro, periodoFiltro, bairrosFiltro){
   if(!el)return;
   tipoFiltro=tipoFiltro||"todos";
-  periodoFiltro=periodoFiltro||"24h";
+  periodoFiltro=periodoFiltro||"7d";
   // bairrosFiltro: array de nomes ou vazio = todos
   var bairrosFiltro=bairrosFiltro||[];
   if(typeof L==="undefined"){el.innerHTML="<p style='color:#5a5535;font-size:12px;text-align:center;padding:18px'>Mapa carregando...</p>";return;}
@@ -2698,7 +2698,7 @@ function renderDashboardOperador(main,ocs,hoje_){
   h+="<button onclick='atualizarMapa()' style='background:transparent;border:1px solid #3a3820;color:#5a5535;padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer'>↻</button>";
   h+="</div>";
   h+="<div style='display:flex;gap:8px;flex-wrap:wrap'>";
-  var _mf=state.mapaFiltros||{tipo:"todos",periodo:"24h",bairros:[]};
+  var _mf=state.mapaFiltros||{tipo:"todos",periodo:"7d",bairros:[]};
   var _tipos=["todos","roubo","furto","homicidio","vd","trafico","outros"];
   var _tiposLabel={"todos":"Todos os crimes","roubo":"🔴 Roubos","furto":"🟡 Furtos","homicidio":"💀 Homicídios","vd":"🛡 Viol. Doméstica","trafico":"⚠️ Tráfico","outros":"📋 Outros"};
   h+="<select id='mapa-tipo' onchange='atualizarMapa()' style='background:#0e0c06;border:1px solid #3a3820;color:#a0906a;padding:5px 10px;border-radius:7px;font-size:11px;outline:none;cursor:pointer'>";
