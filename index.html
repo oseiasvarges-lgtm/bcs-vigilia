@@ -148,7 +148,7 @@ button{cursor:pointer;}
 // ══════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxHm7LDalY1Ooln-GUQ2jsiuAkv8bS_HIIGGPLrUoTYSAcr-EbM4woEHbJvuqIS_Yfr_w/exec";
+const SHEETS_URL = "https://script.google.com/macros/s/AKfycbx993ofzV9vPjXTBbSxxYqH_CRuDMMv4N8n3bFC1PgeXMW1UxT6dRoyCrtk00w9MQttOg/exec";
 const GESTOR_PIN = "1234";
 const OP_PIN = "0000";
 const ANTHROPIC_KEY = ""; // Deixe vazio - o sistema funciona sem IA
@@ -231,6 +231,7 @@ async function carregarDoSheets() {
     if((rj0.dados.atendimentos||[]).length) state.db.atendimentos = rj0.dados.atendimentos;
     if((rj0.dados.visitas||[]).length) state.db.visitas = rj0.dados.visitas;
     if((rj0.dados.agendamentos||[]).length) state.db.agendamentos = rj0.dados.agendamentos;
+    if((rj0.dados.avisos||[]).length) _sincronizarAvisos(rj0.dados.avisos);
     var totalReal = rj0.total || 0;
     var totalPaginas = totalReal > 0 ? Math.ceil(totalReal / 1500) : 10;
     var todasOcs = (rj0.dados.ocorrencias || []).filter(_isOcValida);
@@ -260,12 +261,15 @@ async function carregarDoSheets() {
       if(seen.has(k)) return false;
       seen.add(k); return true;
     });
+    // Carregar avisos do Sheets
+    if(rj0.dados.avisos&&rj0.dados.avisos.length){
+      state.db.avisos = rj0.dados.avisos;
+    }
     salvarLocal();
     var n = state.db.ocorrencias.length;
     console.log("[BCS] concluido: " + n);
     showToast(n + " ocorrencias carregadas!");
     _setStatus("<span style='color:#6b8c42'>v " + n + " ocorrencias</span>");
-    // Atualizar mapa automaticamente após carregar dados
     setTimeout(function(){ if(typeof atualizarMapa==="function") atualizarMapa(); }, 300);
   } catch(e) {
     console.log("[BCS] erro:", e);
@@ -1176,7 +1180,7 @@ function salvarVisita(){
 // ══════════════════════════════════════════════════
 // NAVEGAÇÃO
 // ══════════════════════════════════════════════════
-function setTela(t){ state.tela=t; closeSidebar(); render(); }
+function setTela(t){ if(t!=="avisos") _pararPollAvisos(); state.tela=t; closeSidebar(); render(); }
 
 function updateNavBtns(){
   document.querySelectorAll(".nav-btn").forEach(b=>{
@@ -1891,78 +1895,299 @@ function exportarPDFReincidentes(id){
 // ══════════════════════════════════════════════
 function renderAvisos(el){
   if(!el)return;
-  el.innerHTML="";
   var h="<div style='max-width:600px;margin:0 auto;padding:8px 0'>";
   h+="<div style='display:flex;align-items:center;gap:10px;margin-bottom:20px'>";
   h+="<span style='font-size:22px'>📝</span>";
-  h+="<div><h2 style='font-size:20px;font-weight:700;color:#e8ddd0;margin:0'>Avisos</h2>";
-  h+="<p style='color:#4a4530;font-size:12px;margin:2px 0 0'>Recados e pendências entre turnos</p></div></div>";
+  h+="<div><h2 style='font-size:20px;font-weight:700;color:#e8ddd0;margin:0'>Avisos entre Turnos</h2>";
+  h+="<p style='color:#4a4530;font-size:12px;margin:2px 0 0'>Pendências e recados para o próximo operador</p></div></div>";
   h+="<div style='background:#1a1808;border:1px solid #3a4a28;border-radius:14px;overflow:hidden;margin-bottom:16px'>";
   h+="<div style='padding:12px 16px;border-bottom:1px solid #2a3818'>";
   h+="<p style='color:#6a8a50;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>✉ Novo Aviso</p></div>";
-  h+="<div style='padding:16px'>";
-  h+="<textarea id='recado-input' rows='4' placeholder='Registre um aviso para o proximo operador...' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:11px 13px;border-radius:9px;font-size:13px;resize:vertical;line-height:1.7;outline:none;font-family:inherit;margin-bottom:10px;box-sizing:border-box'></textarea>";
-  h+="<button onclick='salvarRecado()' style='background:linear-gradient(135deg,#3a5a28,#2a4a18);border:none;color:#a8d890;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%'>📨 Registrar Aviso</button>";
+  h+="<div style='padding:16px;display:flex;flex-direction:column;gap:12px'>";
+  h+="<textarea id='recado-input' rows='4' placeholder='Registre um aviso ou pendência para o próximo operador...' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:11px 13px;border-radius:9px;font-size:13px;resize:vertical;line-height:1.7;outline:none;font-family:inherit;box-sizing:border-box'></textarea>";
+  // Validade
+  h+="<div style='display:flex;gap:10px;align-items:center;flex-wrap:wrap'>";
+  h+="<label style='color:#5a5535;font-size:12px;white-space:nowrap'>⏱ Validade:</label>";
+  h+="<select id='recado-validade' onchange='toggleValidadeCustom()' style='background:#0e0c06;border:1px solid #2a3818;color:#a0906a;padding:8px 12px;border-radius:8px;font-size:12px;outline:none;cursor:pointer;flex:1;min-width:120px'>";
+  h+="<option value='0'>Sem validade</option>";
+  h+="<option value='12'>12 horas</option>";
+  h+="<option value='24' selected>24 horas</option>";
+  h+="<option value='48'>48 horas</option>";
+  h+="<option value='72'>3 dias</option>";
+  h+="<option value='168'>1 semana</option>";
+  h+="<option value='custom'>📅 Data específica</option>";
+  h+="</select>";
+  h+="<input type='datetime-local' id='recado-validade-custom' style='display:none;background:#0e0c06;border:1px solid #2a3818;color:#a0906a;padding:8px 12px;border-radius:8px;font-size:12px;outline:none;flex:1' />";
+  h+="</div>";
+  // Anexo
+  h+="<div style='display:flex;flex-direction:column;gap:6px'>";
+  h+="<label style='color:#5a5535;font-size:12px'>📎 Anexo (imagem ou PDF):</label>";
+  h+="<div style='display:flex;gap:8px;align-items:center'>";
+  h+="<label for='recado-anexo' style='background:#0e0c06;border:1px dashed #3a3818;color:#5a5535;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer;flex:1;text-align:center'>Clique para selecionar arquivo</label>";
+  h+="<input type='file' id='recado-anexo' accept='image/*,application/pdf' style='display:none' onchange='previewAnexo()' />";
+  h+="<button onclick='limparAnexo()' style='background:transparent;border:1px solid #2a2010;color:#5a4a20;padding:8px 12px;border-radius:8px;font-size:11px;cursor:pointer'>✕ Limpar</button>";
+  h+="</div>";
+  h+="<div id='anexo-preview' style='display:none;background:#0e0c06;border:1px solid #2a3818;border-radius:8px;padding:10px;font-size:12px;color:#6a8a50'></div>";
+  h+="</div>";
+  h+="<button onclick='salvarRecado()' style='background:linear-gradient(135deg,#3a5a28,#2a4a18);border:none;color:#a8d890;padding:11px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;width:100%'>📨 Registrar Aviso</button>";
   h+="</div></div>";
   h+="<div style='background:#141208;border:1px solid #3a3820;border-radius:14px;overflow:hidden'>";
-  h+="<div style='padding:12px 16px;border-bottom:1px solid #2a2818'>";
-  h+="<p style='color:#5a5535;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>📋 Avisos Registrados</p></div>";
+  h+="<div style='padding:12px 16px;border-bottom:1px solid #2a2818;display:flex;align-items:center;justify-content:space-between'>";
+  h+="<p style='color:#5a5535;font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase'>📋 Avisos Ativos</p>";
+  h+="<button onclick='limparAvisosVencidos()' style='background:transparent;border:none;color:#3a3820;font-size:10px;cursor:pointer'>🗑 Limpar vencidos</button>";
+  h+="</div>";
   h+="<div id='recados-container' style='padding:12px 16px;max-height:500px;overflow-y:auto'></div>";
   h+="</div></div>";
   el.innerHTML=h;
   setTimeout(renderRecados,50);
+  _iniciarPollAvisos();
+}
+
+function toggleValidadeCustom(){
+  var sel=document.getElementById("recado-validade");
+  var inp=document.getElementById("recado-validade-custom");
+  if(!sel||!inp)return;
+  if(sel.value==="custom"){
+    inp.style.display="block";
+    // Pré-preencher com 24h à frente
+    var d=new Date(Date.now()+24*60*60*1000);
+    inp.value=d.toISOString().slice(0,16);
+  } else {
+    inp.style.display="none";
+  }
+}
+function previewAnexo(){
+  var inp=document.getElementById("recado-anexo");
+  var prev=document.getElementById("anexo-preview");
+  var lbl=document.querySelector("label[for='recado-anexo']");
+  if(!inp||!inp.files||!inp.files[0])return;
+  var file=inp.files[0];
+  if(file.size>5*1024*1024){showToast("Arquivo muito grande (máx 5MB)","error");inp.value="";return;}
+  lbl.textContent=file.name;
+  prev.style.display="block";
+  if(file.type.startsWith("image/")){
+    var reader=new FileReader();
+    reader.onload=function(e){
+      prev.innerHTML="<img src='"+e.target.result+"' style='max-width:100%;max-height:200px;border-radius:6px;display:block'/>";
+      prev._b64=e.target.result;
+      prev._nome=file.name;
+      prev._tipo=file.type;
+    };
+    reader.readAsDataURL(file);
+  } else {
+    var reader=new FileReader();
+    reader.onload=function(e){
+      prev.innerHTML="<span>📄 "+file.name+" ("+Math.round(file.size/1024)+"KB)</span>";
+      prev._b64=e.target.result;
+      prev._nome=file.name;
+      prev._tipo=file.type;
+    };
+    reader.readAsDataURL(file);
+  }
+}
+function limparAnexo(){
+  var inp=document.getElementById("recado-anexo");
+  var prev=document.getElementById("anexo-preview");
+  var lbl=document.querySelector("label[for='recado-anexo']");
+  if(inp)inp.value="";
+  if(prev){prev.style.display="none";prev.innerHTML="";prev._b64=null;}
+  if(lbl)lbl.textContent="Clique para selecionar arquivo";
+}
+function _sincronizarAvisos(lista){
+  // Mescla avisos do Sheets com localStorage, priorizando Sheets
+  localStorage.setItem("bcs_recados", JSON.stringify(lista));
+}
+
+function _enviarAvisoSheets(aviso){
+  if(!SHEETS_URL) return;
+  var cb="av_"+Date.now();
+  var s=document.createElement("script");
+  var reg=Object.assign({},aviso);
+  // Não enviar b64 grande via GET — truncar se necessário
+  if(reg.anexo&&reg.anexo.b64&&reg.anexo.b64.length>100000){
+    reg.anexo={nome:reg.anexo.nome,tipo:reg.anexo.tipo,b64:""};
+    showToast("Anexo grande: salvo só localmente","error");
+  }
+  window[cb]=function(r){
+    delete window[cb]; s.remove();
+    if(r&&r.ok) console.log("[BCS] aviso salvo no Sheets");
+  };
+  s.onerror=function(){delete window[cb];s.remove();};
+  s.src=SHEETS_URL+"?dados="+encodeURIComponent(JSON.stringify({tipo:"avisos",registro:reg}))+"&callback="+cb;
+  document.head.appendChild(s);
+}
+
+function _atualizarAvisoSheets(id, leituras, ativo){
+  if(!SHEETS_URL) return;
+  var cb="avup_"+Date.now();
+  var s=document.createElement("script");
+  window[cb]=function(){delete window[cb];s.remove();};
+  s.onerror=function(){delete window[cb];s.remove();};
+  s.src=SHEETS_URL+"?dados="+encodeURIComponent(JSON.stringify({tipo:"avisos",registro:{id:id,leituras:leituras,ativo:ativo,_acao:"atualizar"}}))+"&callback="+cb;
+  document.head.appendChild(s);
+}
+
+function _pollAvisos(){
+  if(!SHEETS_URL) return;
+  var cb="avpoll_"+Date.now();
+  var s=document.createElement("script");
+  window[cb]=function(r){
+    delete window[cb]; s.remove();
+    if(r&&r.ok&&r.dados&&r.dados.avisos){
+      _sincronizarAvisos(r.dados.avisos);
+      renderRecados();
+    }
+  };
+  s.onerror=function(){delete window[cb];s.remove();};
+  s.src=SHEETS_URL+"?acao=lerAvisos&callback="+cb;
+  document.head.appendChild(s);
+}
+
+// Polling a cada 30s quando na tela de avisos
+var _avisosPollTimer=null;
+function _iniciarPollAvisos(){
+  _pollAvisos();
+  if(_avisosPollTimer) clearInterval(_avisosPollTimer);
+  _avisosPollTimer=setInterval(_pollAvisos, 30000);
+}
+function _pararPollAvisos(){
+  if(_avisosPollTimer){clearInterval(_avisosPollTimer);_avisosPollTimer=null;}
 }
 
 function salvarRecado(){
-  const txt=document.getElementById("recado-input")?.value?.trim();
-  if(!txt){showToast("Digite o recado","error");return;}
-  const lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
-  lista.unshift({id:Date.now(),texto:txt,criadoEm:new Date().toISOString(),leituras:[]});
-  if(lista.length>10)lista.pop();
+  var txt=document.getElementById("recado-input")?.value?.trim();
+  if(!txt){showToast("Digite o aviso","error");return;}
+  var sel=document.getElementById("recado-validade");
+  var expira=null;
+  if(sel){
+    if(sel.value==="custom"){
+      var inp=document.getElementById("recado-validade-custom");
+      if(inp&&inp.value) expira=new Date(inp.value).toISOString();
+    } else {
+      var horas=parseInt(sel.value||"0");
+      if(horas>0) expira=new Date(Date.now()+horas*60*60*1000).toISOString();
+    }
+  }
+  var prev=document.getElementById("anexo-preview");
+  var anexo=null;
+  if(prev&&prev._b64){anexo={b64:prev._b64,nome:prev._nome,tipo:prev._tipo};}
+  var aviso={id:Date.now(),texto:txt,criadoEm:new Date().toISOString(),expira:expira,anexo:anexo,leituras:[]};
+  // Salvar localmente
+  var lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+  lista.unshift(aviso);
   localStorage.setItem("bcs_recados",JSON.stringify(lista));
+  // Enviar ao Sheets
+  _enviarAvisoSheets(aviso);
   document.getElementById("recado-input").value="";
-  showToast("Recado registrado!");
+  limparAnexo();
+  showToast("Aviso registrado e sincronizado!");
   renderRecados();
 }
 function confirmarLeituraRecado(id){
-  const lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
-  const rec=lista.find(function(r){return r.id===id;});
+  var lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+  var rec=lista.find(function(r){return String(r.id)===String(id);});
   if(!rec)return;
-  const hora=new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
+  var hora=new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
   if(!rec.leituras.includes(hora))rec.leituras.push(hora);
   localStorage.setItem("bcs_recados",JSON.stringify(lista));
+  _atualizarAvisoSheets(id, rec.leituras, true);
   showToast("Leitura confirmada ✓");
+  renderRecados();
+}
+function excluirAviso(id){
+  var lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+  lista=lista.filter(function(r){return String(r.id)!==String(id);});
+  localStorage.setItem("bcs_recados",JSON.stringify(lista));
+  _atualizarAvisoSheets(id, [], false);
+  renderRecados();
+}
+function limparAvisosVencidos(){
+  var agora=new Date();
+  var lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+  var antes=lista.length;
+  lista=lista.filter(function(r){return !r.expira||new Date(r.expira)>agora;});
+  localStorage.setItem("bcs_recados",JSON.stringify(lista));
+  showToast("Removidos "+(antes-lista.length)+" aviso(s) vencidos");
   renderRecados();
 }
 function renderRecados(){
   var div=document.getElementById("recados-container");
   if(!div)return;
+  var agora=new Date();
+  // Usar Sheets como fonte primária se disponível, localStorage como fallback
   var lista=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
-  if(!lista.length){div.innerHTML="<p style='color:#3a3820;font-size:12px;text-align:center;padding:14px'>Nenhum aviso registrado.</p>";return;}
+  // Atualizar da fonte remota em background
+  if(SHEETS_URL && !window._avisosCarregando){
+    window._avisosCarregando=true;
+    var cb="av"+Date.now();
+    var s=document.createElement("script");
+    window[cb]=function(d){
+      window._avisosCarregando=false;
+      delete window[cb]; s.remove();
+      if(d&&d.ok&&d.avisos){
+        // Mesclar: remoto + local (local tem prioridade para novos não sincronizados)
+        var remotos=d.avisos;
+        var local=JSON.parse(localStorage.getItem("bcs_recados")||"[]");
+        var idsRemotos=new Set(remotos.map(function(a){return String(a.id);}));
+        var apenasLocal=local.filter(function(a){return !idsRemotos.has(String(a.id));});
+        var merged=remotos.concat(apenasLocal);
+        localStorage.setItem("bcs_recados",JSON.stringify(merged));
+        renderRecados();
+      }
+    };
+    s.onerror=function(){window._avisosCarregando=false;delete window[cb];s.remove();};
+    s.src=SHEETS_URL+"?acao=lerAvisos&callback="+cb;
+    document.head.appendChild(s);
+  }
+  var ativos=lista.filter(function(r){return !r.expira||new Date(r.expira)>agora;});
+  if(!ativos.length){div.innerHTML="<p style='color:#3a3820;font-size:12px;text-align:center;padding:18px'>Nenhum aviso ativo.</p>";return;}
   var html="";
-  lista.forEach(function(r){
+  ativos.forEach(function(r){
     var dt=new Date(r.criadoEm);
     var dh=dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+dt.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"});
     var lido=r.leituras.length>0;
     var corB=lido?"#2a3820":"#4a3a10";
     var corL=lido?"#10b981":"#c8a84b";
+    var validadeStr="";
+    if(r.expira){
+      var exp=new Date(r.expira);
+      var diffH=Math.round((exp-agora)/3600000);
+      if(diffH<=2) validadeStr="<span style='color:#ef4444;font-size:10px;font-weight:700'>⚠ Vence em "+diffH+"h</span>";
+      else validadeStr="<span style='color:#5a5535;font-size:10px'>Vence: "+exp.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" "+exp.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"</span>";
+    }
     html+="<div style='background:#0e0c06;border:1px solid "+corB+";border-left:3px solid "+corL+";border-radius:8px;padding:12px 14px;margin-bottom:8px'>";
     html+="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'>";
-    html+="<span style='color:"+corL+";font-size:10px;font-weight:700;text-transform:uppercase'>"+(lido?"Lido":"Aguardando leitura")+"</span>";
-    html+="<span style='color:#3a3820;font-size:10px'>"+dh+"</span></div>";
+    html+="<div style='display:flex;align-items:center;gap:8px'>";
+    html+="<span style='color:"+corL+";font-size:10px;font-weight:700;text-transform:uppercase'>"+(lido?"✓ Lido":"⏳ Aguardando leitura")+"</span>";
+    html+=validadeStr;
+    html+="</div>";
+    html+="<div style='display:flex;align-items:center;gap:8px'>";
+    html+="<span style='color:#3a3820;font-size:10px'>"+dh+"</span>";
+    html+="<button data-del='"+r.id+"' style='background:transparent;border:none;color:#3a2818;font-size:12px;cursor:pointer;padding:0 4px'>✕</button>";
+    html+="</div></div>";
     html+="<p style='color:#e8ddd0;font-size:13px;line-height:1.7;margin-bottom:8px'>"+r.texto+"</p>";
+    if(r.anexo){
+      if(r.anexo.tipo&&r.anexo.tipo.startsWith("image/")){
+        html+="<img src='"+r.anexo.b64+"' style='max-width:100%;max-height:180px;border-radius:7px;margin-bottom:8px;display:block;cursor:pointer' onclick='window.open(this.src)' title='Clique para ampliar'/>";
+      } else {
+        html+="<a href='"+r.anexo.b64+"' download='"+r.anexo.nome+"' style='display:inline-flex;align-items:center;gap:6px;background:#1a1808;border:1px solid #3a3818;color:#c8a84b;padding:6px 12px;border-radius:7px;font-size:11px;font-weight:700;text-decoration:none;margin-bottom:8px'>📄 "+r.anexo.nome+"</a>";
+      }
+    }
     html+="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px'>";
-    html+="<span style='color:#3a3820;font-size:10px'>"+(r.leituras.length?"Confirmado as: "+r.leituras.join(", "):"")+"</span>";
+    html+="<span style='color:#3a3820;font-size:10px'>"+(r.leituras.length?"Confirmado: "+r.leituras.join(", "):"")+"</span>";
     if(!lido){
-      html+="<button class='btn-confirmar-recado' data-rid='"+r.id+"' style='background:#1a2810;border:1px solid #2a4a1a;color:#10b981;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>Confirmar Leitura</button>";
+      html+="<button class='btn-confirmar-recado' data-rid='"+r.id+"' style='background:#1a2810;border:1px solid #2a4a1a;color:#10b981;padding:5px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>✓ Confirmar Leitura</button>";
     }else{
-      html+="<span style='color:#10b981;font-size:10px;font-weight:700'>Confirmada</span>";
+      html+="<span style='color:#10b981;font-size:10px;font-weight:700'>✓ Leitura confirmada</span>";
     }
     html+="</div></div>";
   });
   div.innerHTML=html;
   div.querySelectorAll(".btn-confirmar-recado").forEach(function(btn){
     btn.onclick=function(){ confirmarLeituraRecado(parseInt(this.dataset.rid)); };
+  });
+  div.querySelectorAll("[data-del]").forEach(function(btn){
+    btn.onclick=function(){ excluirAviso(parseInt(this.dataset.del)); };
   });
 }
 
