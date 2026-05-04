@@ -358,17 +358,58 @@ function agendarSyncSheets(){
   _syncTimer=setTimeout(function(){ sincronizarSheets(); }, 2500);
 }
 
+// Versão sem disparar sync — usada internamente ao carregar dados do Sheets
+function _salvarLocalSemSync(){
+  try{
+    var db=state.db||{};
+    var light={
+      ocorrencias:(db.ocorrencias||[]).map(function(o){
+        var x=Object.assign({},o); delete x.texto_original; return x;
+      }),
+      agendamentos:db.agendamentos||[],
+      visitas:db.visitas||[],
+      atendimentos:db.atendimentos||[]
+    };
+    localStorage.setItem("bcs_db_light",JSON.stringify(light));
+    if(state.eventosAvulsos) localStorage.setItem("bcs_eventos_avulsos",JSON.stringify(state.eventosAvulsos));
+    if(state.projetos) localStorage.setItem("bcs_projetos",JSON.stringify(state.projetos));
+    if(state.alertasProjetos) localStorage.setItem("bcs_alertas_projetos",JSON.stringify(state.alertasProjetos));
+  }catch(e){ console.error("[BCS] _salvarLocalSemSync:",e); }
+}
+
 async function carregarDadosAppDoSheets(){
   if(!SHEETS_URL) return;
   try{
-    var projetos  = await lerDadoAppSheets("bcs_projetos");
-    var eventos   = await lerDadoAppSheets("bcs_eventos_avulsos");
-    var alertas   = await lerDadoAppSheets("bcs_alertas_projetos");
-    if(projetos  &&Array.isArray(projetos))  state.projetos=projetos;
-    if(eventos   &&Array.isArray(eventos))   state.eventosAvulsos=eventos;
-    if(alertas   &&Array.isArray(alertas))   state.alertasProjetos=alertas;
-    salvarLocal();
-    console.log("[BCS] Dados app carregados do Sheets — projetos:",state.projetos.length,"eventos:",state.eventosAvulsos.length);
+    var projetos = await lerDadoAppSheets("bcs_projetos");
+    var eventos  = await lerDadoAppSheets("bcs_eventos_avulsos");
+    var alertas  = await lerDadoAppSheets("bcs_alertas_projetos");
+
+    // Só substitui local se o Sheets tiver dados reais.
+    // Nunca apaga dados locais com lista vazia vinda do Sheets.
+    var localProj  = state.projetos||[];
+    var localEv    = state.eventosAvulsos||[];
+    var localAlert = state.alertasProjetos||[];
+
+    if(projetos && Array.isArray(projetos) && projetos.length > 0){
+      state.projetos = projetos;
+    } else if(projetos === null){
+      // Sheets ainda não tem o dado — mantém local, e sobe o local para o Sheets
+      if(localProj.length > 0) sincronizarSheets();
+    }
+
+    if(eventos && Array.isArray(eventos) && eventos.length > 0){
+      state.eventosAvulsos = eventos;
+    } else if(eventos === null && localEv.length > 0){
+      sincronizarSheets();
+    }
+
+    if(alertas && Array.isArray(alertas) && alertas.length > 0){
+      state.alertasProjetos = alertas;
+    }
+
+    // Salva sem disparar novo sync (evita loop)
+    _salvarLocalSemSync();
+    console.log("[BCS] Dados app Sheets — projetos:"+(state.projetos||[]).length+" eventos:"+(state.eventosAvulsos||[]).length);
   } catch(e){
     console.log("[BCS] Erro ao carregar dados app do Sheets:", e);
   }
