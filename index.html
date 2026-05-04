@@ -5147,7 +5147,12 @@ async function fazerLogin(tipo){
   const t = setTimeout(function(){ delete window[cb]; s.remove(); showToast("Timeout no login — tente novamente","error"); }, 25000);
   window[cb] = function(res){
     clearTimeout(t); delete window[cb]; s.remove();
-    if(res && res.ok){ state.perfil=res.perfil; render(); }
+    if(res && res.ok){
+      state.perfil=res.perfil;
+      render();
+      // Carregar tudo do Sheets automaticamente após login (ocorrências + projetos + calendário)
+      carregarDoSheets();
+    }
     else{ const err=document.getElementById("pin-err"); if(err) err.style.display="block"; }
   };
   s.onerror = function(){ clearTimeout(t); delete window[cb]; s.remove(); showToast("Falha na autenticação","error"); };
