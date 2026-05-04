@@ -294,12 +294,13 @@ function importarDadosBCS(input){
 // SYNC PROJETOS / CALENDÁRIO / ALERTAS → SHEETS
 // ══════════════════════════════════════════════════
 var _syncTimer = null;
+var _sheetsGetSeq = 0; // contador único para evitar colisão de callbacks paralelos
 
 function _sheetsGet(params){
   return new Promise(function(resolve){
-    var cb="bcs_sync_"+Date.now();
+    var cb="bcs_sync_"+(++_sheetsGetSeq)+"_"+Date.now();
     var s=document.createElement("script");
-    var t=setTimeout(function(){ delete window[cb]; s.remove(); resolve(null); }, 12000);
+    var t=setTimeout(function(){ delete window[cb]; s.remove(); resolve(null); }, 20000);
     window[cb]=function(r){ clearTimeout(t); delete window[cb]; s.remove(); resolve(r); };
     s.onerror=function(){ clearTimeout(t); delete window[cb]; s.remove(); resolve(null); };
     var url=SHEETS_URL+"?token="+encodeURIComponent(BCS_TOKEN)+"&callback="+cb;
@@ -340,13 +341,11 @@ async function lerDadoAppSheets(chave){
 async function sincronizarSheets(){
   if(!SHEETS_URL) return;
   try{
-    var tasks=[
-      salvarDadoAppSheets("bcs_projetos", state.projetos||[]),
-      salvarDadoAppSheets("bcs_eventos_avulsos", state.eventosAvulsos||[]),
-      salvarDadoAppSheets("bcs_alertas_projetos", state.alertasProjetos||[]),
-    ];
-    await Promise.all(tasks);
-    console.log("[BCS] Sync Sheets OK — projetos/eventos/alertas");
+    // Sequencial para evitar colisão de callbacks JSONP paralelos
+    await salvarDadoAppSheets("bcs_projetos",        state.projetos||[]);
+    await salvarDadoAppSheets("bcs_eventos_avulsos",  state.eventosAvulsos||[]);
+    await salvarDadoAppSheets("bcs_alertas_projetos", state.alertasProjetos||[]);
+    console.log("[BCS] Sync Sheets OK — projetos:"+(state.projetos||[]).length+" eventos:"+(state.eventosAvulsos||[]).length);
   } catch(e){
     console.log("[BCS] Sync Sheets erro:", e);
   }
@@ -5143,9 +5142,9 @@ async function fazerLogin(tipo){
   const pin = document.getElementById("pin-input")?.value;
   const hash = await hashPin(pin);
   if(!SHEETS_URL){ showToast("Sem conexão com servidor","error"); return; }
-  const cb = "bcs_login_"+Date.now();
+  const cb = "bcs_login_"+(++_sheetsGetSeq)+"_"+Date.now();
   const s = document.createElement("script");
-  const t = setTimeout(function(){ delete window[cb]; s.remove(); showToast("Timeout no login","error"); }, 15000);
+  const t = setTimeout(function(){ delete window[cb]; s.remove(); showToast("Timeout no login — tente novamente","error"); }, 25000);
   window[cb] = function(res){
     clearTimeout(t); delete window[cb]; s.remove();
     if(res && res.ok){ state.perfil=res.perfil; render(); }
