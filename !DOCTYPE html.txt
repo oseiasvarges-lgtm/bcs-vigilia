@@ -201,6 +201,7 @@ function salvarLocal() {
     if(state.projetos) localStorage.setItem("bcs_projetos",JSON.stringify(state.projetos));
     if(state.alertasProjetos) localStorage.setItem("bcs_alertas_projetos",JSON.stringify(state.alertasProjetos));
     console.log("[BCS] Salvado - OC:",light.ocorrencias.length,"Agendamentos:",light.agendamentos.length,"Visitas:",light.visitas.length);
+    agendarSyncSheets();
   } catch(e){
     console.error("[BCS] Erro ao salvar:",e);
   }
@@ -287,6 +288,90 @@ function importarDadosBCS(input){
   reader.readAsText(file);
   // Limpar input para permitir reimportar o mesmo arquivo
   input.value="";
+}
+
+// ══════════════════════════════════════════════════
+// SYNC PROJETOS / CALENDÁRIO / ALERTAS → SHEETS
+// ══════════════════════════════════════════════════
+var _syncTimer = null;
+
+function _sheetsGet(params){
+  return new Promise(function(resolve){
+    var cb="bcs_sync_"+Date.now();
+    var s=document.createElement("script");
+    var t=setTimeout(function(){ delete window[cb]; s.remove(); resolve(null); }, 12000);
+    window[cb]=function(r){ clearTimeout(t); delete window[cb]; s.remove(); resolve(r); };
+    s.onerror=function(){ clearTimeout(t); delete window[cb]; s.remove(); resolve(null); };
+    var url=SHEETS_URL+"?token="+encodeURIComponent(BCS_TOKEN)+"&callback="+cb;
+    Object.keys(params).forEach(function(k){ url+="&"+k+"="+encodeURIComponent(params[k]); });
+    s.src=url;
+    document.head.appendChild(s);
+  });
+}
+
+async function salvarDadoAppSheets(chave, valor){
+  if(!SHEETS_URL) return;
+  var json=JSON.stringify(valor);
+  // Chunking: se o JSON for grande, dividir em partes de 4000 chars
+  var CHUNK=4000;
+  var chunks=[];
+  for(var i=0;i<json.length;i+=CHUNK) chunks.push(json.slice(i,i+CHUNK));
+  // Salvar total de chunks primeiro
+  await _sheetsGet({acao:"salvarDadoApp",chave:chave+"__total",valor:String(chunks.length)});
+  for(var c=0;c<chunks.length;c++){
+    await _sheetsGet({acao:"salvarDadoApp",chave:chave+"__"+c,valor:chunks[c]});
+  }
+}
+
+async function lerDadoAppSheets(chave){
+  if(!SHEETS_URL) return null;
+  var r=await _sheetsGet({acao:"lerDadoApp",chave:chave+"__total"});
+  if(!r||!r.ok||!r.valor) return null;
+  var total=parseInt(r.valor)||1;
+  var json="";
+  for(var c=0;c<total;c++){
+    var rc=await _sheetsGet({acao:"lerDadoApp",chave:chave+"__"+c});
+    if(!rc||!rc.ok) return null;
+    json+=rc.valor||"";
+  }
+  try{ return JSON.parse(json); } catch(e){ return null; }
+}
+
+async function sincronizarSheets(){
+  if(!SHEETS_URL) return;
+  try{
+    var tasks=[
+      salvarDadoAppSheets("bcs_projetos", state.projetos||[]),
+      salvarDadoAppSheets("bcs_eventos_avulsos", state.eventosAvulsos||[]),
+      salvarDadoAppSheets("bcs_alertas_projetos", state.alertasProjetos||[]),
+    ];
+    await Promise.all(tasks);
+    console.log("[BCS] Sync Sheets OK — projetos/eventos/alertas");
+  } catch(e){
+    console.log("[BCS] Sync Sheets erro:", e);
+  }
+}
+
+function agendarSyncSheets(){
+  if(!SHEETS_URL) return;
+  clearTimeout(_syncTimer);
+  _syncTimer=setTimeout(function(){ sincronizarSheets(); }, 2500);
+}
+
+async function carregarDadosAppDoSheets(){
+  if(!SHEETS_URL) return;
+  try{
+    var projetos  = await lerDadoAppSheets("bcs_projetos");
+    var eventos   = await lerDadoAppSheets("bcs_eventos_avulsos");
+    var alertas   = await lerDadoAppSheets("bcs_alertas_projetos");
+    if(projetos  &&Array.isArray(projetos))  state.projetos=projetos;
+    if(eventos   &&Array.isArray(eventos))   state.eventosAvulsos=eventos;
+    if(alertas   &&Array.isArray(alertas))   state.alertasProjetos=alertas;
+    salvarLocal();
+    console.log("[BCS] Dados app carregados do Sheets — projetos:",state.projetos.length,"eventos:",state.eventosAvulsos.length);
+  } catch(e){
+    console.log("[BCS] Erro ao carregar dados app do Sheets:", e);
+  }
 }
 
 let _carregando = false;
@@ -426,6 +511,12 @@ async function carregarDoSheets() {
     showToast(n+" ocorrência(s) carregadas!");
     setS("<span style='color:#6b8c42'>✓ "+n+" ocorrências · "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"</span>");
     _carregando = false;
+
+    // Carregar projetos / calendário / alertas do Sheets
+    await carregarDadosAppDoSheets();
+    // Re-renderizar se tela for projetos/calendário/dashprojetos
+    var mRe=document.getElementById("main");
+    if(mRe&&(state.tela==="projetos"||state.tela==="dashprojetos"||state.tela==="calendario")) renderTela();
 
   } catch(e) {
     _carregando = false;
