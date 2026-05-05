@@ -3914,6 +3914,151 @@ function _bannerImportacao(main){
 }
 
 // ══════════════════════════════════════════════════════
+//  DETECÇÃO AUTOMÁTICA DE OCORRÊNCIA ESCOLAR
+// ══════════════════════════════════════════════════════
+function _detectarEscolaNaOc(texto){
+  var r={escolaId:null,escolaNome:null,tipoOcEscola:null,tipoViolencia:null,ehEscolar:false,confidence:0};
+  if(!texto||texto.length<10) return r;
+  var txt=texto.toLowerCase();
+
+  // 1 ── Palavras-chave genéricas de escola
+  var kwEscola=[
+    "escola","colégio","colegio","eefm","eeef","eeem","eem ","emef","cemep",
+    "aluno","alunos","aluna","alunas","estudante","estudantes",
+    "professor","professora","coordenador","diretora","diretora",
+    "sala de aula","recreio","pátio da escola","quadra escolar",
+    "ensino médio","ensino fundamental","ensino infantil","eja",
+    "turma","turno escolar","matriculad","colégio estadual","colégio municipal"
+  ];
+  var hits=0;
+  kwEscola.forEach(function(k){if(txt.includes(k))hits++;});
+  if(hits>0){r.ehEscolar=true; r.confidence=Math.min(hits*20,90);}
+
+  // 2 ── Tentar casar com escola cadastrada (fuzzy por palavras significativas)
+  var melhorScore=0;
+  (state.escolas||[]).forEach(function(es){
+    var nomeLow=es.nome.toLowerCase().replace(/[^a-záéíóúãõâêôàü\s]/gi,"");
+    var palavras=nomeLow.split(/\s+/).filter(function(w){return w.length>3&&!/^(escola|estadual|municipal|federal|privada|ensino|colegio|centro|unidade)$/.test(w);});
+    var score=0;
+    palavras.forEach(function(w){if(txt.includes(w))score++;});
+    // Bonus: nome completo contido no texto
+    if(txt.includes(nomeLow.substring(0,12)))score+=3;
+    if(score>melhorScore&&score>0){
+      melhorScore=score;
+      r.escolaId=es.id;
+      r.escolaNome=es.nome;
+      r.ehEscolar=true;
+      r.confidence=Math.min(50+score*15,99);
+    }
+  });
+
+  // 3 ── Classificar tipo da ocorrência escolar
+  if(/bullying|buli\b|humilha|intimidaç|intimidacao|zoaç|zoação|apelid|gozaç|constrangi|cyberbullying/i.test(texto)){
+    r.tipoOcEscola="Bullying";
+  } else if(/droga|maconha|narguilé|narguile|crack|cocaína|cocaina|entorpecente|cannabis|baseado|skank|haxixe|usuário de droga/i.test(texto)){
+    r.tipoOcEscola="Drogas";
+  } else if(/ameaça|ameaçou|ameacao|vai matar|matar o professor|explodir|bomba|arma na escola|arma de fogo|faca na escola/i.test(texto)){
+    r.tipoOcEscola="Ameaça";
+  } else if(/furto|furtou|roubou|roubaram|levou pertence|subtraiu|celular levado|mochila levada/i.test(texto)){
+    r.tipoOcEscola="Furto";
+  } else if(/vandalism|depredar|depredou|pichação|pichacao|quebrou|destruiu|danific|patrimônio escolar/i.test(texto)){
+    r.tipoOcEscola="Vandalismo";
+  } else if(/desentend.*famil|pai.*escola|mãe.*escola|responsável.*escola|conflit.*famil/i.test(texto)){
+    r.tipoOcEscola="Conflito Familiar";
+  } else if(/briga|agress|espanc|soc |socos|tapas|empurr|pancada|lesão corporal|lesao corporal|vias de fato|luta|brigaram|brigou/i.test(texto)){
+    r.tipoOcEscola="Violência";
+  } else if(r.ehEscolar){
+    r.tipoOcEscola="Outros";
+  }
+
+  // 4 ── Tipo de violência (se for violência)
+  if(r.tipoOcEscola==="Violência"){
+    if(/sexual|abuso|assédio|assedio|importunaç|estupro|toque indevido/i.test(texto)) r.tipoViolencia="Sexual";
+    else if(/psicológic|psicologic|moral|constrang|humilhação por adulto/i.test(texto)) r.tipoViolencia="Psicológica";
+    else if(/verbal|xingou|xingament|ofend|palavrão|insulto/i.test(texto)) r.tipoViolencia="Verbal";
+    else r.tipoViolencia="Física";
+  }
+
+  return r;
+}
+
+// Chamado pelo oninput do textarea — atualiza o painel de sugestão
+function detectarEscolaNaOc(){
+  var texto=(document.getElementById("oc-texto")||{value:""}).value;
+  var painel=document.getElementById("painel-escola-detectada");
+  var blocoCampo=document.getElementById("bloco-campo-escola");
+  if(!painel) return;
+
+  var det=_detectarEscolaNaOc(texto);
+
+  if(!det.ehEscolar){
+    painel.style.display="none";
+    if(blocoCampo) blocoCampo.style.display="block";
+    return;
+  }
+
+  // Monta o painel de sugestão
+  var corConf=det.confidence>=70?"#22c55e":det.confidence>=40?"#f59e0b":"#38bdf8";
+  var h="<div style='background:#0a1e0a;border:1px solid "+corConf+";border-radius:10px;padding:12px 14px'>";
+  h+="<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px'>";
+  h+="<span style='font-size:16px'>🏫</span>";
+  h+="<span style='color:"+corConf+";font-size:12px;font-weight:700'>Ocorrência escolar detectada</span>";
+  h+="<span style='background:"+corConf+"22;color:"+corConf+";padding:1px 7px;border-radius:8px;font-size:10px;font-weight:700;margin-left:auto'>"+det.confidence+"% confiança</span>";
+  h+="</div>";
+
+  // Escola identificada
+  if(det.escolaNome){
+    h+="<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px'>";
+    h+="<span style='color:#7a9a7a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;width:80px;flex-shrink:0'>Escola</span>";
+    h+="<span style='color:#e8ddd0;font-size:12px;font-weight:600;flex:1'>"+esc(det.escolaNome)+"</span>";
+    h+="<button onclick=\"_confirmarEscolaDetectada('"+det.escolaId+"')\" style='background:#22c55e22;border:1px solid #22c55e44;color:#22c55e;padding:3px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>✓ Confirmar</button>";
+    h+="</div>";
+  } else {
+    h+="<div style='margin-bottom:8px'><span style='color:#f59e0b;font-size:11px'>⚠ Escola não identificada na base — selecione manualmente abaixo ou cadastre a escola.</span></div>";
+  }
+
+  // Tipo de ocorrência escolar
+  if(det.tipoOcEscola){
+    h+="<div style='display:flex;align-items:center;gap:8px;margin-bottom:"+(det.tipoViolencia?"6":"0")+"px'>";
+    h+="<span style='color:#7a9a7a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;width:80px;flex-shrink:0'>Tipo</span>";
+    h+="<span style='background:#f59e0b22;color:#f59e0b;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700'>"+det.tipoOcEscola+"</span>";
+    h+="<span style='color:#5a7a5a;font-size:10px'>(detectado automaticamente)</span>";
+    h+="</div>";
+  }
+  if(det.tipoViolencia){
+    h+="<div style='display:flex;align-items:center;gap:8px'>";
+    h+="<span style='color:#7a9a7a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;width:80px;flex-shrink:0'>Violência</span>";
+    h+="<span style='background:#ef444422;color:#ef4444;padding:2px 8px;border-radius:5px;font-size:11px;font-weight:700'>"+det.tipoViolencia+"</span>";
+    h+="</div>";
+  }
+  h+="</div>";
+
+  painel.innerHTML=h;
+  painel.style.display="block";
+
+  // Se escola confirmada automaticamente, oculta o select manual (para não confundir)
+  if(det.escolaId && blocoCampo){
+    var sel=document.getElementById("oc-escola");
+    if(sel&&!sel.value) blocoCampo.style.opacity="0.4";
+  }
+}
+
+function _confirmarEscolaDetectada(escolaId){
+  var sel=document.getElementById("oc-escola");
+  if(sel){
+    sel.value=escolaId;
+    var blocoCampo=document.getElementById("bloco-campo-escola");
+    if(blocoCampo){blocoCampo.style.opacity="1";}
+  }
+  var painel=document.getElementById("painel-escola-detectada");
+  if(painel){
+    // Mostra confirmação visual
+    var btn=painel.querySelector("button");
+    if(btn){btn.textContent="✓ Vinculada!";btn.style.background="#22c55e44";btn.style.cursor="default";btn.onclick=null;}
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  MÓDULO ESCOLAR
 // ══════════════════════════════════════════════════════
 function renderModuloEscolar(main){
@@ -4915,12 +5060,14 @@ function renderTela() {
       h.push("<h2 style='font-size:20px;font-weight:700;color:#e8ddd0;margin-bottom:20px'>📝 Lançar Ocorrência</h2>");
       h.push("<div style='background:#141208;border:1px solid #2a3818;border-radius:10px;padding:20px'>");
       h.push("<label style='color:#5a5535;font-size:11px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:8px'>Descrição Completa *</label>");
-      h.push("<textarea id='oc-texto' placeholder='Cole aqui o texto completo da ocorrência. Será parseado automaticamente para os campos.' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:12px;border-radius:6px;font-size:12px;font-family:monospace;box-sizing:border-box;min-height:180px;resize:vertical;outline:none'></textarea>");
+      h.push("<textarea id='oc-texto' oninput='detectarEscolaNaOc()' placeholder='Cole aqui o texto completo da ocorrência. Será parseado automaticamente para os campos.' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:12px;border-radius:6px;font-size:12px;font-family:monospace;box-sizing:border-box;min-height:180px;resize:vertical;outline:none'></textarea>");
       h.push("<p style='color:#7a7050;font-size:11px;margin:8px 0;line-height:1.6'>Dica: Mencione tipo de crime, nome da vítima, suspeito, bairro, endereço, características, veículo e qualquer outra informação importante.</p>");
-      // Campo escola
+      // Painel de detecção automática de escola
+      h.push("<div id='painel-escola-detectada' style='display:none;margin-top:10px'></div>");
+      // Campo escola (manual / confirmação)
       var optsEscola="<option value=''>-- Não envolve escola --</option>";
       (state.escolas||[]).forEach(function(es){ optsEscola+="<option value='"+es.id+"'>"+esc(es.nome)+"</option>"; });
-      h.push("<div style='margin-top:12px'><label style='color:#5a5535;font-size:11px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px'>🏫 Escola Envolvida (opcional)</label><select id='oc-escola' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:9px 10px;border-radius:6px;font-size:12px;outline:none'>"+ optsEscola +"</select></div>");
+      h.push("<div id='bloco-campo-escola' style='margin-top:12px'><label style='color:#5a5535;font-size:11px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px'>🏫 Escola Envolvida (opcional)</label><select id='oc-escola' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:9px 10px;border-radius:6px;font-size:12px;outline:none'>"+ optsEscola +"</select></div>");
       h.push("<div style='display:flex;gap:10px;margin-top:16px'><button id='btn-cancelar-lancar' style='flex:1;background:#1a1808;border:1px solid #2a3818;color:#5a5535;padding:10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button><button id='btn-salvar-lancar' style='flex:1;background:linear-gradient(135deg,#2a4a18,#3a5a28);border:none;color:#a8d890;padding:10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>💾 Lançar</button></div>");
       h.push("</div></div>");
       main.innerHTML=h.join("");
@@ -5001,10 +5148,15 @@ function renderTela() {
         var escolaSelEl=document.getElementById("oc-escola");
         var escolaId=escolaSelEl?escolaSelEl.value:"";
         var escolaNome=escolaId?(escolaSelEl.options[escolaSelEl.selectedIndex]||{text:""}).text:"";
+        // Se operador não selecionou manualmente, usa detecção automática
+        var _det=_detectarEscolaNaOc(texto);
+        if(!escolaId && _det.escolaId){ escolaId=_det.escolaId; escolaNome=_det.escolaNome; }
         var oc={
           id:"oc_"+Date.now(), criadoEm:new Date().toISOString(),
           tipo:tipo, bairro:bairro, municipio:"Vitória da Conquista",
           escolaId:escolaId, escolaNome:escolaNome,
+          tipoOcEscola:(_det.tipoOcEscola||""),
+          tipoViolenciaEscola:(_det.tipoViolencia||""),
           vitima_nome:vitimaNome, vitima_telefone:vitimaTel,
           vitima_endereco:vitimaEnd||(endereco&&endereco.length<=150&&!/segundo o relato|ao chegar|a vítima|o autor/i.test(endereco)?endereco:""),
           vitima_sexo:"F", vitima_idade:vitimaIdade, vitima_cpf:"",
