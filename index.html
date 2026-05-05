@@ -227,6 +227,10 @@ function salvarLocal() {
     if(state.eventosAvulsos) localStorage.setItem("bcs_eventos_avulsos",JSON.stringify(state.eventosAvulsos));
     if(state.projetos) localStorage.setItem("bcs_projetos",JSON.stringify(state.projetos));
     if(state.alertasProjetos) localStorage.setItem("bcs_alertas_projetos",JSON.stringify(state.alertasProjetos));
+    if(state.escolas) localStorage.setItem("bcs_escolas",JSON.stringify(state.escolas));
+    if(state.visitasEscolares) localStorage.setItem("bcs_visitas_escolares",JSON.stringify(state.visitasEscolares));
+    if(state.palestrasEscolares) localStorage.setItem("bcs_palestras_escolares",JSON.stringify(state.palestrasEscolares));
+    if(state.projetosEscolares) localStorage.setItem("bcs_projetos_escolares",JSON.stringify(state.projetosEscolares));
     console.log("[BCS] Salvado - OC:",light.ocorrencias.length,"Agendamentos:",light.agendamentos.length,"Visitas:",light.visitas.length);
     agendarSyncSheets();
   } catch(e){
@@ -614,6 +618,13 @@ let state = {
   eventosAvulsos: JSON.parse(localStorage.getItem("bcs_eventos_avulsos")||"[]"),
   projetos: JSON.parse(localStorage.getItem("bcs_projetos")||"[]"),
   alertasProjetos: JSON.parse(localStorage.getItem("bcs_alertas_projetos")||"[]"),
+  escolas: JSON.parse(localStorage.getItem("bcs_escolas")||"[]"),
+  visitasEscolares: JSON.parse(localStorage.getItem("bcs_visitas_escolares")||"[]"),
+  palestrasEscolares: JSON.parse(localStorage.getItem("bcs_palestras_escolares")||"[]"),
+  projetosEscolares: JSON.parse(localStorage.getItem("bcs_projetos_escolares")||"[]"),
+  _escolaTab: "dashboard",
+  _escolaFiltro: "",
+  _escolaId: null,
 };
 
 // Inicializar arrays vazios se undefined
@@ -3902,6 +3913,693 @@ function _bannerImportacao(main){
   document.body.insertBefore(b, document.body.firstChild);
 }
 
+// ══════════════════════════════════════════════════════
+//  MÓDULO ESCOLAR
+// ══════════════════════════════════════════════════════
+function renderModuloEscolar(main){
+  var tab=state._escolaTab||"dashboard";
+  var escolas=state.escolas||[];
+  var visitasEsc=state.visitasEscolares||[];
+  var palestrasEsc=state.palestrasEscolares||[];
+  var projetosEsc=state.projetosEscolares||[];
+  var ocsEsc=(state.db.ocorrencias||[]).filter(function(o){return o.escolaId;});
+  var filtro=(state._escolaFiltro||"").toLowerCase();
+
+  var TIPOS_OC=["Violência","Bullying","Drogas","Ameaça","Furto","Vandalismo","Conflito Familiar","Outros"];
+  var TIPOS_VIO=["Física","Verbal","Psicológica","Sexual","Patrimonial"];
+  var COR_ESCOLA="#38bdf8";
+
+  var h=[];
+  h.push("<div style='max-width:1100px;margin:0 auto'>");
+  // ── Cabeçalho + abas ────────────────────────────────
+  h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px'>");
+  h.push("<h2 style='font-size:22px;font-weight:800;color:#e8ddd0;margin:0'>🏫 Módulo Escolar</h2>");
+  h.push("<div style='display:flex;gap:6px;flex-wrap:wrap'>");
+  [["dashboard","📊 Dashboard"],["escolas","🏫 Escolas"],["visitas","🚗 Visitas"],["palestras","🎤 Ações"]].forEach(function(tb){
+    var a=tab===tb[0];
+    h.push("<button onclick=\"state._escolaTab='"+tb[0]+"';renderTela()\" style='background:"+(a?"#0a1e2a":"#141208")+";border:1px solid "+(a?"#38bdf8":"#2a2818")+";color:"+(a?"#38bdf8":"#4a7a90")+";padding:7px 14px;border-radius:7px;font-size:11px;font-weight:"+(a?"700":"400")+";cursor:pointer'>"+tb[1]+"</button>");
+  });
+  h.push("</div></div>");
+
+  // ── Dashboard ───────────────────────────────────────
+  if(tab==="dashboard"){
+    var nEsc=escolas.filter(function(e){return e.status!=="Inativa";}).length;
+    var nOc=ocsEsc.length;
+    var nVio=ocsEsc.filter(function(o){return (o.tipoOcEscola||"").toLowerCase().includes("viol");}).length;
+    var nVis=visitasEsc.length;
+    var nPal=palestrasEsc.length;
+    var nProj=projetosEsc.length;
+
+    // KPIs
+    h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px'>");
+    [[nEsc,"Escolas Atendidas","🏫","#38bdf8"],[nOc,"Ocorrências","📋","#f59e0b"],[nVio,"Violências","🚨","#ef4444"],[nVis,"Visitas","🚗","#22c55e"],[nPal,"Palestras","🎤","#a78bfa"],[nProj,"Projetos","📌","#f472b6"]].forEach(function(k){
+      h.push("<div class='stat-card' style='border-color:"+k[3]+"33'><div class='stat-icon'>"+k[2]+"</div><div class='stat-val' style='color:"+k[3]+"'>"+k[0]+"</div><div class='stat-label'>"+k[1]+"</div></div>");
+    });
+    h.push("</div>");
+
+    // Gráficos
+    h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px'>");
+    // Pizza tipos de OC
+    h.push("<div class='card'><p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>Tipo de Ocorrência Escolar</p><div style='height:200px;position:relative'><canvas id='chartEscTipoOc'></canvas></div></div>");
+    // Barras violência
+    h.push("<div class='card'><p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>Tipo de Violência Escolar</p><div style='height:200px;position:relative'><canvas id='chartEscVio'></canvas></div></div>");
+    h.push("</div>");
+
+    // Ranking escolas
+    h.push("<div class='card' style='margin-bottom:20px'>");
+    h.push("<p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>🏆 Ranking — Escolas com mais ocorrências</p>");
+    if(!escolas.length){
+      h.push("<p style='color:#3a3820;font-size:13px;text-align:center;padding:20px 0'>Nenhuma escola cadastrada ainda.</p>");
+    } else {
+      var rank=escolas.map(function(es){
+        var n=ocsEsc.filter(function(o){return o.escolaId===es.id;}).length;
+        var v=visitasEsc.filter(function(v){return v.escolaId===es.id;}).length;
+        return {es:es,n:n,v:v};
+      }).sort(function(a,b){return b.n-a.n;});
+      rank.forEach(function(r,i){
+        var risco=r.n>=5?"#ef4444":r.n>=3?"#f59e0b":"#22c55e";
+        h.push("<div style='display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid #1a1808'>");
+        h.push("<span style='color:#3a3820;font-size:12px;font-weight:700;width:20px;text-align:right'>"+(i+1)+"</span>");
+        h.push("<div style='flex:1'>");
+        h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:3px'>");
+        h.push("<span style='color:#e8ddd0;font-size:12px;font-weight:600'>"+esc(r.es.nome)+"</span>");
+        h.push("<span style='background:"+risco+"22;color:"+risco+";padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700'>"+(r.n>=5?"ALTO":r.n>=3?"MÉDIO":"BAIXO")+"</span>");
+        h.push("</div>");
+        h.push("<div style='background:#1a1808;border-radius:4px;height:5px;width:100%'><div style='height:100%;width:"+(rank[0].n>0?Math.round(r.n/rank[0].n*100):0)+"%;background:"+risco+";border-radius:4px'></div></div>");
+        h.push("</div>");
+        h.push("<span style='color:#4a7a50;font-size:10px'>"+r.n+" oc.</span>");
+        h.push("<span style='color:#4a6a90;font-size:10px'>"+r.v+" vis.</span>");
+        h.push("<button onclick=\"abrirFichaEscola('"+r.es.id+"')\" style='background:#0a1e2a;border:1px solid #1a3a4a;color:#38bdf8;padding:4px 10px;border-radius:6px;font-size:10px;cursor:pointer'>Ver</button>");
+        h.push("</div>");
+      });
+    }
+    h.push("</div>");
+
+    // Últimas ocorrências escolares
+    h.push("<div class='card'>");
+    h.push("<p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>📋 Últimas Ocorrências Escolares</p>");
+    var ultOcs=ocsEsc.slice(-8).reverse();
+    if(!ultOcs.length){h.push("<p style='color:#3a3820;font-size:13px;text-align:center;padding:16px 0'>Nenhuma ocorrência vinculada a escola ainda.<br><span style='color:#2a2818;font-size:11px'>Ao lançar ocorrência, selecione a escola no campo correspondente.</span></p>");}
+    else{ultOcs.forEach(function(o){
+      h.push("<div style='display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #1a1808'>");
+      h.push("<span style='color:#38bdf8;font-size:10px;white-space:nowrap'>"+fmtData(o.data)+"</span>");
+      h.push("<span style='color:#e8ddd0;font-size:11px;flex:1'>"+esc(o.tipo||"Ocorrência")+"</span>");
+      h.push("<span style='color:#7a7050;font-size:10px'>"+esc(o.escolaNome||"")+"</span>");
+      h.push("</div>");
+    });}
+    h.push("</div>");
+
+    main.innerHTML=h.join("").replace("</div>","")+"</div></div>";
+    // Charts
+    setTimeout(function(){
+      var tipoData={};
+      TIPOS_OC.forEach(function(t){tipoData[t]=0;});
+      ocsEsc.forEach(function(o){var t=o.tipoOcEscola||"Outros";tipoData[t]=(tipoData[t]||0)+1;});
+      var tLabels=Object.keys(tipoData).filter(function(k){return tipoData[k]>0;});
+      var COLS=["#38bdf8","#f59e0b","#a78bfa","#ef4444","#22c55e","#f472b6","#fb923c","#6b7280"];
+      var el1=document.getElementById("chartEscTipoOc");
+      if(el1) new Chart(el1,{type:"doughnut",data:{labels:tLabels,datasets:[{data:tLabels.map(function(k){return tipoData[k];}),backgroundColor:COLS.slice(0,tLabels.length),borderWidth:0}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:"right",labels:{color:"#7a7050",font:{size:9}}}}}});
+      var vioData={};
+      TIPOS_VIO.forEach(function(t){vioData[t]=0;});
+      ocsEsc.forEach(function(o){if(o.tipoViolenciaEscola)vioData[o.tipoViolenciaEscola]=(vioData[o.tipoViolenciaEscola]||0)+1;});
+      var el2=document.getElementById("chartEscVio");
+      if(el2) new Chart(el2,{type:"bar",data:{labels:TIPOS_VIO,datasets:[{data:TIPOS_VIO.map(function(k){return vioData[k];}),backgroundColor:"#ef444488",borderColor:"#ef4444",borderWidth:1}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:"#7a7050",font:{size:9}},grid:{color:"#1a1808"}},y:{ticks:{color:"#7a7050",font:{size:9},stepSize:1},grid:{color:"#1a1808"},beginAtZero:true}}}});
+    },100);
+    return;
+  }
+
+  // ── Lista de Escolas ────────────────────────────────
+  if(tab==="escolas"){
+    h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap'>");
+    h.push("<input id='filtro-escola' type='text' placeholder='Buscar escola...' value='"+esc(state._escolaFiltro||"")+"' oninput=\"state._escolaFiltro=this.value;renderTela()\" style='flex:1;min-width:180px;background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:8px 12px;border-radius:7px;font-size:12px;outline:none'/>");
+    h.push("<button onclick=\"abrirModalEscola(null)\" style='background:#0a1e2a;border:1px solid #1a4a6a;color:#38bdf8;padding:8px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer'>+ Nova Escola</button>");
+    h.push("</div>");
+    var escoFilt=escolas.filter(function(e){return !filtro||e.nome.toLowerCase().includes(filtro)||( e.bairro||"").toLowerCase().includes(filtro);});
+    if(!escoFilt.length){
+      h.push("<div class='card'><p style='color:#3a3820;font-size:13px;text-align:center;padding:20px 0'>Nenhuma escola"+(filtro?" encontrada para \""+esc(filtro)+"\"":" cadastrada ainda")+".</p></div>");
+    } else {
+      escoFilt.forEach(function(es){
+        var nOcE=ocsEsc.filter(function(o){return o.escolaId===es.id;}).length;
+        var nVisE=visitasEsc.filter(function(v){return v.escolaId===es.id;}).length;
+        var nPalE=palestrasEsc.filter(function(p){return p.escolaId===es.id;}).length;
+        var risco=nOcE>=5?"#ef4444":nOcE>=3?"#f59e0b":"#22c55e";
+        h.push("<div class='card' style='margin-bottom:10px;cursor:pointer' onclick=\"abrirFichaEscola('"+es.id+"')\">");
+        h.push("<div style='display:flex;align-items:start;justify-content:space-between;gap:10px'>");
+        h.push("<div style='flex:1'>");
+        h.push("<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px'>");
+        h.push("<span style='color:#e8ddd0;font-size:14px;font-weight:700'>"+esc(es.nome)+"</span>");
+        h.push("<span style='background:"+risco+"22;color:"+risco+";padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700'>"+(nOcE>=5?"RISCO ALTO":nOcE>=3?"RISCO MÉDIO":"REGULAR")+"</span>");
+        if(es.status==="Inativa") h.push("<span style='background:#3a3820;color:#7a7050;padding:2px 7px;border-radius:4px;font-size:9px'>INATIVA</span>");
+        h.push("</div>");
+        h.push("<div style='display:flex;gap:14px;flex-wrap:wrap'>");
+        if(es.tipo) h.push("<span style='color:#5a5535;font-size:11px'>🏛 "+esc(es.tipo)+"</span>");
+        if(es.bairro) h.push("<span style='color:#5a5535;font-size:11px'>📍 "+esc(es.bairro)+"</span>");
+        if(es.diretor) h.push("<span style='color:#5a5535;font-size:11px'>👤 "+esc(es.diretor)+"</span>");
+        h.push("</div>");
+        h.push("</div>");
+        h.push("<div style='display:flex;gap:12px;flex-shrink:0'>");
+        h.push("<div style='text-align:center'><div style='color:#f59e0b;font-size:16px;font-weight:700'>"+nOcE+"</div><div style='color:#5a5535;font-size:9px'>Ocorr.</div></div>");
+        h.push("<div style='text-align:center'><div style='color:#22c55e;font-size:16px;font-weight:700'>"+nVisE+"</div><div style='color:#5a5535;font-size:9px'>Visitas</div></div>");
+        h.push("<div style='text-align:center'><div style='color:#a78bfa;font-size:16px;font-weight:700'>"+nPalE+"</div><div style='color:#5a5535;font-size:9px'>Palestras</div></div>");
+        h.push("</div></div></div>");
+      });
+    }
+    main.innerHTML=h.join("").replace("</div>","")+"</div></div>";
+    return;
+  }
+
+  // ── Visitas Escolares ───────────────────────────────
+  if(tab==="visitas"){
+    h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;gap:10px;flex-wrap:wrap'>");
+    h.push("<p style='color:#7a7050;font-size:11px;margin:0'>Total: <strong style='color:#e8ddd0'>"+visitasEsc.length+"</strong> visitas</p>");
+    h.push("<button onclick=\"abrirModalVisitaEscolar(null)\" style='background:#0a1e2a;border:1px solid #1a4a6a;color:#38bdf8;padding:8px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer'>+ Registrar / Agendar Visita</button>");
+    h.push("</div>");
+    // Filtro por escola
+    h.push("<div style='margin-bottom:14px'>");
+    h.push("<select id='filtro-escola-vis' onchange=\"state._escolaFiltroVis=this.value;renderTela()\" style='background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:8px 12px;border-radius:7px;font-size:12px;outline:none;width:100%'>");
+    h.push("<option value=''>Todas as escolas</option>");
+    escolas.forEach(function(es){h.push("<option value='"+es.id+"'"+(state._escolaFiltroVis===es.id?" selected":"")+">"+esc(es.nome)+"</option>");});
+    h.push("</select></div>");
+    var visFilt=visitasEsc.filter(function(v){return !state._escolaFiltroVis||v.escolaId===state._escolaFiltroVis;}).sort(function(a,b){return b.data<a.data?-1:1;});
+    if(!visFilt.length){
+      h.push("<div class='card'><p style='color:#3a3820;font-size:13px;text-align:center;padding:20px 0'>Nenhuma visita registrada ainda.</p></div>");
+    } else {
+      visFilt.forEach(function(v){
+        var tipoCor={Rotina:"#38bdf8","Solidária":"#22c55e","Preventiva":"#a78bfa","Palestra":"#f59e0b","Projeto":"#f472b6"}[v.tipo]||"#6b7280";
+        var passada=v.data&&v.data<hoje();
+        h.push("<div class='card' style='margin-bottom:10px'>");
+        h.push("<div style='display:flex;align-items:start;justify-content:space-between;gap:10px;flex-wrap:wrap'>");
+        h.push("<div style='flex:1'>");
+        h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:5px;flex-wrap:wrap'>");
+        h.push("<span style='background:"+tipoCor+"22;color:"+tipoCor+";padding:2px 8px;border-radius:5px;font-size:10px;font-weight:700'>"+esc(v.tipo||"Visita")+"</span>");
+        if(!passada) h.push("<span style='background:#22c55e22;color:#22c55e;padding:2px 8px;border-radius:5px;font-size:9px;font-weight:700'>AGENDADA</span>");
+        h.push("<span style='color:#7a7050;font-size:10px'>"+fmtData(v.data)+(v.hora?" às "+v.hora:"")+"</span>");
+        h.push("</div>");
+        h.push("<span style='color:#e8ddd0;font-size:12px;font-weight:600'>"+esc(v.escolaNome||"")+"</span><br>");
+        if(v.policial) h.push("<span style='color:#5a5535;font-size:11px'>👤 "+esc(v.policial)+"</span> ");
+        if(v.objetivo) h.push("<span style='color:#5a5535;font-size:11px'>🎯 "+esc(v.objetivo)+"</span>");
+        if(v.resultado) h.push("<p style='color:#6a8a50;font-size:11px;margin:6px 0 0;border-top:1px solid #1a1808;padding-top:5px'>"+esc(v.resultado)+"</p>");
+        h.push("</div>");
+        h.push("<button onclick=\"excluirVisitaEscolar('"+v.id+"')\" style='background:none;border:none;color:#3a2a2a;font-size:16px;cursor:pointer;padding:0' title='Excluir'>🗑</button>");
+        h.push("</div></div>");
+      });
+    }
+    main.innerHTML=h.join("").replace("</div>","")+"</div></div>";
+    return;
+  }
+
+  // ── Palestras / Projetos ─────────────────────────────
+  if(tab==="palestras"){
+    h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap'>");
+    h.push("<button onclick=\"abrirModalPalestraEscolar()\" style='background:#0a1e2a;border:1px solid #1a4a6a;color:#a78bfa;padding:8px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer'>+ Registrar Palestra</button>");
+    h.push("<button onclick=\"abrirModalProjetoEscolar()\" style='background:#1a0a2a;border:1px solid #4a1a6a;color:#f472b6;padding:8px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer'>+ Registrar Projeto</button>");
+    h.push("</div>");
+    // Palestras
+    h.push("<p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px'>🎤 Palestras ("+palestrasEsc.length+")</p>");
+    if(!palestrasEsc.length){h.push("<div class='card' style='margin-bottom:14px'><p style='color:#3a3820;font-size:13px;text-align:center;padding:12px 0'>Nenhuma palestra registrada.</p></div>");}
+    else{
+      h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px;margin-bottom:20px'>");
+      palestrasEsc.forEach(function(p){
+        h.push("<div class='card'>");
+        h.push("<div style='display:flex;justify-content:space-between;align-items:start'>");
+        h.push("<span style='color:#a78bfa;font-size:11px;font-weight:700'>"+esc(p.tema||"Palestra")+"</span>");
+        h.push("<button onclick=\"excluirPalestraEscolar('"+p.id+"')\" style='background:none;border:none;color:#3a2a2a;font-size:14px;cursor:pointer;padding:0'>×</button>");
+        h.push("</div>");
+        h.push("<p style='color:#e8ddd0;font-size:12px;font-weight:600;margin:4px 0'>"+esc(p.escolaNome||"")+"</p>");
+        h.push("<div style='display:flex;gap:10px;flex-wrap:wrap;margin-top:4px'>");
+        if(p.data) h.push("<span style='color:#5a5535;font-size:10px'>📅 "+fmtData(p.data)+"</span>");
+        if(p.publico) h.push("<span style='color:#5a5535;font-size:10px'>👥 "+esc(p.publico)+"</span>");
+        if(p.participantes) h.push("<span style='color:#5a5535;font-size:10px'>👤 "+p.participantes+" participantes</span>");
+        h.push("</div></div>");
+      });
+      h.push("</div>");
+    }
+    // Projetos
+    h.push("<p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px'>📌 Projetos Escolares ("+projetosEsc.length+")</p>");
+    if(!projetosEsc.length){h.push("<div class='card'><p style='color:#3a3820;font-size:13px;text-align:center;padding:12px 0'>Nenhum projeto registrado.</p></div>");}
+    else{
+      h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:10px'>");
+      projetosEsc.forEach(function(p){
+        var sCor={Ativo:"#22c55e","Em Andamento":"#f59e0b",Concluído:"#38bdf8",Cancelado:"#ef4444"}[p.status]||"#6b7280";
+        h.push("<div class='card'>");
+        h.push("<div style='display:flex;justify-content:space-between;align-items:start'>");
+        h.push("<span style='color:#f472b6;font-size:11px;font-weight:700'>"+esc(p.nome||"Projeto")+"</span>");
+        h.push("<button onclick=\"excluirProjetoEscolar('"+p.id+"')\" style='background:none;border:none;color:#3a2a2a;font-size:14px;cursor:pointer;padding:0'>×</button>");
+        h.push("</div>");
+        h.push("<p style='color:#e8ddd0;font-size:12px;font-weight:600;margin:4px 0'>"+esc(p.escolaNome||"")+"</p>");
+        h.push("<div style='display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px'>");
+        h.push("<span style='background:"+sCor+"22;color:"+sCor+";padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700'>"+esc(p.status||"")+"</span>");
+        if(p.dataInicio) h.push("<span style='color:#5a5535;font-size:10px'>"+fmtData(p.dataInicio)+" → "+fmtData(p.dataFim)+"</span>");
+        h.push("</div>");
+        if(p.descricao) h.push("<p style='color:#7a7050;font-size:10px;margin:6px 0 0'>"+esc(p.descricao)+"</p>");
+        h.push("</div>");
+      });
+      h.push("</div>");
+    }
+    main.innerHTML=h.join("").replace("</div>","")+"</div></div>";
+    return;
+  }
+
+  main.innerHTML=h.join("")+"</div>";
+}
+
+// ── Ficha completa da escola (modal) ─────────────────
+function abrirFichaEscola(escolaId){
+  var es=(state.escolas||[]).find(function(e){return e.id===escolaId;}); if(!es) return;
+  var ocsE=(state.db.ocorrencias||[]).filter(function(o){return o.escolaId===escolaId;});
+  var visE=(state.visitasEscolares||[]).filter(function(v){return v.escolaId===escolaId;});
+  var palE=(state.palestrasEscolares||[]).filter(function(p){return p.escolaId===escolaId;});
+  var projE=(state.projetosEscolares||[]).filter(function(p){return p.escolaId===escolaId;});
+  var filtOcTipo=(state._fichaFiltroOcTipo||"");
+  var filtOcData=(state._fichaFiltroOcData||"");
+
+  var m=document.getElementById("modal-ficha-escola"); if(m) m.remove();
+  var modal=document.createElement("div");
+  modal.id="modal-ficha-escola";
+  modal.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);display:flex;align-items:flex-start;justify-content:center;z-index:9999;overflow-y:auto;padding:20px";
+
+  var h=[];
+  h.push("<div style='background:#0e0c06;border:2px solid #38bdf8;border-radius:14px;max-width:780px;width:100%;padding:24px;margin:auto'>");
+  // Header
+  h.push("<div style='display:flex;align-items:start;justify-content:space-between;margin-bottom:20px'>");
+  h.push("<div>");
+  h.push("<p style='color:#38bdf8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:2px;margin:0 0 4px'>"+esc(es.tipo||"Escola")+"</p>");
+  h.push("<h2 style='color:#e8ddd0;font-size:20px;font-weight:800;margin:0 0 4px'>🏫 "+esc(es.nome)+"</h2>");
+  h.push("<p style='color:#5a5535;font-size:11px;margin:0'>"+(es.bairro?"📍 "+esc(es.bairro)+" · ":"")+(es.diretor?"👤 "+esc(es.diretor)+" · ":"")+(es.telefone?"📞 "+esc(es.telefone):"")+"</p>");
+  h.push("</div>");
+  h.push("<div style='display:flex;gap:8px'>");
+  h.push("<button onclick=\"gerarPDFEscola('"+escolaId+"')\" style='background:#0a2a1a;border:1px solid #1a5a2a;color:#22c55e;padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>📄 PDF</button>");
+  h.push("<button onclick=\"abrirModalEscola('"+escolaId+"')\" style='background:#0a1a2a;border:1px solid #1a3a5a;color:#38bdf8;padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>✏ Editar</button>");
+  h.push("<button onclick=\"document.getElementById('modal-ficha-escola').remove()\" style='background:none;border:none;color:#5a5535;font-size:22px;cursor:pointer;padding:0'>×</button>");
+  h.push("</div></div>");
+
+  // KPIs mini
+  h.push("<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px'>");
+  [[ocsE.length,"Ocorrências","#f59e0b"],[visE.length,"Visitas","#22c55e"],[palE.length,"Palestras","#a78bfa"],[projE.length,"Projetos","#f472b6"]].forEach(function(k){
+    h.push("<div style='background:#141208;border:1px solid "+k[2]+"33;border-radius:8px;padding:12px;text-align:center'>");
+    h.push("<div style='color:"+k[2]+";font-size:22px;font-weight:800'>"+k[0]+"</div>");
+    h.push("<div style='color:#5a5535;font-size:10px'>"+k[1]+"</div></div>");
+  });
+  h.push("</div>");
+
+  // Ocorrências filtradas
+  h.push("<p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px'>📋 Ocorrências ("+ocsE.length+")</p>");
+  // Filtros
+  h.push("<div style='display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap'>");
+  h.push("<select onchange=\"state._fichaFiltroOcTipo=this.value;abrirFichaEscola('"+escolaId+"')\" style='background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:6px 10px;border-radius:6px;font-size:11px;outline:none'>");
+  h.push("<option value=''>Todos os tipos</option>");
+  ["Violência","Bullying","Drogas","Ameaça","Furto","Vandalismo","Conflito Familiar","Outros"].forEach(function(t){
+    h.push("<option value='"+t+"'"+(filtOcTipo===t?" selected":"")+">"+t+"</option>");
+  });
+  h.push("</select>");
+  h.push("<input type='month' onchange=\"state._fichaFiltroOcData=this.value;abrirFichaEscola('"+escolaId+"')\" value='"+esc(filtOcData)+"' style='background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:6px 10px;border-radius:6px;font-size:11px;outline:none'/>");
+  h.push("</div>");
+
+  var ocsFilt=ocsE.filter(function(o){
+    if(filtOcTipo&&o.tipoOcEscola!==filtOcTipo) return false;
+    if(filtOcData&&o.data&&!o.data.startsWith(filtOcData)) return false;
+    return true;
+  });
+  if(!ocsFilt.length){h.push("<p style='color:#3a3820;font-size:12px;text-align:center;padding:12px 0'>Nenhuma ocorrência encontrada com os filtros aplicados.</p>");}
+  else{
+    h.push("<div style='max-height:200px;overflow-y:auto;margin-bottom:16px'>");
+    ocsFilt.forEach(function(o){
+      h.push("<div style='display:flex;gap:10px;align-items:center;padding:7px 0;border-bottom:1px solid #1a1808'>");
+      h.push("<span style='color:#7a7050;font-size:10px;white-space:nowrap'>"+fmtData(o.data)+"</span>");
+      h.push("<span style='color:#e8ddd0;font-size:11px;flex:1'>"+esc(o.tipo||"Ocorrência")+"</span>");
+      if(o.tipoOcEscola) h.push("<span style='color:#f59e0b;font-size:10px'>"+esc(o.tipoOcEscola)+"</span>");
+      if(o.tipoViolenciaEscola) h.push("<span style='color:#ef4444;font-size:10px'>"+esc(o.tipoViolenciaEscola)+"</span>");
+      h.push("</div>");
+    });
+    h.push("</div>");
+  }
+
+  // Agendar visita solidária ─ botão rápido
+  h.push("<div style='background:#0a1e0a;border:1px solid #1a4a1a;border-radius:8px;padding:12px;margin-bottom:14px'>");
+  h.push("<p style='color:#22c55e;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px'>🤝 Agendar Visita Solidária</p>");
+  h.push("<div style='display:flex;gap:8px;flex-wrap:wrap'>");
+  h.push("<input id='data-vis-sol' type='date' style='flex:1;min-width:120px;background:#0e0c06;border:1px solid #2a4a2a;color:#e8ddd0;padding:7px 10px;border-radius:6px;font-size:11px;outline:none'/>");
+  h.push("<input id='hora-vis-sol' type='time' style='width:90px;background:#0e0c06;border:1px solid #2a4a2a;color:#e8ddd0;padding:7px 10px;border-radius:6px;font-size:11px;outline:none'/>");
+  h.push("<input id='pol-vis-sol' type='text' placeholder='Policial responsável' style='flex:1;min-width:150px;background:#0e0c06;border:1px solid #2a4a2a;color:#e8ddd0;padding:7px 10px;border-radius:6px;font-size:11px;outline:none'/>");
+  h.push("<button onclick=\"agendarVisitaSolidaria('"+escolaId+"')\" style='background:#0a2a0a;border:1px solid #2a6a2a;color:#22c55e;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>Agendar</button>");
+  h.push("</div></div>");
+
+  // Visitas recentes
+  h.push("<p style='color:#7a7050;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 8px'>🚗 Visitas ("+visE.length+")</p>");
+  if(!visE.length){h.push("<p style='color:#3a3820;font-size:12px;text-align:center;padding:8px 0;margin-bottom:14px'>Nenhuma visita registrada.</p>");}
+  else{
+    h.push("<div style='max-height:140px;overflow-y:auto;margin-bottom:14px'>");
+    visE.slice(-5).reverse().forEach(function(v){
+      var tipoCor={"Solidária":"#22c55e","Rotina":"#38bdf8","Preventiva":"#a78bfa","Palestra":"#f59e0b","Projeto":"#f472b6"}[v.tipo]||"#6b7280";
+      h.push("<div style='display:flex;gap:8px;align-items:center;padding:5px 0;border-bottom:1px solid #1a1808'>");
+      h.push("<span style='color:"+tipoCor+";font-size:9px;font-weight:700;padding:1px 6px;border:1px solid "+tipoCor+"44;border-radius:4px'>"+esc(v.tipo||"")+"</span>");
+      h.push("<span style='color:#7a7050;font-size:10px'>"+fmtData(v.data)+"</span>");
+      h.push("<span style='color:#e8ddd0;font-size:11px;flex:1'>"+esc(v.policial||"")+"</span>");
+      h.push("</div>");
+    });
+    h.push("</div>");
+  }
+
+  h.push("</div></div>");
+  modal.innerHTML=h.join("");
+  document.body.appendChild(modal);
+  modal.addEventListener("click",function(e){if(e.target===modal)modal.remove();});
+}
+
+// ── Modal cadastro escola ─────────────────────────────
+function abrirModalEscola(escolaId){
+  var es=escolaId?(state.escolas||[]).find(function(e){return e.id===escolaId;}):null;
+  var m=document.getElementById("modal-escola"); if(m) m.remove();
+  var modal=document.createElement("div");
+  modal.id="modal-escola";
+  modal.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:10001;padding:16px";
+  var h=[];
+  h.push("<div style='background:#0e0c06;border:2px solid #38bdf8;border-radius:14px;max-width:540px;width:100%;padding:22px;max-height:90vh;overflow-y:auto'>");
+  h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>");
+  h.push("<h3 style='color:#e8ddd0;font-size:16px;font-weight:800;margin:0'>"+(es?"✏ Editar":"+ Nova")+" Escola</h3>");
+  h.push("<button onclick=\"document.getElementById('modal-escola').remove()\" style='background:none;border:none;color:#5a5535;font-size:22px;cursor:pointer;padding:0'>×</button>");
+  h.push("</div>");
+
+  var inp="style='width:100%;background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:9px 10px;border-radius:6px;font-size:12px;outline:none;box-sizing:border-box'";
+  var lbl="style='color:#5a5535;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px'";
+
+  h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Nome da Escola *</label><input id='esc-nome' type='text' value='"+esc(es?es.nome:"")+"' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Tipo</label><select id='esc-tipo' "+inp+"><option value=''>--</option>"+"Municipal,Estadual,Federal,Privada".split(",").map(function(t){return "<option value='"+t+"'"+(es&&es.tipo===t?" selected":"")+">"+t+"</option>";}).join("")+"</select></div>");
+  h.push("<div><label "+lbl+">Nível de Ensino</label><select id='esc-nivel' "+inp+"><option value=''>--</option>"+"Fundamental,Médio,EJA,Integral".split(",").map(function(t){return "<option value='"+t+"'"+(es&&es.nivel===t?" selected":"")+">"+t+"</option>";}).join("")+"</select></div>");
+  h.push("<div><label "+lbl+">Turno</label><select id='esc-turno' "+inp+"><option value=''>--</option>"+"Manhã,Tarde,Noite,Integral".split(",").map(function(t){return "<option value='"+t+"'"+(es&&es.turno===t?" selected":"")+">"+t+"</option>";}).join("")+"</select></div>");
+  h.push("<div><label "+lbl+">Status</label><select id='esc-status' "+inp+"><option value='Ativa'"+((!es||es.status!=="Inativa")?" selected":"")+">Ativa</option><option value='Inativa'"+((es&&es.status==="Inativa")?" selected":"")+">Inativa</option></select></div>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Bairro / Endereço</label><input id='esc-bairro' type='text' value='"+esc(es?es.bairro||"":"")+"' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Diretor(a)</label><input id='esc-diretor' type='text' value='"+esc(es?es.diretor||"":"")+"' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Telefone</label><input id='esc-tel' type='text' value='"+esc(es?es.telefone||"":"")+"' "+inp+"/></div>");
+  h.push("</div>");
+  h.push("<button onclick=\"salvarEscola("+(escolaId?"'"+escolaId+"'":"null")+")\" style='width:100%;background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:6px'>💾 Salvar Escola</button>");
+  if(es) h.push("<button onclick=\"excluirEscola('"+escolaId+"')\" style='width:100%;background:none;border:1px solid #3a1a1a;color:#5a2a2a;padding:9px;border-radius:8px;font-size:12px;cursor:pointer;margin-top:8px'>🗑 Excluir escola</button>");
+  h.push("</div>");
+  modal.innerHTML=h.join("");
+  document.body.appendChild(modal);
+  modal.addEventListener("click",function(e){if(e.target===modal)modal.remove();});
+}
+
+function salvarEscola(escolaId){
+  var nome=(document.getElementById("esc-nome")||{value:""}).value.trim();
+  if(!nome){showToast("Informe o nome da escola","error");return;}
+  if(!state.escolas) state.escolas=[];
+  if(escolaId){
+    var es=state.escolas.find(function(e){return e.id===escolaId;}); if(!es) return;
+    es.nome=nome; es.tipo=(document.getElementById("esc-tipo")||{value:""}).value;
+    es.nivel=(document.getElementById("esc-nivel")||{value:""}).value;
+    es.turno=(document.getElementById("esc-turno")||{value:""}).value;
+    es.status=(document.getElementById("esc-status")||{value:"Ativa"}).value;
+    es.bairro=(document.getElementById("esc-bairro")||{value:""}).value.trim();
+    es.diretor=(document.getElementById("esc-diretor")||{value:""}).value.trim();
+    es.telefone=(document.getElementById("esc-tel")||{value:""}).value.trim();
+  } else {
+    state.escolas.push({id:"ESC_"+Date.now(),nome:nome,
+      tipo:(document.getElementById("esc-tipo")||{value:""}).value,
+      nivel:(document.getElementById("esc-nivel")||{value:""}).value,
+      turno:(document.getElementById("esc-turno")||{value:""}).value,
+      status:(document.getElementById("esc-status")||{value:"Ativa"}).value,
+      bairro:(document.getElementById("esc-bairro")||{value:""}).value.trim(),
+      diretor:(document.getElementById("esc-diretor")||{value:""}).value.trim(),
+      telefone:(document.getElementById("esc-tel")||{value:""}).value.trim(),
+      criadoEm:new Date().toISOString()});
+  }
+  salvarLocal(); showToast("Escola salva!");
+  document.getElementById("modal-escola").remove();
+  if(document.getElementById("modal-ficha-escola")) document.getElementById("modal-ficha-escola").remove();
+  renderTela();
+}
+
+function excluirEscola(escolaId){
+  if(!confirm("Excluir esta escola? As ocorrências vinculadas não serão apagadas.")) return;
+  state.escolas=(state.escolas||[]).filter(function(e){return e.id!==escolaId;});
+  salvarLocal(); showToast("Escola removida.");
+  document.getElementById("modal-escola").remove();
+  if(document.getElementById("modal-ficha-escola")) document.getElementById("modal-ficha-escola").remove();
+  renderTela();
+}
+
+// ── Modal visita escolar ──────────────────────────────
+function abrirModalVisitaEscolar(escolaIdPre){
+  var m=document.getElementById("modal-visita-esc"); if(m) m.remove();
+  var modal=document.createElement("div");
+  modal.id="modal-visita-esc";
+  modal.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:10002;padding:16px";
+  var escOpts=(state.escolas||[]).map(function(es){return "<option value='"+es.id+"'"+(escolaIdPre===es.id?" selected":"")+">"+esc(es.nome)+"</option>";}).join("");
+  var inp="style='width:100%;background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:9px 10px;border-radius:6px;font-size:12px;outline:none;box-sizing:border-box'";
+  var lbl="style='color:#5a5535;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px'";
+  var h=[];
+  h.push("<div style='background:#0e0c06;border:2px solid #22c55e;border-radius:14px;max-width:520px;width:100%;padding:22px;max-height:90vh;overflow-y:auto'>");
+  h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>");
+  h.push("<h3 style='color:#e8ddd0;font-size:16px;font-weight:800;margin:0'>🚗 Registrar / Agendar Visita</h3>");
+  h.push("<button onclick=\"document.getElementById('modal-visita-esc').remove()\" style='background:none;border:none;color:#5a5535;font-size:22px;cursor:pointer;padding:0'>×</button>");
+  h.push("</div>");
+  h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Escola *</label><select id='vis-escola' "+inp+"><option value=''>-- Selecione --</option>"+escOpts+"</select></div>");
+  h.push("<div><label "+lbl+">Tipo de Visita</label><select id='vis-tipo' "+inp+">"+"Rotina,Solidária,Preventiva,Palestra,Projeto".split(",").map(function(t){return "<option value='"+t+"'>"+t+"</option>";}).join("")+"</select></div>");
+  h.push("<div><label "+lbl+">Data *</label><input id='vis-data' type='date' value='"+hoje()+"' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Hora</label><input id='vis-hora' type='time' "+inp+"/></div>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Policial Responsável</label><input id='vis-policial' type='text' "+inp+"/></div>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Objetivo</label><input id='vis-objetivo' type='text' "+inp+"/></div>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Resultado / Observação</label><textarea id='vis-resultado' rows='3' "+inp+" style='resize:vertical'></textarea></div>");
+  h.push("</div>");
+  h.push("<button onclick=\"salvarVisitaEscolar()\" style='width:100%;background:#0a2a0a;border:1px solid #22c55e;color:#22c55e;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>💾 Salvar Visita</button>");
+  h.push("</div>");
+  modal.innerHTML=h.join("");
+  document.body.appendChild(modal);
+  modal.addEventListener("click",function(e){if(e.target===modal)modal.remove();});
+}
+
+function salvarVisitaEscolar(){
+  var escId=(document.getElementById("vis-escola")||{value:""}).value;
+  var data=(document.getElementById("vis-data")||{value:""}).value;
+  if(!escId||!data){showToast("Informe escola e data","error");return;}
+  var escEl=document.getElementById("vis-escola");
+  var escNome=escEl?(escEl.options[escEl.selectedIndex]||{text:""}).text:"";
+  var tipo=(document.getElementById("vis-tipo")||{value:"Rotina"}).value;
+  var hora=(document.getElementById("vis-hora")||{value:""}).value;
+  var policial=(document.getElementById("vis-policial")||{value:""}).value.trim();
+  var objetivo=(document.getElementById("vis-objetivo")||{value:""}).value.trim();
+  var resultado=(document.getElementById("vis-resultado")||{value:""}).value.trim();
+  if(!state.visitasEscolares) state.visitasEscolares=[];
+  var vis={id:"VES_"+Date.now(),escolaId:escId,escolaNome:escNome,tipo:tipo,data:data,hora:hora,policial:policial,objetivo:objetivo,resultado:resultado,criadoEm:new Date().toISOString()};
+  state.visitasEscolares.push(vis);
+  // Adiciona ao calendário
+  if(!state.eventosAvulsos) state.eventosAvulsos=[];
+  state.eventosAvulsos.push({id:"CAL_VES_"+vis.id,titulo:"🏫 Visita "+tipo+" — "+escNome,data:data,hora:hora||"08:00",tipo:"Visita Escolar",cor:"#22c55e",visitaEscolarId:vis.id});
+  salvarLocal();
+  showToast("Visita salva e adicionada ao calendário!");
+  var m=document.getElementById("modal-visita-esc"); if(m) m.remove();
+  var mf=document.getElementById("modal-ficha-escola"); if(mf) mf.remove();
+  renderTela();
+}
+
+function agendarVisitaSolidaria(escolaId){
+  var data=(document.getElementById("data-vis-sol")||{value:""}).value;
+  var hora=(document.getElementById("hora-vis-sol")||{value:""}).value;
+  var policial=(document.getElementById("pol-vis-sol")||{value:""}).value.trim();
+  if(!data){showToast("Informe a data da visita","error");return;}
+  var es=(state.escolas||[]).find(function(e){return e.id===escolaId;})||{nome:"Escola"};
+  if(!state.visitasEscolares) state.visitasEscolares=[];
+  var vis={id:"VES_"+Date.now(),escolaId:escolaId,escolaNome:es.nome,tipo:"Solidária",data:data,hora:hora,policial:policial,objetivo:"Visita solidária agendada",criadoEm:new Date().toISOString()};
+  state.visitasEscolares.push(vis);
+  if(!state.eventosAvulsos) state.eventosAvulsos=[];
+  state.eventosAvulsos.push({id:"CAL_VES_"+vis.id,titulo:"🤝 Visita Solidária — "+es.nome,data:data,hora:hora||"08:00",tipo:"Visita Solidária",cor:"#22c55e",visitaEscolarId:vis.id});
+  salvarLocal();
+  showToast("✅ Visita solidária agendada e adicionada ao calendário!");
+  abrirFichaEscola(escolaId);
+}
+
+function excluirVisitaEscolar(id){
+  if(!confirm("Excluir esta visita?")) return;
+  state.visitasEscolares=(state.visitasEscolares||[]).filter(function(v){return v.id!==id;});
+  state.eventosAvulsos=(state.eventosAvulsos||[]).filter(function(e){return e.visitaEscolarId!==id;});
+  salvarLocal(); showToast("Visita removida."); renderTela();
+}
+
+// ── Modal palestra ────────────────────────────────────
+function abrirModalPalestraEscolar(){
+  var m=document.getElementById("modal-palestra-esc"); if(m) m.remove();
+  var modal=document.createElement("div");
+  modal.id="modal-palestra-esc";
+  modal.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:10002;padding:16px";
+  var escOpts=(state.escolas||[]).map(function(es){return "<option value='"+es.id+"'>"+esc(es.nome)+"</option>";}).join("");
+  var inp="style='width:100%;background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:9px 10px;border-radius:6px;font-size:12px;outline:none;box-sizing:border-box'";
+  var lbl="style='color:#5a5535;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px'";
+  var TEMAS=["Prevenção às Drogas","Bullying","Cidadania","Trânsito","Violência Doméstica","Protagonismo Juvenil","Outros"];
+  var h=[];
+  h.push("<div style='background:#0e0c06;border:2px solid #a78bfa;border-radius:14px;max-width:520px;width:100%;padding:22px;max-height:90vh;overflow-y:auto'>");
+  h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>");
+  h.push("<h3 style='color:#e8ddd0;font-size:16px;font-weight:800;margin:0'>🎤 Registrar Palestra</h3>");
+  h.push("<button onclick=\"document.getElementById('modal-palestra-esc').remove()\" style='background:none;border:none;color:#5a5535;font-size:22px;cursor:pointer;padding:0'>×</button>");
+  h.push("</div>");
+  h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Escola *</label><select id='pal-escola' "+inp+"><option value=''>-- Selecione --</option>"+escOpts+"</select></div>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Tema *</label><select id='pal-tema' "+inp+">"+TEMAS.map(function(t){return "<option>"+t+"</option>";}).join("")+"</select></div>");
+  h.push("<div><label "+lbl+">Data</label><input id='pal-data' type='date' value='"+hoje()+"' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Público</label><select id='pal-publico' "+inp+">"+"Alunos,Professores,Pais,Misto".split(",").map(function(t){return "<option>"+t+"</option>";}).join("")+"</select></div>");
+  h.push("<div><label "+lbl+">Participantes</label><input id='pal-part' type='number' min='0' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Responsável</label><input id='pal-resp' type='text' "+inp+"/></div>");
+  h.push("</div>");
+  h.push("<button onclick=\"salvarPalestraEscolar()\" style='width:100%;background:#1a0a2a;border:1px solid #a78bfa;color:#a78bfa;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>💾 Salvar Palestra</button>");
+  h.push("</div>");
+  modal.innerHTML=h.join("");
+  document.body.appendChild(modal);
+  modal.addEventListener("click",function(e){if(e.target===modal)modal.remove();});
+}
+
+function salvarPalestraEscolar(){
+  var escId=(document.getElementById("pal-escola")||{value:""}).value;
+  if(!escId){showToast("Informe a escola","error");return;}
+  var escEl=document.getElementById("pal-escola");
+  var escNome=escEl?(escEl.options[escEl.selectedIndex]||{text:""}).text:"";
+  if(!state.palestrasEscolares) state.palestrasEscolares=[];
+  state.palestrasEscolares.push({id:"PAL_"+Date.now(),escolaId:escId,escolaNome:escNome,
+    tema:(document.getElementById("pal-tema")||{value:""}).value,
+    data:(document.getElementById("pal-data")||{value:""}).value,
+    publico:(document.getElementById("pal-publico")||{value:""}).value,
+    participantes:(document.getElementById("pal-part")||{value:""}).value,
+    responsavel:(document.getElementById("pal-resp")||{value:""}).value.trim(),
+    criadoEm:new Date().toISOString()});
+  salvarLocal(); showToast("Palestra registrada!");
+  document.getElementById("modal-palestra-esc").remove(); renderTela();
+}
+
+function excluirPalestraEscolar(id){
+  if(!confirm("Excluir esta palestra?")) return;
+  state.palestrasEscolares=(state.palestrasEscolares||[]).filter(function(p){return p.id!==id;});
+  salvarLocal(); showToast("Palestra removida."); renderTela();
+}
+
+// ── Modal projeto escolar ─────────────────────────────
+function abrirModalProjetoEscolar(){
+  var m=document.getElementById("modal-projeto-esc"); if(m) m.remove();
+  var modal=document.createElement("div");
+  modal.id="modal-projeto-esc";
+  modal.style.cssText="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:10002;padding:16px";
+  var escOpts=(state.escolas||[]).map(function(es){return "<option value='"+es.id+"'>"+esc(es.nome)+"</option>";}).join("");
+  var inp="style='width:100%;background:#141208;border:1px solid #2a2818;color:#e8ddd0;padding:9px 10px;border-radius:6px;font-size:12px;outline:none;box-sizing:border-box'";
+  var lbl="style='color:#5a5535;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px'";
+  var h=[];
+  h.push("<div style='background:#0e0c06;border:2px solid #f472b6;border-radius:14px;max-width:520px;width:100%;padding:22px;max-height:90vh;overflow-y:auto'>");
+  h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>");
+  h.push("<h3 style='color:#e8ddd0;font-size:16px;font-weight:800;margin:0'>📌 Registrar Projeto</h3>");
+  h.push("<button onclick=\"document.getElementById('modal-projeto-esc').remove()\" style='background:none;border:none;color:#5a5535;font-size:22px;cursor:pointer;padding:0'>×</button>");
+  h.push("</div>");
+  h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Escola *</label><select id='proj-escola' "+inp+"><option value=''>-- Selecione --</option>"+escOpts+"</select></div>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Nome do Projeto *</label><input id='proj-nome' type='text' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Data Início</label><input id='proj-ini' type='date' value='"+hoje()+"' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Data Fim</label><input id='proj-fim' type='date' "+inp+"/></div>");
+  h.push("<div><label "+lbl+">Status</label><select id='proj-status' "+inp+">"+"Ativo,Em Andamento,Concluído,Cancelado".split(",").map(function(t){return "<option>"+t+"</option>";}).join("")+"</select></div>");
+  h.push("<div style='grid-column:1/-1'><label "+lbl+">Descrição</label><textarea id='proj-desc' rows='3' "+inp+" style='resize:vertical'></textarea></div>");
+  h.push("</div>");
+  h.push("<button onclick=\"salvarProjetoEscolar()\" style='width:100%;background:#1a001a;border:1px solid #f472b6;color:#f472b6;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>💾 Salvar Projeto</button>");
+  h.push("</div>");
+  modal.innerHTML=h.join("");
+  document.body.appendChild(modal);
+  modal.addEventListener("click",function(e){if(e.target===modal)modal.remove();});
+}
+
+function salvarProjetoEscolar(){
+  var escId=(document.getElementById("proj-escola")||{value:""}).value;
+  var nome=(document.getElementById("proj-nome")||{value:""}).value.trim();
+  if(!escId||!nome){showToast("Informe escola e nome","error");return;}
+  var escEl=document.getElementById("proj-escola");
+  var escNome=escEl?(escEl.options[escEl.selectedIndex]||{text:""}).text:"";
+  if(!state.projetosEscolares) state.projetosEscolares=[];
+  state.projetosEscolares.push({id:"PRJE_"+Date.now(),escolaId:escId,escolaNome:escNome,nome:nome,
+    dataInicio:(document.getElementById("proj-ini")||{value:""}).value,
+    dataFim:(document.getElementById("proj-fim")||{value:""}).value,
+    status:(document.getElementById("proj-status")||{value:"Ativo"}).value,
+    descricao:(document.getElementById("proj-desc")||{value:""}).value.trim(),
+    criadoEm:new Date().toISOString()});
+  salvarLocal(); showToast("Projeto escolar registrado!");
+  document.getElementById("modal-projeto-esc").remove(); renderTela();
+}
+
+function excluirProjetoEscolar(id){
+  if(!confirm("Excluir este projeto?")) return;
+  state.projetosEscolares=(state.projetosEscolares||[]).filter(function(p){return p.id!==id;});
+  salvarLocal(); showToast("Projeto removido."); renderTela();
+}
+
+// ── Modal detalhe ocorrência escolar (para vincular tipo/violência) ──
+// Quando o operador lança oc vinculada a escola, tipos específicos ficam pendentes.
+// O gestor pode editar via Ver Ocorrência > adicionar tipoOcEscola / tipoViolenciaEscola.
+// (Isso é feito ao abrir detalhes da oc — código existente — aqui apenas utilitário)
+
+// ── Geração de PDF por escola ─────────────────────────
+function gerarPDFEscola(escolaId){
+  var es=(state.escolas||[]).find(function(e){return e.id===escolaId;});
+  if(!es){showToast("Escola não encontrada","error");return;}
+  var ocsE=(state.db.ocorrencias||[]).filter(function(o){return o.escolaId===escolaId;});
+  var visE=(state.visitasEscolares||[]).filter(function(v){return v.escolaId===escolaId;});
+  var palE=(state.palestrasEscolares||[]).filter(function(p){return p.escolaId===escolaId;});
+  var projE=(state.projetosEscolares||[]).filter(function(p){return p.escolaId===escolaId;});
+
+  var w=window.open("","_blank","width=900,height=700");
+  if(!w){showToast("Permita pop-ups no navegador","error");return;}
+  var d=w.document;
+  d.open();
+  d.write("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Relatório Escolar — "+es.nome+"</title><style>");
+  d.write("*{box-sizing:border-box;margin:0;padding:0;}body{font-family:Arial,sans-serif;font-size:12px;color:#1a1a1a;padding:30px;}");
+  d.write("h1{font-size:20px;font-weight:700;margin-bottom:4px;}h2{font-size:14px;font-weight:700;margin:20px 0 8px;border-bottom:2px solid #1a1a1a;padding-bottom:4px;}");
+  d.write(".header{display:flex;justify-content:space-between;align-items:start;margin-bottom:20px;border-bottom:3px solid #1a1a1a;padding-bottom:12px;}");
+  d.write(".kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px;}");
+  d.write(".kpi{border:1px solid #ccc;border-radius:6px;padding:10px;text-align:center;}.kpi-val{font-size:22px;font-weight:700;}.kpi-lbl{font-size:10px;color:#555;}");
+  d.write("table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:10px;}th{background:#1a1a1a;color:#fff;padding:6px 8px;text-align:left;}td{padding:5px 8px;border-bottom:1px solid #eee;}");
+  d.write(".badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;background:#eee;}");
+  d.write("@media print{body{padding:15px;}}");
+  d.write("</style></head><body>");
+  d.write("<div class='header'><div><h1>🏫 "+es.nome+"</h1><p style='color:#555;margin-top:4px'>"+(es.tipo||"")+(es.bairro?" · "+es.bairro:"")+"</p><p style='color:#555'>"+(es.diretor?"Diretor(a): "+es.diretor+" ":"")+(es.telefone?"Tel: "+es.telefone:"")+"</p></div>");
+  d.write("<div style='text-align:right'><p style='font-weight:700'>77ª CIPM — BCS</p><p style='color:#555'>Gerado em: "+new Date().toLocaleDateString("pt-BR")+"</p></div></div>");
+  d.write("<div class='kpi-grid'><div class='kpi'><div class='kpi-val'>"+ocsE.length+"</div><div class='kpi-lbl'>Ocorrências</div></div><div class='kpi'><div class='kpi-val'>"+visE.length+"</div><div class='kpi-lbl'>Visitas</div></div><div class='kpi'><div class='kpi-val'>"+palE.length+"</div><div class='kpi-lbl'>Palestras</div></div><div class='kpi'><div class='kpi-val'>"+projE.length+"</div><div class='kpi-lbl'>Projetos</div></div></div>");
+  // Ocorrências
+  d.write("<h2>Ocorrências</h2>");
+  if(!ocsE.length){d.write("<p style='color:#555'>Nenhuma ocorrência registrada.</p>");}
+  else{d.write("<table><tr><th>Data</th><th>Tipo</th><th>Tipo Escolar</th><th>Violência</th><th>Bairro</th></tr>");ocsE.forEach(function(o){d.write("<tr><td>"+fmtData(o.data)+"</td><td>"+( o.tipo||"")+"</td><td>"+(o.tipoOcEscola||"—")+"</td><td>"+(o.tipoViolenciaEscola||"—")+"</td><td>"+(o.bairro||"")+"</td></tr>");});d.write("</table>");}
+  // Visitas
+  d.write("<h2>Visitas Realizadas</h2>");
+  if(!visE.length){d.write("<p style='color:#555'>Nenhuma visita registrada.</p>");}
+  else{d.write("<table><tr><th>Data</th><th>Tipo</th><th>Policial</th><th>Objetivo</th></tr>");visE.forEach(function(v){d.write("<tr><td>"+fmtData(v.data)+"</td><td>"+( v.tipo||"")+"</td><td>"+(v.policial||"")+"</td><td>"+(v.objetivo||"")+"</td></tr>");});d.write("</table>");}
+  // Palestras
+  d.write("<h2>Palestras Realizadas</h2>");
+  if(!palE.length){d.write("<p style='color:#555'>Nenhuma palestra registrada.</p>");}
+  else{d.write("<table><tr><th>Data</th><th>Tema</th><th>Público</th><th>Participantes</th></tr>");palE.forEach(function(p){d.write("<tr><td>"+fmtData(p.data)+"</td><td>"+(p.tema||"")+"</td><td>"+(p.publico||"")+"</td><td>"+(p.participantes||"")+"</td></tr>");});d.write("</table>");}
+  // Projetos
+  d.write("<h2>Projetos</h2>");
+  if(!projE.length){d.write("<p style='color:#555'>Nenhum projeto registrado.</p>");}
+  else{d.write("<table><tr><th>Projeto</th><th>Status</th><th>Início</th><th>Fim</th></tr>");projE.forEach(function(p){d.write("<tr><td>"+(p.nome||"")+"</td><td>"+(p.status||"")+"</td><td>"+fmtData(p.dataInicio)+"</td><td>"+fmtData(p.dataFim)+"</td></tr>");});d.write("</table>");}
+  d.write("<br><p style='color:#555;font-size:10px;text-align:center'>IARA — Sistema de Inteligência Policial · 77ª CIPM BCS</p>");
+  d.write("</body></html>");
+  d.close();
+  setTimeout(function(){w.print();},600);
+}
+
+// ── Campo tipo ocorrência escolar no modal de ocorrência ──
+// Adiciona campos escolares ao abrir detalhes de OC que tem escolaId
+function _renderCamposEscolarOc(ocId){
+  var oc=(state.db.ocorrencias||[]).find(function(o){return o.id===ocId;}); if(!oc||!oc.escolaId) return "";
+  var TIPOS_OC=["Violência","Bullying","Drogas","Ameaça","Furto","Vandalismo","Conflito Familiar","Outros"];
+  var TIPOS_VIO=["Física","Verbal","Psicológica","Sexual","Patrimonial","N/A"];
+  var h="<div style='background:#0a1e2a;border:1px solid #1a3a4a;border-radius:8px;padding:12px;margin-bottom:12px'>";
+  h+="<p style='color:#38bdf8;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 10px'>🏫 Classificação Escolar — "+esc(oc.escolaNome||"")+"</p>";
+  h+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px'>";
+  h+="<div><label style='color:#4a6a8a;font-size:9px;display:block;margin-bottom:4px'>Tipo Ocorrência Escolar</label><select id='oc-tipo-esc-"+ocId+"' onchange=\"_salvarTipoEscolar('"+ocId+"')\" style='width:100%;background:#0e0c06;border:1px solid #1a3a4a;color:#e8ddd0;padding:7px 8px;border-radius:6px;font-size:11px;outline:none'><option value=''>-- Selecione --</option>"+TIPOS_OC.map(function(t){return "<option value='"+t+"'"+(oc.tipoOcEscola===t?" selected":"")+">"+t+"</option>";}).join("")+"</select></div>";
+  h+="<div><label style='color:#4a6a8a;font-size:9px;display:block;margin-bottom:4px'>Tipo de Violência</label><select id='oc-vio-esc-"+ocId+"' onchange=\"_salvarTipoEscolar('"+ocId+"')\" style='width:100%;background:#0e0c06;border:1px solid #1a3a4a;color:#e8ddd0;padding:7px 8px;border-radius:6px;font-size:11px;outline:none'><option value=''>-- N/A --</option>"+TIPOS_VIO.map(function(t){return "<option value='"+t+"'"+(oc.tipoViolenciaEscola===t?" selected":"")+">"+t+"</option>";}).join("")+"</select></div>";
+  h+="</div></div>";
+  return h;
+}
+
+function _salvarTipoEscolar(ocId){
+  var oc=(state.db.ocorrencias||[]).find(function(o){return o.id===ocId;}); if(!oc) return;
+  var t=document.getElementById("oc-tipo-esc-"+ocId); if(t) oc.tipoOcEscola=t.value;
+  var v=document.getElementById("oc-vio-esc-"+ocId); if(v) oc.tipoViolenciaEscola=v.value;
+  salvarLocal(); showToast("Classificação escolar salva!");
+}
+
 function renderTela() {
   const main=document.getElementById("main");
   if(!main)return;
@@ -4219,6 +4917,10 @@ function renderTela() {
       h.push("<label style='color:#5a5535;font-size:11px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:8px'>Descrição Completa *</label>");
       h.push("<textarea id='oc-texto' placeholder='Cole aqui o texto completo da ocorrência. Será parseado automaticamente para os campos.' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:12px;border-radius:6px;font-size:12px;font-family:monospace;box-sizing:border-box;min-height:180px;resize:vertical;outline:none'></textarea>");
       h.push("<p style='color:#7a7050;font-size:11px;margin:8px 0;line-height:1.6'>Dica: Mencione tipo de crime, nome da vítima, suspeito, bairro, endereço, características, veículo e qualquer outra informação importante.</p>");
+      // Campo escola
+      var optsEscola="<option value=''>-- Não envolve escola --</option>";
+      (state.escolas||[]).forEach(function(es){ optsEscola+="<option value='"+es.id+"'>"+esc(es.nome)+"</option>"; });
+      h.push("<div style='margin-top:12px'><label style='color:#5a5535;font-size:11px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px'>🏫 Escola Envolvida (opcional)</label><select id='oc-escola' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:9px 10px;border-radius:6px;font-size:12px;outline:none'>"+ optsEscola +"</select></div>");
       h.push("<div style='display:flex;gap:10px;margin-top:16px'><button id='btn-cancelar-lancar' style='flex:1;background:#1a1808;border:1px solid #2a3818;color:#5a5535;padding:10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button><button id='btn-salvar-lancar' style='flex:1;background:linear-gradient(135deg,#2a4a18,#3a5a28);border:none;color:#a8d890;padding:10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>💾 Lançar</button></div>");
       h.push("</div></div>");
       main.innerHTML=h.join("");
@@ -4296,9 +4998,13 @@ function renderTela() {
           if(dp.length===3) dataISO=dp[2]+"-"+dp[1]+"-"+dp[0];
         }
 
+        var escolaSelEl=document.getElementById("oc-escola");
+        var escolaId=escolaSelEl?escolaSelEl.value:"";
+        var escolaNome=escolaId?(escolaSelEl.options[escolaSelEl.selectedIndex]||{text:""}).text:"";
         var oc={
           id:"oc_"+Date.now(), criadoEm:new Date().toISOString(),
           tipo:tipo, bairro:bairro, municipio:"Vitória da Conquista",
+          escolaId:escolaId, escolaNome:escolaNome,
           vitima_nome:vitimaNome, vitima_telefone:vitimaTel,
           vitima_endereco:vitimaEnd||(endereco&&endereco.length<=150&&!/segundo o relato|ao chegar|a vítima|o autor/i.test(endereco)?endereco:""),
           vitima_sexo:"F", vitima_idade:vitimaIdade, vitima_cpf:"",
@@ -4914,6 +5620,12 @@ function renderTela() {
     return;
   }
 
+  // MÓDULO ESCOLAR
+  if(tela==="escolas"){
+    renderModuloEscolar(main);
+    return;
+  }
+
   // DASHBOARD COMANDANTE
   if(tela==="dashcomandante"){
     renderDashComandante(main);
@@ -5240,6 +5952,7 @@ function render(){
       <button class="nav-btn${state.tela==="pendencias"?" active":""}" data-tela="pendencias" onclick="setTela('pendencias')">⏳ Pendências</button>
       <button class="nav-btn${state.tela==="dashvcm"?" active":""}" data-tela="dashvcm" onclick="setTela('dashvcm')" style="color:#ff69b4;border-color:${state.tela==="dashvcm"?"#ff1493":"transparent"}">🌸 Dashboard VCM</button>
       <button class="nav-btn${state.tela==="cadastrosvcm"?" active":""}" data-tela="cadastrosvcm" onclick="setTela('cadastrosvcm')" style="color:#ff69b4;border-color:${state.tela==="cadastrosvcm"?"#ff1493":"transparent"}">🌸 Cadastros VCM</button>
+      <button class="nav-btn${state.tela==="escolas"?" active":""}" data-tela="escolas" onclick="setTela('escolas')" style="color:${state.tela==="escolas"?"#38bdf8":"#38bdf888"};border-color:${state.tela==="escolas"?"#38bdf8":"transparent"}">🏫 Módulo Escolar</button>
           `}
     <div style="margin-top:auto;border-top:1px solid #242214;padding-top:10px">
       <div style="padding:0 4px 8px">
@@ -5783,6 +6496,11 @@ function renderDetalheAlerta(oc){
       if(prevTxt) h+="<p style='color:#5a5535;font-size:11px;margin:0;line-height:1.5'>"+prevTxt+(prevTxt.length===120?"…":"")+"</p>";
       h+="</div>";
     });
+  }
+
+  // Bloco escola (se oc tiver escolaId)
+  if(oc.escolaId){
+    h+=_renderCamposEscolarOc(oc.id);
   }
 
   h+="</div></div></div>";
