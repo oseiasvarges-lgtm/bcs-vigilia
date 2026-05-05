@@ -122,13 +122,40 @@ button{cursor:pointer;}
 .painel-section-title{font-size:10px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin-bottom:10px;display:flex;align-items:center;gap:6px;}
 .intel-card{background:#0e0c06;border-radius:8px;padding:10px 12px;margin-bottom:6px;border-left:3px solid transparent;}
 .intel-card:last-child{margin-bottom:0;}
+/* Modais responsivos */
+[id^="modal-"] > div, .modal-inner {
+  max-height:92vh;
+  overflow-y:auto;
+  -webkit-overflow-scrolling:touch;
+}
 @media(max-width:768px){
-  #sidebar{transform:translateX(-100%);width:82vw;max-width:280px;z-index:200;}
+  #sidebar{transform:translateX(-100%);width:82vw;max-width:300px;z-index:200;}
   #sidebar.open{transform:translateX(0);}
-  #main{margin-left:0!important;padding:14px 12px 80px!important;}
+  #main{margin-left:0!important;padding:12px 10px 90px!important;}
   #mobile-nav-bar{display:flex!important;}
   .grid2{grid-template-columns:1fr!important;}
   .grid3{grid-template-columns:1fr!important;}
+  /* Tabelas e cards */
+  table{font-size:11px;}
+  .kpi-grid{grid-template-columns:1fr 1fr!important;}
+  /* Modais full-screen no mobile */
+  [id^="modal-"]{padding:8px!important;}
+  /* Textos e inputs */
+  input,textarea,select{font-size:16px!important;} /* evita zoom no iOS */
+  /* Grids internos */
+  div[style*="grid-template-columns:1fr 1fr"]{grid-template-columns:1fr!important;}
+  div[style*="grid-template-columns:repeat(2"]{grid-template-columns:1fr!important;}
+  div[style*="grid-template-columns:repeat(3"]{grid-template-columns:1fr!important;}
+  div[style*="grid-template-columns:repeat(4"]{grid-template-columns:1fr 1fr!important;}
+  div[style*="grid-template-columns:repeat(auto-fit"]{grid-template-columns:1fr!important;}
+  /* Kanban horizontal → scroll */
+  .kanban-board{display:flex;overflow-x:auto;gap:10px;padding-bottom:8px;scroll-snap-type:x mandatory;}
+  .kanban-col{min-width:80vw;scroll-snap-align:start;}
+  /* Botões em linha → empilha */
+  .btn-row-mobile{flex-direction:column!important;}
+  /* Overflow geral */
+  *{box-sizing:border-box;}
+  img,svg{max-width:100%;}
 }
 #sidebar{transition:transform 0.25s ease;}
 #sidebar-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:199;}
@@ -2929,9 +2956,9 @@ function renderGestaoProjectos(main){
     h.push("<button onclick='abrirModalNovoProjeto()' style='background:linear-gradient(135deg,#c8a84b,#a8882b);border:none;color:#1a1808;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>+ Criar Primeiro Projeto</button>");
     h.push("</div>");
   } else {
-    h.push("<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;align-items:start'>");
+    h.push("<div style='display:flex;gap:12px;align-items:start;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch'>");
     colunas.forEach(function(col){
-      h.push("<div style='background:#0e0c06;border:1px solid #2a2818;border-radius:12px;overflow:hidden'>");
+      h.push("<div style='background:#0e0c06;border:1px solid #2a2818;border-radius:12px;overflow:hidden;min-width:260px;flex:1'>");
       // Cabeçalho coluna
       h.push("<div style='background:"+col.cor+"18;border-bottom:2px solid "+col.cor+"44;padding:10px 14px;display:flex;align-items:center;justify-content:space-between'>");
       h.push("<span style='color:"+col.cor+";font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:1px'>"+col.st+"</span>");
@@ -4776,6 +4803,12 @@ function renderTela() {
     <div style="margin-bottom:18px"><h2 style="font-size:24px;font-weight:700;color:#e8ddd0">Calendário de Visitas</h2><p style="color:#4a4530;font-size:13px">Clique em um dia para ver detalhes.</p></div>
     <div id="cal-container"></div>`;
     renderCalendar();
+    // Se não tem eventos locais, tenta carregar do Sheets
+    if(!(state.eventosAvulsos||[]).length && SHEETS_URL){
+      carregarDadosAppDoSheets().then(function(){
+        renderCalendar();
+      });
+    }
     return;
   }
 
@@ -5524,8 +5557,9 @@ function renderMobileNav(){
     nav.appendChild(b1);nav.appendChild(b2);nav.appendChild(b3);nav.appendChild(menu());
   } else {
     [["dashboard","📊","Painel",function(){setTela("dashboard");}],
-     ["lancar","📋","Ocorrências",function(){setTela("lancar");}],
-     ["calendario","🗓","Calendário",function(){setTela("calendario");}]
+     ["calendario","🗓","Agenda",function(){setTela("calendario");}],
+     ["projetos","🟢","Projetos",function(){setTela("projetos");}],
+     ["dashcomandante","⚔️","Comando",function(){setTela("dashcomandante");}]
     ].forEach(function(x){nav.appendChild(mk(x[0],x[1],x[2],x[3]));});
     nav.appendChild(menu());
   }
