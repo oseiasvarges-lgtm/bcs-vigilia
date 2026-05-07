@@ -3965,7 +3965,34 @@ function _detectarEscolaNaOc(texto){
     if(mPart) r.nParticipantes=parseInt(mPart[1]);
   }
 
-  // 3 ── Tentar casar com escola cadastrada (fuzzy)
+  // 3 ── Extrair nome da escola diretamente do texto
+  var _nomePadroes=[
+    // EEFM / EEEF / EMEF + nome
+    /\b((?:eefm|eeef|eeem|emef|cemep|eem)\s+[\w\sáéíóúàâêôãõüç]{3,50}?)(?=\s*[,.\n]|\s+(?:no|na|do|da|localiz|situad)|$)/i,
+    // Escola + tipo + nome
+    /\b(escola\s+(?:estadual|municipal|federal|privada|pública)\s+(?:de\s+ensino\s+(?:médio|fundamental|infantil|integral)\s+)?[\w\sáéíóúàâêôãõüç]{3,50}?)(?=\s*[,.\n]|\s+(?:no|na|do|da|localiz|situad)|$)/i,
+    // Escola + nome (sem tipo)
+    /\b(escola\s+[\wáéíóúàâêôãõüç]{3}[\w\sáéíóúàâêôãõüç]{1,45}?)(?=\s*[,.\n]|\s+(?:no|na|do|da|localiz|situad)|$)/i,
+    // Colégio + nome
+    /\b(col[eé]gio\s+(?:estadual|municipal|federal|privado\s+)?[\w\sáéíóúàâêôãõüç]{3,50}?)(?=\s*[,.\n]|\s+(?:no|na|do|da)|$)/i,
+    // Centro Educacional
+    /\b(centro\s+(?:educacional|de\s+ensino)\s+[\w\sáéíóúàâêôãõüç]{3,45}?)(?=\s*[,.\n]|\s+(?:no|na)|$)/i,
+    // Unidade Escolar
+    /\b(unidade\s+escolar\s+[\w\sáéíóúàâêôãõüç]{3,45}?)(?=\s*[,.\n]|\s+(?:no|na)|$)/i,
+  ];
+  var _nomeExtraido=null;
+  for(var _pi=0;_pi<_nomePadroes.length;_pi++){
+    var _pm=texto.match(_nomePadroes[_pi]);
+    if(_pm&&_pm[1]){
+      var _n=_pm[1].replace(/\s+/g," ").trim();
+      if(_n.length>5&&_n.length<80){
+        _nomeExtraido=_n.charAt(0).toUpperCase()+_n.slice(1);
+        break;
+      }
+    }
+  }
+
+  // 4 ── Tentar casar com escola cadastrada (fuzzy)
   var melhorScore=0;
   (state.escolas||[]).forEach(function(es){
     var nomeLow=es.nome.toLowerCase().replace(/[^a-záéíóúãõâêôàü\s]/gi,"");
@@ -3983,6 +4010,13 @@ function _detectarEscolaNaOc(texto){
       r.confidence=Math.min(50+score*15,99);
     }
   });
+
+  // Se não casou com cadastro mas extraiu do texto → usa o nome extraído
+  if(!r.escolaNome && _nomeExtraido){
+    r.escolaNome=_nomeExtraido;
+    r.confidence=Math.max(r.confidence,65);
+    r.ehEscolar=true;
+  }
 
   // 4 ── Classificar tipo (se não for palestra)
   if(!r.ehPalestra){
@@ -4097,10 +4131,10 @@ function abrirVarreduraEscolar(){
   if(!resultados.length){
     h.push("<p style='color:#3a3820;text-align:center;padding:30px 0;font-size:14px'>Nenhuma ocorrência escolar identificada.</p>");
   } else {
-    var comEscola=resultados.filter(function(r){return r.det.escolaId;}).length;
-    if(comEscola>0){
+    var comNome=resultados.filter(function(r){return r.det.escolaNome;}).length;
+    if(comNome>0){
       h.push("<div style='background:#0a1e0a;border:1px solid #22c55e33;border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap'>");
-      h.push("<span style='color:#4a9a4a;font-size:11px'>"+comEscola+" com escola identificada automaticamente</span>");
+      h.push("<span style='color:#4a9a4a;font-size:11px'>"+comNome+" com escola identificada automaticamente no texto</span>");
       h.push("<button onclick='_vincularTodasDetectadas()' style='background:#0a2a0a;border:1px solid #22c55e;color:#22c55e;padding:7px 16px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>✓ Vincular todas</button>");
       h.push("</div>");
     }
@@ -4119,15 +4153,12 @@ function abrirVarreduraEscolar(){
       h.push("<span style='background:"+corConf+"22;color:"+corConf+";padding:2px 7px;border-radius:4px;font-size:9px;font-weight:700;margin-left:auto'>"+det.confidence+"% confiança</span>");
       h.push("</div>");
       if(trecho) h.push("<p style='color:#5a5535;font-size:10px;font-style:italic;margin:0 0 10px;line-height:1.5;background:#0a0a08;padding:8px 10px;border-radius:6px;border-left:2px solid "+corConf+"'>"+esc(trecho)+(trecho.length===180?"…":"")+"</p>");
-      h.push("<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:10px'>");
-      // Escola
-      h.push("<div><label style='color:#4a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Escola</label>");
-      h.push("<select id='var-escola-"+idx+"' style='width:100%;background:#0e0c06;border:1px solid "+(det.escolaId?"#22c55e55":"#2a2818")+";color:#e8ddd0;padding:7px 8px;border-radius:6px;font-size:11px;outline:none'>");
-      h.push("<option value=''>-- Selecione --</option>");
-      (state.escolas||[]).forEach(function(es){h.push("<option value='"+es.id+"'"+(det.escolaId===es.id?" selected":"")+">"+esc(es.nome)+"</option>");});
-      h.push("</select></div>");
+      h.push("<div style='display:grid;grid-template-columns:2fr 1fr 1fr;gap:8px;margin-bottom:10px'>");
+      // Escola — campo texto editável, preenchido automaticamente do texto
+      h.push("<div><label style='color:#4a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Escola (extraída do texto)</label>");
+      h.push("<input id='var-escola-"+idx+"' type='text' value='"+esc(det.escolaNome||"")+"' placeholder='Nome da escola...' style='width:100%;background:#0e0c06;border:1px solid "+(det.escolaNome?"#22c55e55":"#2a2818")+";color:#e8ddd0;padding:7px 8px;border-radius:6px;font-size:11px;outline:none;box-sizing:border-box'/></div>");
       // Tipo
-      h.push("<div><label style='color:#4a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Tipo Escolar</label>");
+      h.push("<div><label style='color:#4a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Tipo</label>");
       h.push("<select id='var-tipo-"+idx+"' style='width:100%;background:#0e0c06;border:1px solid "+(det.tipoOcEscola?"#f59e0b55":"#2a2818")+";color:#e8ddd0;padding:7px 8px;border-radius:6px;font-size:11px;outline:none'>");
       h.push("<option value=''>--</option>");
       ["Violência","Bullying","Drogas","Ameaça","Furto","Vandalismo","Conflito Familiar","Palestra","Outros"].forEach(function(t){
@@ -4135,7 +4166,7 @@ function abrirVarreduraEscolar(){
       });
       h.push("</select></div>");
       // Violência
-      h.push("<div><label style='color:#4a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Tipo Violência</label>");
+      h.push("<div><label style='color:#4a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Violência</label>");
       h.push("<select id='var-vio-"+idx+"' style='width:100%;background:#0e0c06;border:1px solid "+(det.tipoViolencia?"#ef444455":"#2a2818")+";color:#e8ddd0;padding:7px 8px;border-radius:6px;font-size:11px;outline:none'>");
       h.push("<option value=''>N/A</option>");
       ["Física","Verbal","Psicológica","Sexual","Patrimonial"].forEach(function(t){
@@ -5048,130 +5079,193 @@ function renderTela() {
       return;
     }
     if(tela==="lancar"){
-      // Tela de lançar ocorrência - operador digita texto completo
+      // ── Formulário SIGESPOL estruturado ──
       var h=[];
-      h.push("<div style='max-width:700px;margin:0 auto;padding:20px'>");
-      h.push("<h2 style='font-size:20px;font-weight:700;color:#e8ddd0;margin-bottom:20px'>📝 Lançar Ocorrência</h2>");
-      h.push("<div style='background:#141208;border:1px solid #2a3818;border-radius:10px;padding:20px'>");
-      h.push("<label style='color:#5a5535;font-size:11px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:8px'>Descrição Completa *</label>");
-      h.push("<textarea id='oc-texto' oninput='detectarEscolaNaOc()' placeholder='Cole aqui o texto completo da ocorrência. Será parseado automaticamente para os campos.' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:12px;border-radius:6px;font-size:12px;font-family:monospace;box-sizing:border-box;min-height:180px;resize:vertical;outline:none'></textarea>");
-      h.push("<p style='color:#7a7050;font-size:11px;margin:8px 0;line-height:1.6'>Dica: Mencione tipo de crime, nome da vítima, suspeito, bairro, endereço, características, veículo e qualquer outra informação importante.</p>");
-      // Painel de detecção automática de escola
-      h.push("<div id='painel-escola-detectada' style='display:none;margin-top:10px'></div>");
-      // Campo escola (manual / confirmação)
-      var optsEscola="<option value=''>-- Não envolve escola --</option>";
-      (state.escolas||[]).forEach(function(es){ optsEscola+="<option value='"+es.id+"'>"+esc(es.nome)+"</option>"; });
-      h.push("<div id='bloco-campo-escola' style='margin-top:12px'><label style='color:#5a5535;font-size:11px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:6px'>🏫 Escola Envolvida (opcional)</label><select id='oc-escola' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:9px 10px;border-radius:6px;font-size:12px;outline:none'>"+ optsEscola +"</select></div>");
-      h.push("<div style='display:flex;gap:10px;margin-top:16px'><button id='btn-cancelar-lancar' style='flex:1;background:#1a1808;border:1px solid #2a3818;color:#5a5535;padding:10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button><button id='btn-salvar-lancar' style='flex:1;background:linear-gradient(135deg,#2a4a18,#3a5a28);border:none;color:#a8d890;padding:10px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>💾 Lançar</button></div>");
-      h.push("</div></div>");
+      var tiposOc=["Abordagem","Acidente de Trânsito","Ameaça","Apreensão de Drogas","Apreensão de Veículo",
+        "Arrombamento","Assalto / Roubo","Atropelamento","Averiguação","Crime Ambiental",
+        "Desaparecimento","Disparo de Arma de Fogo","Estupro","Flagrante","Furto",
+        "Homicídio","Lesão Corporal","Maria da Penha","Ocorrência Escolar","Perturbação do Sossego",
+        "Prisão em Flagrante","Recuperação de Veículo","Roubo","Tentativa de Homicídio",
+        "Tráfico de Drogas","Vandalismo","Violência Doméstica","Vias de Fato","Outro"];
+      var grads=["Sd","Cb","3°Sgt","2°Sgt","1°Sgt","SubTen","Asp","2°Ten","1°Ten","Cap","Maj","TC","Cel"];
+      var IS="width:100%;background:#0b1628;border:1px solid #1e3d6a;color:#c5daf5;padding:9px 11px;border-radius:5px;font-size:12px;outline:none;box-sizing:border-box";
+      var LS="color:#4a9fd4;font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.6px;display:block;margin-bottom:5px";
+      var SH="display:flex;align-items:center;gap:8px;background:#0a1a3a;border-left:3px solid #4a9fd4;padding:7px 13px;border-radius:0 5px 5px 0;margin-bottom:14px";
+      var ST="color:#c5daf5;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1.2px;margin:0";
+      var SC="background:#060d1c;border:1px solid #1a3358;border-radius:8px;padding:15px;margin-bottom:13px";
+
+      h.push("<div style='max-width:740px;margin:0 auto;padding:16px 20px 30px'>");
+
+      // ── Cabeçalho ──
+      h.push("<div style='display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#0a1a3a,#0d2248);border:1px solid #1e3d6a;border-radius:8px'>");
+      h.push("<div style='width:42px;height:42px;border-radius:50%;background:#0d2248;border:2px solid #4a9fd4;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0'>📋</div>");
+      h.push("<div><h2 style='font-size:15px;font-weight:700;color:#c5daf5;margin:0 0 2px'>Lançar Ocorrência</h2><p style='color:#4a9fd4;font-size:10px;margin:0;letter-spacing:.5px'>FORMULÁRIO SIGESPOL · 77ª CIPM / BCS</p></div>");
+      h.push("</div>");
+
+      // ── 1. IDENTIFICAÇÃO ──
+      h.push("<div style='"+SC+"'>");
+      h.push("<div style='"+SH+"'><span style='font-size:14px'>🔎</span><p style='"+ST+"'>1 — Identificação</p></div>");
+      h.push("<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:10px'>");
+      h.push("<div><label style='"+LS+"'>Nº da Ocorrência</label><input id='oc-numero' type='text' placeholder='Ex: 2025/001234' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Relatório de Serviço</label><input id='oc-relatorio' type='text' placeholder='Ex: 1ª Turno · Mai/2025' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Posto de Serviço</label><input id='oc-posto' type='text' value='BCS / Setor 1' style='"+IS+"'></div>");
+      h.push("</div>");
+      h.push("<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:10px;margin-bottom:10px'>");
+      h.push("<div><label style='"+LS+"'>Tipo de Ocorrência *</label><select id='oc-tipo' style='"+IS+"'>");
+      tiposOc.forEach(function(t){ h.push("<option>"+t+"</option>"); });
+      h.push("</select></div>");
+      h.push("<div><label style='"+LS+"'>Data *</label><input id='oc-data' type='date' value='"+hoje()+"' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Hora *</label><input id='oc-hora' type='time' value='"+new Date().toTimeString().slice(0,5)+"' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Zona</label><select id='oc-zona' style='"+IS+"'><option>Urbana</option><option>Rural</option></select></div>");
+      h.push("</div>");
+      h.push("<div style='display:grid;grid-template-columns:3fr 1fr;gap:10px'>");
+      h.push("<div><label style='"+LS+"'>Local — Endereço Completo</label><input id='oc-local' type='text' placeholder='Rua / Av., nº, Bairro, Município' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Ponto de Referência</label><input id='oc-referencia' type='text' placeholder='Ex: Próximo ao mercado...' style='"+IS+"'></div>");
+      h.push("</div>");
+      h.push("</div>");
+
+      // ── 2. VÍTIMA ──
+      h.push("<div style='"+SC+"'>");
+      h.push("<div style='"+SH+"'><span style='font-size:14px'>👤</span><p style='"+ST+"'>2 — Vítima</p></div>");
+      h.push("<div style='display:grid;grid-template-columns:3fr 100px 80px 150px;gap:10px;margin-bottom:10px'>");
+      h.push("<div><label style='"+LS+"'>Nome Completo</label><input id='oc-vit-nome' type='text' placeholder='Nome completo da vítima' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Sexo</label><select id='oc-vit-sexo' style='"+IS+"'><option value='F'>Feminino</option><option value='M'>Masculino</option><option value=''>N/I</option></select></div>");
+      h.push("<div><label style='"+LS+"'>Idade</label><input id='oc-vit-idade' type='number' min='0' max='120' placeholder='--' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Telefone</label><input id='oc-vit-tel' type='text' placeholder='(77) 9 ____-____' style='"+IS+"'></div>");
+      h.push("</div>");
+      h.push("<div><label style='"+LS+"'>Endereço Residencial</label><input id='oc-vit-end' type='text' placeholder='Endereço residencial da vítima' style='"+IS+"'></div>");
+      h.push("</div>");
+
+      // ── 3. AUTOR ──
+      h.push("<div style='"+SC+"'>");
+      h.push("<div style='display:flex;align-items:center;gap:8px;background:#0a1a3a;border-left:3px solid #c05050;padding:7px 13px;border-radius:0 5px 5px 0;margin-bottom:14px'>");
+      h.push("<span style='font-size:14px'>🚨</span><p style='"+ST+"'>3 — Autor / Suspeito</p>");
+      h.push("<label style='margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;color:#9ab;font-weight:600'>");
+      h.push("<input type='checkbox' id='oc-autor-niid' onchange=\"var b=document.getElementById('bloco-autor');b.style.opacity=this.checked?'0.3':'1';b.style.pointerEvents=this.checked?'none':'auto'\"> Não Identificado</label>");
+      h.push("</div>");
+      h.push("<div id='bloco-autor'>");
+      h.push("<div style='display:grid;grid-template-columns:3fr 100px 80px;gap:10px;margin-bottom:10px'>");
+      h.push("<div><label style='"+LS+"'>Nome / Apelido</label><input id='oc-aut-nome' type='text' placeholder='Nome, apelido ou alcunha do autor' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Sexo</label><select id='oc-aut-sexo' style='"+IS+"'><option value='M'>Masculino</option><option value='F'>Feminino</option><option value=''>N/I</option></select></div>");
+      h.push("<div><label style='"+LS+"'>Idade aprox.</label><input id='oc-aut-idade' type='number' min='0' max='120' placeholder='--' style='"+IS+"'></div>");
+      h.push("</div>");
+      h.push("<div><label style='"+LS+"'>Endereço / Localidade Conhecida</label><input id='oc-aut-end' type='text' placeholder='Endereço ou localidade do autor' style='"+IS+"'></div>");
+      h.push("</div>");
+      h.push("</div>");
+
+      // ── 4. OBJETOS ──
+      h.push("<div style='"+SC+"'>");
+      h.push("<div style='"+SH+"'><span style='font-size:14px'>📦</span><p style='"+ST+"'>4 — Objetos Relacionados</p></div>");
+      h.push("<textarea id='oc-objetos' placeholder='Descreva objetos apreendidos, recuperados ou subtraídos (ex: celular Samsung, R$ 200 em espécie, arma de fogo...)' rows='3' style='"+IS+";resize:vertical;font-family:inherit;line-height:1.5'></textarea>");
+      h.push("</div>");
+
+      // ── 5. NARRATIVA ──
+      h.push("<div style='"+SC+"'>");
+      h.push("<div style='"+SH+"'><span style='font-size:14px'>📝</span><p style='"+ST+"'>5 — Narrativa</p></div>");
+      h.push("<div style='margin-bottom:10px'><label style='"+LS+"'>Descrição — Resumo da Ocorrência</label><input id='oc-descricao' type='text' placeholder='Resumo em uma linha do fato' style='"+IS+"'></div>");
+      h.push("<div style='margin-bottom:10px'><label style='"+LS+"'>Dinâmica dos Fatos *</label><textarea id='oc-texto' oninput='detectarEscolaNaOc()' placeholder='Descreva detalhadamente: circunstâncias, ações das partes, cronologia dos fatos, características de suspeitos e veículos...' rows='7' style='"+IS+";resize:vertical;font-family:inherit;line-height:1.6'></textarea></div>");
+      h.push("<div id='painel-escola-detectada' style='margin-bottom:10px'></div>");
+      h.push("<div><label style='"+LS+"'>Medidas Adotadas pela Guarnição</label><textarea id='oc-medidas' placeholder='Ex: Conduzido à delegacia, local preservado, acionado perito criminal, medida protetiva solicitada...' rows='3' style='"+IS+";resize:vertical;font-family:inherit;line-height:1.5'></textarea></div>");
+      h.push("</div>");
+
+      // ── 6. POLICIAIS ──
+      h.push("<div style='"+SC+"'>");
+      h.push("<div style='display:flex;align-items:center;gap:0;margin-bottom:14px'>");
+      h.push("<div style='flex:1;"+SH.replace("margin-bottom:14px","margin-bottom:0")+";border-radius:0 5px 5px 0'><span style='font-size:14px'>👮</span><p style='"+ST+"'>6 — Policiais que Atenderam</p></div>");
+      h.push("<button onclick='_addPolicial()' style='background:#091830;border:1px solid #4a9fd4;border-left:none;color:#4a9fd4;padding:6px 14px;border-radius:0 5px 5px 0;font-size:11px;font-weight:700;cursor:pointer;height:34px;white-space:nowrap'>+ Adicionar</button>");
+      h.push("</div>");
+      h.push("<div id='lista-policiais'></div>");
+      h.push("</div>");
+
+      // ── BOTÕES ──
+      h.push("<div style='display:flex;gap:10px;margin-top:4px'>");
+      h.push("<button id='btn-cancelar-lancar' style='flex:1;background:#070e1c;border:1px solid #1a3358;color:#4a6a8a;padding:12px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer'>Cancelar</button>");
+      h.push("<button id='btn-salvar-lancar' style='flex:2;background:linear-gradient(135deg,#0c2d5c,#1a4d9a);border:1px solid #4a9fd4;color:#c5daf5;padding:12px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer;letter-spacing:.3px'>💾 Lançar Ocorrência</button>");
+      h.push("</div>");
+      h.push("</div>");
       main.innerHTML=h.join("");
-      
+
+      // Gerenciar lista de policiais dinâmica
+      var _policiais=[{grad:"Sd",nome:"",matricula:""}];
+      function _renderPoliciais(){
+        var li=document.getElementById("lista-policiais");
+        if(!li) return;
+        var ph=[];
+        _policiais.forEach(function(p,i){
+          ph.push("<div style='display:grid;grid-template-columns:110px 1fr 140px 34px;gap:8px;margin-bottom:8px;align-items:end'>");
+          ph.push("<div><label style='"+LS+"'>Graduação</label><select onchange='_policiais["+i+"].grad=this.value' style='"+IS+"'>");
+          grads.forEach(function(g){ ph.push("<option"+(p.grad===g?" selected":"")+" value='"+g+"'>"+g+"</option>"); });
+          ph.push("</select></div>");
+          ph.push("<div><label style='"+LS+"'>Nome Completo</label><input type='text' value='"+esc(p.nome)+"' oninput='_policiais["+i+"].nome=this.value' placeholder='Nome do policial' style='"+IS+"'></div>");
+          ph.push("<div><label style='"+LS+"'>Matrícula</label><input type='text' value='"+esc(p.matricula)+"' oninput='_policiais["+i+"].matricula=this.value' placeholder='Nº Matrícula' style='"+IS+"'></div>");
+          if(_policiais.length>1){
+            ph.push("<button onclick='_remPolicial("+i+")' style='background:#120808;border:1px solid #4a1515;color:#c05050;width:34px;height:34px;border-radius:5px;font-size:16px;cursor:pointer;line-height:1'>×</button>");
+          } else {
+            ph.push("<div></div>");
+          }
+          ph.push("</div>");
+        });
+        li.innerHTML=ph.join("");
+      }
+      window._addPolicial=function(){ _policiais.push({grad:"Sd",nome:"",matricula:""}); _renderPoliciais(); };
+      window._remPolicial=function(i){ if(_policiais.length>1){ _policiais.splice(i,1); _renderPoliciais(); } };
+      _renderPoliciais();
+
+      // Botões
       document.getElementById("btn-cancelar-lancar").onclick=function(){ state.tela="dashboard"; render(); };
       document.getElementById("btn-salvar-lancar").onclick=function(){
-        var texto=document.getElementById("oc-texto").value.trim();
-        if(!texto){ showToast("Preencha a descrição","error"); return; }
+        var dinamica=(document.getElementById("oc-texto")||{value:""}).value.trim();
+        var tipo=(document.getElementById("oc-tipo")||{value:"Ocorrência"}).value||"Ocorrência";
+        if(!dinamica){ showToast("Preencha a Dinâmica dos Fatos","error"); return; }
         try {
-        // Parser para formato BCS
-        var get=function(patterns){
-          for(var i=0;i<patterns.length;i++){
-            var m=texto.match(patterns[i]);
-            if(m&&m[1]) return m[1].trim();
-          }
-          return "";
-        };
-
-        var tipo=get([/\*TIPO:\*\s*([^\n]+)/i,/\*?OCORRÊNCIA:?\*?\s*(.+)/i, /\*?NATUREZA:?\*?\s*(.+)/i]) || "Ocorrência";
-        var dataStr=get([/\*DATA:\*\s*(\d{2}\/\d{2}\/\d{4})/i,/\*?DATA:?\*?\s*(\d{2}\/\d{2}\/\d{4})/i]);
-        var hora=get([/\*HORA:\*\s*(\d{2}:\d{2})/i,/\*?HORA:?\*?\s*(\d{2}:\d{2})/i]);
-        var localStr=get([/\*LOCAL:\*\s*([^\n]+)/i,/\*?LOCAL:?\*?\s*(.+)/i]);
-        var responsavelWpp=get([/\*RESPONSÁVEL:\*\s*([^\n]+)/i,/\*RESPONSAVEL:\*\s*([^\n]+)/i]);
-        
-        // Bairro: última palavra do local (após vírgula)
-        var bairro="", endereco="";
-        if(localStr){
-          var partes=localStr.split(",");
-          bairro=partes.length>1?partes[partes.length-1].trim():localStr;
-          endereco=partes.length>1?partes.slice(0,-1).join(",").trim():localStr;
-        }
-
-        // Vítima
-        var vitimaLinha=get([/\*?Vítima:?\*?\s*(.+)/i]);
-        var vitimaNome="", vitimaIdade="", vitimaTel="", vitimaEnd="";
-        if(vitimaLinha){
-          // Nome: tudo até o primeiro " - "
-          var vParts=vitimaLinha.split(/\s*-\s*/);
-          vitimaNome=vParts[0]?vParts[0].trim():"";
-          // Idade: primeiro número isolado
-          var idadeM=vitimaLinha.match(/\b(\d{1,3})\s*anos/i);
-          if(!idadeM) idadeM=vitimaLinha.match(/\s-\s(\d{1,3})\s/);
-          if(idadeM) vitimaIdade=idadeM[1];
-          // Telefone: 10-11 dígitos seguidos
-          var telMs=vitimaLinha.match(/\b(\d{10,11})\b/g);
-          if(telMs) vitimaTel=telMs[telMs.length-1]; // último número (contato)
-          // Endereço
-          var endM=vitimaLinha.match(/(?:Rua|Av(?:enida)?|Travessa|Alameda)[^-\n]*/i);
-          if(endM) vitimaEnd=endM[0].trim();
-        }
-
-        // Suspeito
-        var suspLinha=get([/\*?Autor:?\*?\s*(.+)/i, /\*?Suspeito:?\*?\s*(.+)/i]);
-        var suspNome="", suspIdade="";
-        if(suspLinha){
-          if(/não identificado/i.test(suspLinha)){
-            suspNome="Não identificado";
-          } else {
-            var sParts=suspLinha.split(/\s*-\s*/);
-            suspNome=sParts[0]?sParts[0].trim():"";
-            var sIdade=suspLinha.match(/\b(\d{1,3})\s*anos/i);
-            if(!sIdade) sIdade=suspLinha.match(/\s-\s(\d{1,3})\s/);
-            if(sIdade) suspIdade=sIdade[1];
-          }
-        }
-
-        // Medida protetiva e VD
-        var mp=/medida protetiva.*sim/i.test(texto)?"Sim":/não possui medida protetiva/i.test(texto)?"Não":"Não";
-        var vd=/maria da penha|violência doméstica|violencia domestica|vd\b/i.test(texto);
-
-        // Data ISO
-        var dataISO=hoje();
-        if(dataStr){
-          var dp=dataStr.split("/");
-          if(dp.length===3) dataISO=dp[2]+"-"+dp[1]+"-"+dp[0];
-        }
-
-        var escolaSelEl=document.getElementById("oc-escola");
-        var escolaId=escolaSelEl?escolaSelEl.value:"";
-        var escolaNome=escolaId?(escolaSelEl.options[escolaSelEl.selectedIndex]||{text:""}).text:"";
-        // Se operador não selecionou manualmente, usa detecção automática
-        var _det=_detectarEscolaNaOc(texto);
-        if(!escolaId && _det.escolaId){ escolaId=_det.escolaId; escolaNome=_det.escolaNome; }
-        var oc={
-          id:"oc_"+Date.now(), criadoEm:new Date().toISOString(),
-          tipo:tipo, bairro:bairro, municipio:"Vitória da Conquista",
-          escolaId:escolaId, escolaNome:escolaNome,
-          tipoOcEscola:(_det.tipoOcEscola||""),
-          tipoViolenciaEscola:(_det.tipoViolencia||""),
-          vitima_nome:vitimaNome, vitima_telefone:vitimaTel,
-          vitima_endereco:vitimaEnd||(endereco&&endereco.length<=150&&!/segundo o relato|ao chegar|a vítima|o autor/i.test(endereco)?endereco:""),
-          vitima_sexo:"F", vitima_idade:vitimaIdade, vitima_cpf:"",
-          suspeito_nome:suspNome, suspeito_apelido:"", suspeito_caracteristicas:"",
-          suspeito_idade:suspIdade,
-          veiculo:"", medida_protetiva:mp,
-          responsavel:responsavelWpp||"",
-          violencia_domestica:vd, requer_visita:vd, reincidente:false,
-          descricao:(function(){var pats=[/\*DESCRIÇÃO:\*\s*([\s\S]+?)(?=\n\s*\*[A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]|\s*$)/i,/Dinâmica dos fatos[\t: ]+([\s\S]+?)(?=\n\s*\*[A-Z]|\n\n\w|$)/i,/Descrição[\t: ]+([\s\S]+?)(?=\n\s*\*[A-Z]|\n\n|$)/i];for(var i=0;i<pats.length;i++){var m=texto.match(pats[i]);if(m&&m[1]&&m[1].trim().length>10)return m[1].trim();}return texto.trim();})(),
-          texto_original:texto,
-          data:dataISO, hora:hora||new Date().toTimeString().slice(0,5), numero:""
-        };
-        
-        if(!state.db.ocorrencias) state.db.ocorrencias=[];
-        state.db.ocorrencias.push(oc);
-        enviarSheets("ocorrencias", oc);
-        salvarLocal();
-        showToast("✓ Ocorrência lançada!");
-        state.tela="dashboard";
-        render();
-        } catch(e){ console.error("[IARA] Erro ao lançar:",e); showToast("Erro ao lançar: "+e.message,"error"); }
+          var localVal=(document.getElementById("oc-local")||{value:""}).value.trim();
+          var lPartes=localVal.split(",");
+          var bairro=lPartes.length>1?lPartes[lPartes.length-1].trim():localVal;
+          var dataVal=(document.getElementById("oc-data")||{value:hoje()}).value||hoje();
+          var horaVal=(document.getElementById("oc-hora")||{value:""}).value||new Date().toTimeString().slice(0,5);
+          var vd=/maria da penha|violência doméstica|violencia domestica|\bvd\b/i.test(dinamica);
+          var naoId=!!(document.getElementById("oc-autor-niid")&&document.getElementById("oc-autor-niid").checked);
+          var _det=_detectarEscolaNaOc(dinamica);
+          var policiaisTexto=_policiais.filter(function(p){return p.nome.trim();})
+            .map(function(p){return p.grad+" "+p.nome+(p.matricula?" ("+p.matricula+")":"");}).join("; ");
+          var oc={
+            id:"oc_"+Date.now(), criadoEm:new Date().toISOString(),
+            numero:(document.getElementById("oc-numero")||{value:""}).value.trim(),
+            relatorio:(document.getElementById("oc-relatorio")||{value:""}).value.trim(),
+            posto:(document.getElementById("oc-posto")||{value:"BCS"}).value.trim()||"BCS",
+            tipo:tipo,
+            zona:(document.getElementById("oc-zona")||{value:"Urbana"}).value,
+            local:localVal, bairro:bairro, municipio:"Vitória da Conquista",
+            referencia:(document.getElementById("oc-referencia")||{value:""}).value.trim(),
+            vitima_nome:(document.getElementById("oc-vit-nome")||{value:""}).value.trim(),
+            vitima_sexo:(document.getElementById("oc-vit-sexo")||{value:"F"}).value,
+            vitima_idade:(document.getElementById("oc-vit-idade")||{value:""}).value.trim(),
+            vitima_telefone:(document.getElementById("oc-vit-tel")||{value:""}).value.trim(),
+            vitima_endereco:(document.getElementById("oc-vit-end")||{value:""}).value.trim(),
+            suspeito_nome:naoId?"Não identificado":(document.getElementById("oc-aut-nome")||{value:""}).value.trim(),
+            suspeito_sexo:(document.getElementById("oc-aut-sexo")||{value:"M"}).value,
+            suspeito_idade:(document.getElementById("oc-aut-idade")||{value:""}).value.trim(),
+            suspeito_endereco:(document.getElementById("oc-aut-end")||{value:""}).value.trim(),
+            objetos:(document.getElementById("oc-objetos")||{value:""}).value.trim(),
+            descricao:(document.getElementById("oc-descricao")||{value:""}).value.trim()||dinamica.slice(0,120),
+            descricao_dinamica:dinamica,
+            medidas:(document.getElementById("oc-medidas")||{value:""}).value.trim(),
+            policiais:policiaisTexto,
+            escolaId:(_det.escolaId||""), escolaNome:(_det.escolaNome||""),
+            tipoOcEscola:(_det.tipoOcEscola||""),
+            tipoViolenciaEscola:(_det.tipoViolencia||""),
+            violencia_domestica:vd, requer_visita:vd,
+            medida_protetiva:vd?"Sim":"Não",
+            data:dataVal, hora:horaVal, texto_original:dinamica
+          };
+          if(!state.db.ocorrencias) state.db.ocorrencias=[];
+          state.db.ocorrencias.push(oc);
+          enviarSheets("ocorrencias",oc);
+          salvarLocal();
+          showToast("✓ Ocorrência lançada com sucesso!");
+          state.tela="dashboard";
+          render();
+        } catch(e){ console.error("[IARA] Erro ao lançar:",e); showToast("Erro: "+e.message,"error"); }
       };
       return;
     }
