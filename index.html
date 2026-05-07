@@ -5071,6 +5071,25 @@ function renderTela() {
       h.push("<div><h2 style='font-size:15px;font-weight:700;color:#c5daf5;margin:0 0 2px'>Lançar Ocorrência</h2><p style='color:#4a9fd4;font-size:10px;margin:0;letter-spacing:.5px'>FORMULÁRIO SIGESPOL · 77ª CIPM / BCS</p></div>");
       h.push("</div>");
 
+      // ── CLASSIFICAÇÃO (obrigatório) ──
+      h.push("<div style='background:#0d1c0a;border:2px solid #4a8a30;border-radius:8px;padding:14px 16px;margin-bottom:13px'>");
+      h.push("<label style='color:#7ec850;font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.8px;display:flex;align-items:center;gap:6px;margin-bottom:8px'>🏷️ Classificação da Atividade <span style='background:#4a8a30;color:#d0f0b0;font-size:9px;padding:1px 7px;border-radius:10px;font-weight:700'>OBRIGATÓRIO</span></label>");
+      h.push("<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px' id='classif-btns'>");
+      var classifs=[
+        {v:"Ocorrência",      ic:"🚔"},
+        {v:"Visita Solidária",  ic:"🤝"},
+        {v:"Acompanhamento VCM",ic:"💜"},
+        {v:"Ronda Escolar",     ic:"🏫"},
+        {v:"Visita Comunitária",ic:"🏘️"},
+        {v:"Projeto Social",    ic:"🌱"}
+      ];
+      classifs.forEach(function(c){
+        h.push("<button type='button' data-classif='"+c.v+"' onclick='_selecionarClassif(this)' style='background:#0a1808;border:1px solid #2a4a18;color:#6a9a50;padding:9px 8px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;text-align:center;transition:all .15s'>"+c.ic+" "+c.v+"</button>");
+      });
+      h.push("</div>");
+      h.push("<input type='hidden' id='oc-classificacao' value=''>");
+      h.push("</div>");
+
       // ── 1. IDENTIFICAÇÃO ──
       h.push("<div style='"+SC+"'>");
       h.push("<div style='"+SH+"'><span style='font-size:14px'>🔎</span><p style='"+ST+"'>1 — Identificação</p></div>");
@@ -5180,9 +5199,26 @@ function renderTela() {
       window._remPolicial=function(i){ if(_policiais.length>1){ _policiais.splice(i,1); _renderPoliciais(); } };
       _renderPoliciais();
 
+      // Seletor de classificação
+      window._selecionarClassif=function(btn){
+        document.querySelectorAll("#classif-btns button").forEach(function(b){
+          b.style.background="#0a1808";
+          b.style.borderColor="#2a4a18";
+          b.style.color="#6a9a50";
+          b.style.fontWeight="600";
+        });
+        btn.style.background="#1a4a0a";
+        btn.style.borderColor="#7ec850";
+        btn.style.color="#c8f090";
+        btn.style.fontWeight="700";
+        document.getElementById("oc-classificacao").value=btn.dataset.classif;
+      };
+
       // Botões
       document.getElementById("btn-cancelar-lancar").onclick=function(){ state.tela="dashboard"; render(); };
       document.getElementById("btn-salvar-lancar").onclick=function(){
+        var classificacao=(document.getElementById("oc-classificacao")||{value:""}).value.trim();
+        if(!classificacao){ showToast("Selecione a Classificação da Atividade","error"); document.getElementById("classif-btns").scrollIntoView({behavior:"smooth",block:"center"}); return; }
         var dinamica=(document.getElementById("oc-texto")||{value:""}).value.trim();
         var tipo=(document.getElementById("oc-tipo")||{value:"Ocorrência"}).value||"Ocorrência";
         if(!dinamica){ showToast("Preencha a Dinâmica dos Fatos","error"); return; }
@@ -5199,6 +5235,7 @@ function renderTela() {
             .map(function(p){return p.grad+" "+p.nome+(p.matricula?" ("+p.matricula+")":"");}).join("; ");
           var oc={
             id:"oc_"+Date.now(), criadoEm:new Date().toISOString(),
+            classificacao:classificacao,
             numero:(document.getElementById("oc-numero")||{value:""}).value.trim(),
             relatorio:(document.getElementById("oc-relatorio")||{value:""}).value.trim(),
             posto:(document.getElementById("oc-posto")||{value:"BCS"}).value.trim()||"BCS",
@@ -8285,9 +8322,16 @@ function renderOcorrenciasGestor(el, perfil_atual){
     var tipoExib   = tipoValido(o.tipo)          ? (o.tipo||"").toUpperCase() : "NÃO IDENTIFICADO";
     var vitimeExib = nomeValido(o.vitima_nome)   ? o.vitima_nome              : "--";
     var suspExib   = nomeValido(o.suspeito_nome) ? o.suspeito_nome            : "Não identificado";
-    // Linha 1: tipo + tags + nº
+    // Linha 1: tipo + classificação + tags + nº
     h.push("<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px'>");
     h.push("<span style='background:"+cor+"18;color:"+cor+";padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase'>"+tipoExib+"</span>");
+    if(o.classificacao && o.classificacao!=="Ocorrência"){
+      var classifIc={
+        "Visita Solidária":"🤝","Acompanhamento VCM":"💜","Ronda Escolar":"🏫",
+        "Visita Comunitária":"🏘️","Projeto Social":"🌱"
+      };
+      h.push("<span style='background:rgba(126,200,80,0.15);color:#7ec850;padding:3px 9px;border-radius:4px;font-size:10px;font-weight:700'>"+(classifIc[o.classificacao]||"🏷️")+" "+o.classificacao+"</span>");
+    }
     if(o.numero) h.push("<span style='background:#1a2818;color:#5a7a4a;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600'>Nº "+o.numero+"</span>");
     if(o.violencia_domestica) h.push("<span style='background:rgba(168,85,247,0.15);color:#a855f7;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700'>VD</span>");
     if(o.medida_protetiva==="Sim") h.push("<span style='background:rgba(200,80,80,0.12);color:#c85050;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700'>M.P.</span>");
