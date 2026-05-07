@@ -7750,13 +7750,17 @@ function gerarJanelaPDF(oc){
   if(temMp) h+="<span class='badge badge-mp'>MEDIDA PROTETIVA</span>";
   h+="</div></div>";
 
-  // ── Ocorrências (apenas tipo + texto na íntegra)
+  // ── Ocorrências — layout SIGESPOL estruturado
   todasOcs.forEach(function(o, idx){
     var isAtual = o.id===oc.id;
-    var textoOc = (o.texto_original||o.descricao||"").trim();
     h+="<div class='oc-bloco"+(isAtual?" atual":"")+"'>";
+    // Cabeçalho do bloco
     h+="<p class='oc-tipo'>"+(o.tipo||"Ocorrência").toUpperCase()+"</p>";
-    h+="<p class='oc-meta'>"+fmtData(o.data)+(o.hora?" · "+normHora(o.hora):"")+(o.bairro?" · "+o.bairro:"")+(o.numero?" · Nº "+o.numero:"")+"</p>";
+    h+="<p class='oc-meta'>";
+    if(o.numero) h+="Nº "+o.numero+" &nbsp;|&nbsp; ";
+    h+=fmtData(o.data)+(o.hora?" · "+normHora(o.hora):"");
+    if(o.posto) h+=" &nbsp;|&nbsp; "+o.posto;
+    h+="</p>";
     // Tags
     var tags=[];
     if(o.violencia_domestica) tags.push("<span class='tag tag-vd'>VD</span>");
@@ -7764,9 +7768,52 @@ function gerarJanelaPDF(oc){
     if(o.reincidente) tags.push("<span class='tag tag-reinc'>REINCIDENTE</span>");
     if(o.requer_visita) tags.push("<span class='tag tag-visita'>REQUER VISITA</span>");
     if(tags.length) h+="<div class='oc-tags'>"+tags.join("")+"</div>";
-    // Texto
-    if(textoOc) h+="<pre class='oc-texto'>"+esc(textoOc)+"</pre>";
-    else h+="<p style='color:#aaa;font-size:10px;font-style:italic'>Texto não disponível.</p>";
+    // ── Tabela de campos SIGESPOL
+    h+="<table style='width:100%;border-collapse:collapse;font-size:10px;margin-bottom:8px'>";
+    // Linha 1: Local + Zona + Referência
+    if(o.local||o.bairro){
+      h+="<tr><td style='width:80px;padding:4px 6px;background:#e8eef8;font-weight:700;border:1px solid #ccd;color:#1a3a6a'>LOCAL</td>";
+      h+="<td style='padding:4px 6px;border:1px solid #ccd' colspan='3'>"+esc(o.local||o.bairro||"")+(o.zona?" &nbsp;("+o.zona+")":"")+"</td></tr>";
+    }
+    if(o.referencia){
+      h+="<tr><td style='width:80px;padding:4px 6px;background:#e8eef8;font-weight:700;border:1px solid #ccd;color:#1a3a6a'>REFERÊNCIA</td>";
+      h+="<td style='padding:4px 6px;border:1px solid #ccd' colspan='3'>"+esc(o.referencia)+"</td></tr>";
+    }
+    // Linha 2: Vítima
+    if(o.vitima_nome){
+      h+="<tr style='background:#fff8f8'><td style='padding:4px 6px;background:#fde8e8;font-weight:700;border:1px solid #ccd;color:#8b0000'>VÍTIMA</td>";
+      h+="<td style='padding:4px 6px;border:1px solid #ccd'><b>"+esc(o.vitima_nome)+"</b>"+(o.vitima_sexo?" · "+({F:"Feminino",M:"Masculino"}[o.vitima_sexo]||o.vitima_sexo):"")+(o.vitima_idade?" · "+o.vitima_idade+" anos":"")+"</td>";
+      h+="<td style='width:60px;padding:4px 6px;background:#fde8e8;font-weight:700;border:1px solid #ccd;color:#8b0000'>TEL.</td>";
+      h+="<td style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.vitima_telefone||"—")+"</td></tr>";
+      if(o.vitima_endereco) h+="<tr style='background:#fff8f8'><td style='padding:4px 6px;background:#fde8e8;font-weight:700;border:1px solid #ccd;color:#8b0000'>END. VÍT.</td><td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.vitima_endereco)+"</td></tr>";
+    }
+    // Linha 3: Autor
+    if(o.suspeito_nome){
+      h+="<tr><td style='padding:4px 6px;background:#fef3e8;font-weight:700;border:1px solid #ccd;color:#8b4000'>AUTOR</td>";
+      h+="<td style='padding:4px 6px;border:1px solid #ccd' colspan='3'>"+esc(o.suspeito_nome)+(o.suspeito_sexo?" · "+({F:"Feminino",M:"Masculino"}[o.suspeito_sexo]||o.suspeito_sexo):"")+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+(o.suspeito_endereco?" | "+o.suspeito_endereco:"")+"</td></tr>";
+    }
+    // Objetos
+    if(o.objetos){
+      h+="<tr><td style='padding:4px 6px;background:#e8eef8;font-weight:700;border:1px solid #ccd;color:#1a3a6a'>OBJETOS</td>";
+      h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.objetos)+"</td></tr>";
+    }
+    h+="</table>";
+    // Dinâmica dos Fatos
+    var dinamica = (o.descricao_dinamica||o.texto_original||o.descricao||"").trim();
+    if(dinamica){
+      h+="<p style='font-size:9px;font-weight:700;text-transform:uppercase;color:#1a3a6a;margin:8px 0 3px'>Dinâmica dos Fatos</p>";
+      h+="<pre class='oc-texto'>"+esc(dinamica)+"</pre>";
+    }
+    // Medidas Adotadas
+    if(o.medidas){
+      h+="<p style='font-size:9px;font-weight:700;text-transform:uppercase;color:#1a3a6a;margin:8px 0 3px'>Medidas Adotadas pela Guarnição</p>";
+      h+="<p style='font-size:10px;line-height:1.6;margin:0;padding:6px 10px;border-left:3px solid #1a3a6a;background:#fafafa'>"+esc(o.medidas)+"</p>";
+    }
+    // Policiais
+    if(o.policiais){
+      h+="<p style='font-size:9px;font-weight:700;text-transform:uppercase;color:#1a3a6a;margin:8px 0 3px'>Policiais que Atenderam</p>";
+      h+="<p style='font-size:10px;margin:0'>"+esc(o.policiais)+"</p>";
+    }
     h+="</div>";
   });
 
@@ -7843,25 +7890,67 @@ function renderOcorrenciasGestor(el, perfil_atual){
     if(ocM){
       var modal = document.createElement("div");
       modal.id = "modal-editar";
-      modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;padding:12px;box-sizing:border-box";
+      modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.92);display:flex;align-items:flex-start;justify-content:center;z-index:9999;padding:12px;overflow-y:auto;box-sizing:border-box";
+      var mIS="width:100%;background:#0b1628;border:1px solid #1e3d6a;color:#c5daf5;padding:8px 10px;border-radius:5px;font-size:11px;outline:none;box-sizing:border-box";
+      var mLS="color:#4a9fd4;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;display:block;margin-bottom:4px";
+      var mSH="display:flex;align-items:center;gap:7px;background:#0a1a3a;border-left:3px solid #4a9fd4;padding:6px 12px;border-radius:0 4px 4px 0;margin-bottom:12px";
+      var mST="color:#c5daf5;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0";
+      var mSC="background:#060d1c;border:1px solid #1a3358;border-radius:7px;padding:13px;margin-bottom:11px";
       var mh = [];
-      mh.push("<div style='background:#0e0c06;border:2px solid #3a4a28;border-radius:16px;max-width:700px;width:100%;max-height:95vh;overflow-y:auto;padding:22px;box-sizing:border-box'>");
-      mh.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:1px solid #2a2818;padding-bottom:14px'>");
-      mh.push("<h3 style='color:#a8d890;font-size:17px;font-weight:700;margin:0'>✏️ Editar Ocorrência</h3>");
-      mh.push("<button id='btn-fechar-editar' style='background:#1a1808;border:1px solid #3a3820;color:#8a7a5a;font-size:20px;cursor:pointer;border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;line-height:1'>×</button>");
+      mh.push("<div style='background:#070e1c;border:2px solid #1e3d6a;border-radius:14px;max-width:700px;width:100%;margin:auto;padding:20px;box-sizing:border-box'>");
+      mh.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #1a3358;padding-bottom:12px'>");
+      mh.push("<div><h3 style='color:#c5daf5;font-size:15px;font-weight:700;margin:0 0 2px'>✏️ Editar Ocorrência</h3><p style='color:#4a9fd4;font-size:10px;margin:0'>SIGESPOL · 77ª CIPM / BCS</p></div>");
+      mh.push("<button id='btn-fechar-editar' style='background:#0a1628;border:1px solid #1e3d6a;color:#4a9fd4;font-size:18px;cursor:pointer;border-radius:7px;width:32px;height:32px;line-height:1'>×</button>");
       mh.push("</div>");
-      mh.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px'>");
-      mh.push("<div><label style='color:#6a8a50;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Tipo</label><input id='ed-tipo' type='text' value='"+(ocM.tipo||"")+"' style='width:100%;background:#141208;border:1px solid #2a3818;color:#e8e0cc;padding:8px;border-radius:8px;font-size:11px;box-sizing:border-box'/></div>");
-      mh.push("<div><label style='color:#6a8a50;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Bairro</label><input id='ed-bairro' type='text' value='"+(ocM.bairro||"")+"' style='width:100%;background:#141208;border:1px solid #2a3818;color:#e8e0cc;padding:8px;border-radius:8px;font-size:11px;box-sizing:border-box'/></div>");
-      mh.push("<div><label style='color:#6a8a50;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Vítima Nome</label><input id='ed-vitima' type='text' value='"+(ocM.vitima_nome||"")+"' style='width:100%;background:#141208;border:1px solid #2a3818;color:#e8e0cc;padding:8px;border-radius:8px;font-size:11px;box-sizing:border-box'/></div>");
-      mh.push("<div><label style='color:#6a8a50;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Telefone</label><input id='ed-tel' type='text' value='"+(ocM.vitima_telefone||"")+"' style='width:100%;background:#141208;border:1px solid #2a3818;color:#e8e0cc;padding:8px;border-radius:8px;font-size:11px;box-sizing:border-box'/></div>");
-      mh.push("<div><label style='color:#6a8a50;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Suspeito</label><input id='ed-suspeito' type='text' value='"+(ocM.suspeito_nome||"")+"' style='width:100%;background:#141208;border:1px solid #2a3818;color:#e8e0cc;padding:8px;border-radius:8px;font-size:11px;box-sizing:border-box'/></div>");
-      mh.push("<div><label style='color:#6a8a50;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Veículo</label><input id='ed-veiculo' type='text' value='"+(ocM.veiculo||"")+"' style='width:100%;background:#141208;border:1px solid #2a3818;color:#e8e0cc;padding:8px;border-radius:8px;font-size:11px;box-sizing:border-box'/></div>");
+      // Seção 1 — Identificação
+      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>🔎</span><p style='"+mST+"'>1 — Identificação</p></div>");
+      mh.push("<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px'>");
+      mh.push("<div><label style='"+mLS+"'>Nº Ocorrência</label><input id='ed-numero' type='text' value='"+esc(ocM.numero||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Relatório</label><input id='ed-relatorio' type='text' value='"+esc(ocM.relatorio||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Posto</label><input id='ed-posto' type='text' value='"+esc(ocM.posto||"BCS / Setor 1")+"' style='"+mIS+"'></div>");
       mh.push("</div>");
-      mh.push("<div><label style='color:#6a8a50;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Descrição</label><textarea id='ed-desc' style='width:100%;background:#141208;border:1px solid #2a3818;color:#e8e0cc;padding:8px;border-radius:8px;font-size:11px;box-sizing:border-box;min-height:80px;resize:vertical;font-family:inherit'>"+(ocM.descricao||"")+"</textarea></div>");
-      mh.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px'>");
-      mh.push("<button id='btn-cancelar-editar' style='background:#1a0800;border:1px solid #2a1808;color:#5a4530;padding:10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button>");
-      mh.push("<button id='btn-salvar-editar' style='background:linear-gradient(135deg,#2a4a18,#3a5a28);border:none;color:#a8d890;padding:10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>💾 Salvar</button>");
+      mh.push("<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px'>");
+      mh.push("<div><label style='"+mLS+"'>Tipo *</label><input id='ed-tipo' type='text' value='"+esc(ocM.tipo||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Data</label><input id='ed-data' type='date' value='"+esc(ocM.data||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Hora</label><input id='ed-hora' type='time' value='"+esc(ocM.hora||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Zona</label><select id='ed-zona' style='"+mIS+"'><option"+(ocM.zona!=="Rural"?" selected":"")+" value='Urbana'>Urbana</option><option"+(ocM.zona==="Rural"?" selected":"")+" value='Rural'>Rural</option></select></div>");
+      mh.push("</div>");
+      mh.push("<div style='display:grid;grid-template-columns:3fr 1fr;gap:8px'>");
+      mh.push("<div><label style='"+mLS+"'>Local</label><input id='ed-local' type='text' value='"+esc(ocM.local||ocM.bairro||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Referência</label><input id='ed-referencia' type='text' value='"+esc(ocM.referencia||"")+"' style='"+mIS+"'></div>");
+      mh.push("</div></div>");
+      // Seção 2 — Vítima
+      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>👤</span><p style='"+mST+"'>2 — Vítima</p></div>");
+      mh.push("<div style='display:grid;grid-template-columns:3fr 90px 70px 140px;gap:8px;margin-bottom:8px'>");
+      mh.push("<div><label style='"+mLS+"'>Nome</label><input id='ed-vit-nome' type='text' value='"+esc(ocM.vitima_nome||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Sexo</label><select id='ed-vit-sexo' style='"+mIS+"'><option value='F'"+(ocM.vitima_sexo==="F"?" selected":"")+" >Feminino</option><option value='M'"+(ocM.vitima_sexo==="M"?" selected":"")+">Masculino</option><option value=''"+((!ocM.vitima_sexo||ocM.vitima_sexo==="")?" selected":"")+">N/I</option></select></div>");
+      mh.push("<div><label style='"+mLS+"'>Idade</label><input id='ed-vit-idade' type='number' value='"+esc(ocM.vitima_idade||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Telefone</label><input id='ed-vit-tel' type='text' value='"+esc(ocM.vitima_telefone||"")+"' style='"+mIS+"'></div>");
+      mh.push("</div>");
+      mh.push("<div><label style='"+mLS+"'>Endereço</label><input id='ed-vit-end' type='text' value='"+esc(ocM.vitima_endereco||"")+"' style='"+mIS+"'></div></div>");
+      // Seção 3 — Autor
+      mh.push("<div style='"+mSC+"'><div style='display:flex;align-items:center;gap:7px;background:#0a1a3a;border-left:3px solid #c05050;padding:6px 12px;border-radius:0 4px 4px 0;margin-bottom:12px'><span>🚨</span><p style='"+mST+"'>3 — Autor / Suspeito</p></div>");
+      mh.push("<div style='display:grid;grid-template-columns:3fr 90px 70px;gap:8px;margin-bottom:8px'>");
+      mh.push("<div><label style='"+mLS+"'>Nome / Apelido</label><input id='ed-aut-nome' type='text' value='"+esc(ocM.suspeito_nome||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Sexo</label><select id='ed-aut-sexo' style='"+mIS+"'><option value='M'"+(ocM.suspeito_sexo==="M"?" selected":"")+" >Masculino</option><option value='F'"+(ocM.suspeito_sexo==="F"?" selected":"")+">Feminino</option><option value=''"+((!ocM.suspeito_sexo)?" selected":"")+">N/I</option></select></div>");
+      mh.push("<div><label style='"+mLS+"'>Idade</label><input id='ed-aut-idade' type='number' value='"+esc(ocM.suspeito_idade||"")+"' style='"+mIS+"'></div>");
+      mh.push("</div>");
+      mh.push("<div><label style='"+mLS+"'>Endereço / Localidade</label><input id='ed-aut-end' type='text' value='"+esc(ocM.suspeito_endereco||"")+"' style='"+mIS+"'></div></div>");
+      // Seção 4 — Objetos
+      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>📦</span><p style='"+mST+"'>4 — Objetos Relacionados</p></div>");
+      mh.push("<textarea id='ed-objetos' rows='2' style='"+mIS+";resize:vertical;font-family:inherit'>"+esc(ocM.objetos||"")+"</textarea></div>");
+      // Seção 5 — Narrativa
+      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>📝</span><p style='"+mST+"'>5 — Narrativa</p></div>");
+      mh.push("<div style='margin-bottom:8px'><label style='"+mLS+"'>Descrição (resumo)</label><input id='ed-desc' type='text' value='"+esc(ocM.descricao||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div style='margin-bottom:8px'><label style='"+mLS+"'>Dinâmica dos Fatos</label><textarea id='ed-dinamica' rows='5' style='"+mIS+";resize:vertical;font-family:inherit;line-height:1.6'>"+esc(ocM.descricao_dinamica||ocM.texto_original||"")+"</textarea></div>");
+      mh.push("<div><label style='"+mLS+"'>Medidas Adotadas</label><textarea id='ed-medidas' rows='2' style='"+mIS+";resize:vertical;font-family:inherit'>"+esc(ocM.medidas||"")+"</textarea></div></div>");
+      // Seção 6 — Policiais
+      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>👮</span><p style='"+mST+"'>6 — Policiais que Atenderam</p></div>");
+      mh.push("<div><label style='"+mLS+"'>Policiais (Grad. Nome – Matrícula; ...)</label><input id='ed-policiais' type='text' value='"+esc(ocM.policiais||"")+"' style='"+mIS+"' placeholder='Ex: Sd João Silva (123456); Cb Maria Santos (789012)'></div></div>");
+      // Botões
+      mh.push("<div style='display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:4px'>");
+      mh.push("<button id='btn-cancelar-editar' style='background:#070e1c;border:1px solid #1a3358;color:#4a6a8a;padding:11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button>");
+      mh.push("<button id='btn-salvar-editar' style='background:linear-gradient(135deg,#0c2d5c,#1a4d9a);border:1px solid #4a9fd4;color:#c5daf5;padding:11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>💾 Salvar Alterações</button>");
       mh.push("</div></div>");
       modal.innerHTML = mh.join("");
       modal.onclick = function(e){ if(e.target===this){ state.popEditarOc=null; renderOcorrenciasGestor(el); } };
@@ -7869,28 +7958,46 @@ function renderOcorrenciasGestor(el, perfil_atual){
       document.getElementById("btn-fechar-editar").onclick = function(){ state.popEditarOc=null; renderOcorrenciasGestor(el); };
       document.getElementById("btn-cancelar-editar").onclick = function(){ state.popEditarOc=null; renderOcorrenciasGestor(el); };
       document.getElementById("btn-salvar-editar").onclick = function(){
-        ocM.tipo = document.getElementById("ed-tipo").value;
-        ocM.bairro = document.getElementById("ed-bairro").value;
-        ocM.vitima_nome = document.getElementById("ed-vitima").value;
-        ocM.vitima_telefone = document.getElementById("ed-tel").value;
-        ocM.suspeito_nome = document.getElementById("ed-suspeito").value;
-        ocM.veiculo = document.getElementById("ed-veiculo").value;
-        ocM.descricao = document.getElementById("ed-desc").value;
-        ocM._editadoLocal = true; // flag para preservar edição ao recarregar
+        ocM.numero  = document.getElementById("ed-numero").value.trim();
+        ocM.relatorio = document.getElementById("ed-relatorio").value.trim();
+        ocM.posto   = document.getElementById("ed-posto").value.trim()||"BCS";
+        ocM.tipo    = document.getElementById("ed-tipo").value.trim();
+        ocM.data    = document.getElementById("ed-data").value;
+        ocM.hora    = document.getElementById("ed-hora").value;
+        ocM.zona    = document.getElementById("ed-zona").value;
+        var localVal = document.getElementById("ed-local").value.trim();
+        ocM.local   = localVal;
+        var lPts = localVal.split(",");
+        ocM.bairro  = lPts.length>1?lPts[lPts.length-1].trim():localVal;
+        ocM.referencia = document.getElementById("ed-referencia").value.trim();
+        ocM.vitima_nome = document.getElementById("ed-vit-nome").value.trim();
+        ocM.vitima_sexo = document.getElementById("ed-vit-sexo").value;
+        ocM.vitima_idade = document.getElementById("ed-vit-idade").value.trim();
+        ocM.vitima_telefone = document.getElementById("ed-vit-tel").value.trim();
+        ocM.vitima_endereco = document.getElementById("ed-vit-end").value.trim();
+        ocM.suspeito_nome = document.getElementById("ed-aut-nome").value.trim();
+        ocM.suspeito_sexo = document.getElementById("ed-aut-sexo").value;
+        ocM.suspeito_idade = document.getElementById("ed-aut-idade").value.trim();
+        ocM.suspeito_endereco = document.getElementById("ed-aut-end").value.trim();
+        ocM.objetos  = document.getElementById("ed-objetos").value.trim();
+        ocM.descricao = document.getElementById("ed-desc").value.trim();
+        ocM.descricao_dinamica = document.getElementById("ed-dinamica").value.trim();
+        ocM.medidas  = document.getElementById("ed-medidas").value.trim();
+        ocM.policiais = document.getElementById("ed-policiais").value.trim();
+        var vd = /maria da penha|violência doméstica|violencia domestica|\bvd\b/i.test(ocM.descricao_dinamica||"");
+        if(vd){ ocM.violencia_domestica=true; ocM.requer_visita=true; ocM.medida_protetiva=ocM.medida_protetiva||"Sim"; }
+        ocM._editadoLocal = true;
         salvarLocal();
-        
         // Enviar edição ao servidor
         if(SHEETS_URL){
           var btn = document.getElementById("btn-salvar-editar");
           var textOriginal = btn.textContent;
           btn.textContent = "Salvando...";
           btn.disabled = true;
-          
           var cbE = "bcs_edit_" + Date.now();
           var sE = document.createElement("script");
           window[cbE] = function(data){
             clearTimeout(tE); delete window[cbE]; sE.remove();
-            console.log("[BCS] Resposta editar:", JSON.stringify(data));
             if(data && data.ok){
               ocM._editadoLocal = false;
               salvarLocal();
@@ -7911,9 +8018,17 @@ function renderOcorrenciasGestor(el, perfil_atual){
           };
           var tE = setTimeout(function(){ delete window[cbE]; sE.remove(); btn.textContent=textOriginal; btn.disabled=false; }, 30000);
           var campos = encodeURIComponent(JSON.stringify({
-            tipo:ocM.tipo, bairro:ocM.bairro, vitima_nome:ocM.vitima_nome,
-            vitima_telefone:ocM.vitima_telefone, suspeito_nome:ocM.suspeito_nome,
-            veiculo:ocM.veiculo, descricao:ocM.descricao
+            numero:ocM.numero, relatorio:ocM.relatorio, posto:ocM.posto,
+            tipo:ocM.tipo, data:ocM.data, hora:ocM.hora, zona:ocM.zona,
+            local:ocM.local, bairro:ocM.bairro, referencia:ocM.referencia,
+            vitima_nome:ocM.vitima_nome, vitima_sexo:ocM.vitima_sexo,
+            vitima_idade:ocM.vitima_idade, vitima_telefone:ocM.vitima_telefone,
+            vitima_endereco:ocM.vitima_endereco,
+            suspeito_nome:ocM.suspeito_nome, suspeito_sexo:ocM.suspeito_sexo,
+            suspeito_idade:ocM.suspeito_idade, suspeito_endereco:ocM.suspeito_endereco,
+            objetos:ocM.objetos, descricao:ocM.descricao,
+            descricao_dinamica:ocM.descricao_dinamica, medidas:ocM.medidas,
+            policiais:ocM.policiais
           }));
           sE.src = SHEETS_URL + "?token=" + encodeURIComponent(BCS_TOKEN) + "&acao=editar&id=" + encodeURIComponent(ocM.id) + "&campos=" + campos + "&callback=" + cbE;
           document.head.appendChild(sE);
@@ -8189,11 +8304,28 @@ function renderOcorrenciasGestor(el, perfil_atual){
     if(!isOperador) h.push("<button data-oc='"+o.id+"' data-act='vcm' style='background:#1a1810;border:1px solid #5a5535;color:#8a7a5a;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>Monitor VCM</button>");
     if(!isOperador) h.push("<button data-oc='"+o.id+"' data-act='arq' style='background:#1a0800;border:1px solid #2a1808;color:#5a4530;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>Arquivar</button>");
     h.push("</div></div>");
-    // Bloco único de texto (texto_original na íntegra)
-    var relatoExib=(o.texto_original||o.descricao||"").trim();
-    h.push("<pre style='white-space:pre-wrap;word-break:break-word;color:#c8c0a8;font-size:12px;line-height:1.8;font-family:inherit;margin:0 0 10px;background:#0e0c06;border-radius:8px;padding:14px'>"+esc(relatoExib)+"</pre>");
-    h.push("<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap'>");
-    h.push("<button data-oc='"+o.id+"' data-act='pdf' style='background:#1a0a00;border:1px solid #c8a84b;color:#c8a84b;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>PDF</button>");
+    // ── Campos estruturados SIGESPOL (novo) ou texto legado
+    var temCampos = o.vitima_nome||o.local||o.descricao_dinamica||o.medidas||o.policiais||o.objetos;
+    if(temCampos){
+      var fcS="font-size:10px;color:#4a9fd4;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px";
+      var fcV="font-size:11px;color:#c5daf5;line-height:1.5";
+      h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px'>");
+      if(o.local||o.bairro) h.push("<div><span style='"+fcS+"'>Local</span><span style='"+fcV+"'>"+esc(o.local||o.bairro||"")+(o.zona?" · "+o.zona:"")+"</span></div>");
+      if(o.referencia) h.push("<div><span style='"+fcS+"'>Referência</span><span style='"+fcV+"'>"+esc(o.referencia)+"</span></div>");
+      if(o.vitima_nome) h.push("<div><span style='"+fcS+"'>Vítima</span><span style='"+fcV+"'>"+esc(o.vitima_nome)+(o.vitima_idade?" · "+o.vitima_idade+" anos":"")+(o.vitima_telefone?" · "+o.vitima_telefone:"")+"</span></div>");
+      if(o.suspeito_nome) h.push("<div><span style='"+fcS+"'>Autor/Suspeito</span><span style='"+fcV+"'>"+esc(o.suspeito_nome)+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+"</span></div>");
+      if(o.objetos) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Objetos</span><span style='"+fcV+"'>"+esc(o.objetos)+"</span></div>");
+      h.push("</div>");
+      var dinamica=o.descricao_dinamica||o.descricao||"";
+      if(dinamica) h.push("<div style='background:#060d1c;border:1px solid #1a3358;border-radius:6px;padding:10px;margin-bottom:8px'><span style='"+fcS+"'>Dinâmica dos Fatos</span><p style='color:#c8d8f0;font-size:11px;line-height:1.7;margin:0;white-space:pre-wrap'>"+esc(dinamica)+"</p></div>");
+      if(o.medidas) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Medidas Adotadas</span><p style='"+fcV+";margin:0;white-space:pre-wrap'>"+esc(o.medidas)+"</p></div>");
+      if(o.policiais) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Policiais</span><span style='"+fcV+"'>"+esc(o.policiais)+"</span></div>");
+    } else {
+      var relatoExib=(o.texto_original||o.descricao||"").trim();
+      if(relatoExib) h.push("<pre style='white-space:pre-wrap;word-break:break-word;color:#c8c0a8;font-size:11px;line-height:1.8;font-family:inherit;margin:0 0 10px;background:#0e0c06;border-radius:8px;padding:12px'>"+esc(relatoExib)+"</pre>");
+    }
+    h.push("<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'>");
+    h.push("<button data-oc='"+o.id+"' data-act='pdf' style='background:#0a1628;border:1px solid #c8a84b;color:#c8a84b;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>📄 PDF</button>");
     h.push("<button data-oc='"+o.id+"' data-act='excluir' style='background:#1a0000;border:1px solid #ef4444;color:#ef4444;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>🗑 Excluir</button>");
     h.push("</div>");
     h.push("</div>");
