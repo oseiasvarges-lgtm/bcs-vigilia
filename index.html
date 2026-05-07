@@ -625,6 +625,7 @@ let state = {
   _escolaTab: "dashboard",
   _escolaFiltro: "",
   _escolaId: null,
+  filtroBairro: "",
 };
 
 // Inicializar arrays vazios se undefined
@@ -1506,6 +1507,7 @@ function renderDashboardVCM(main){
   var periodo=state.vcmFiltro;
   // Cards e tabela respeitam o período selecionado
   var vitimas=_buildVitimas(periodo);
+  if(state.filtroBairro) vitimas=vitimas.filter(function(v){return _matchBairro(v.ocBase);});
   var ativas=vitimas.filter(function(v){return !v.encerrado;});
   var comMp=ativas.filter(function(v){return v.temMp;});
   var riscoE=ativas.filter(function(v){return v.fridaRecente&&v.fridaRecente.nivel==="E";});
@@ -1535,6 +1537,7 @@ function renderDashboardVCM(main){
     h+="<button onclick=\"state.vcmFiltro='"+f.k+"';renderDashboardVCM(document.getElementById('main'))\" style='padding:5px 13px;border-radius:20px;border:1px solid "+(ativo?"#ff69b4":"#3a1a1a")+";background:"+(ativo?"#ff1493":"transparent")+";color:"+(ativo?"#fff":"#7a5050")+";font-size:11px;font-weight:"+(ativo?"700":"400")+";cursor:pointer'>"+f.label+"</button>";
   });
   h+="</div></div></div>";
+  h+=_htmlFiltrosBairro("renderDashboardVCM(document.getElementById('main-content'))","#ff69b4");
   h+="<p style='color:#5a4040;font-size:11px;margin:0 0 14px'>"+ativas.length+" vítimas ativas em acompanhamento · "+vitimas.filter(function(v){return v.encerrado;}).length+" encerradas</p>";
 
   // CARDS
@@ -1786,6 +1789,9 @@ function renderCadastrosVCM(main){
     vitimas.push({ocBase:o,ocs:ocs,frida:frida,fridaRecente:fridaRecente,temMp:temMp});
   });
 
+  // Filtrar por bairro
+  if(state.filtroBairro) vitimas=vitimas.filter(function(v){return _matchBairro(v.ocBase);});
+
   // Aplicar busca
   if(busca){
     vitimas=vitimas.filter(function(v){
@@ -1809,6 +1815,7 @@ function renderCadastrosVCM(main){
 
   // Campo de busca
   h+="<div style='background:#0e0c06;border:1px solid #3a2a2a;border-radius:10px;padding:14px;margin-bottom:16px'>";
+  h+=_htmlFiltrosBairro("renderCadastrosVCM(document.getElementById('main-content'))","#ff69b4");
   h+="<input id='vcm-busca' type='text' placeholder='Buscar por nome, CPF, Nº BO, RG, nome do autor...' value='"+(state._vcmBusca||"")+"' style='width:100%;background:#141208;border:1px solid #3a2a2a;color:#e8e0cc;padding:10px 14px;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box' onfocus=\"this.style.borderColor='#ff1493'\" onblur=\"this.style.borderColor='#3a2a2a'\"/>";
   h+="</div>";
 
@@ -4226,6 +4233,9 @@ function renderProjetosSociais(main){
     return true;
   });
 
+  // Filtro bairro
+  if(state.filtroBairro) filtrados=filtrados.filter(_matchBairro);
+
   // Filtro busca
   var busca=(f.busca||"").toLowerCase().trim();
   if(busca) filtrados=filtrados.filter(function(o){
@@ -4289,6 +4299,8 @@ function renderProjetosSociais(main){
     h.push("<input type='date' value='"+esc(f.ate||"")+"' onchange=\"state._psF.ate=this.value;renderProjetosSociais(document.getElementById('main-content'));\" style='"+IS2+";width:140px'>");
   }
   h.push("</div>");
+
+  h.push(_htmlFiltrosBairro("renderProjetosSociais(document.getElementById('main-content'))","#a78bfa"));
 
   // ── Busca
   h.push("<input id='ps-busca' type='text' placeholder='Buscar por tipo, local, descrição...' value='"+esc(f.busca||"")+"' style='"+IS2+";margin-bottom:14px'>");
@@ -6376,6 +6388,30 @@ function salvarVisita(){
 // ══════════════════════════════════════════════════
 // NAVEGAÇÃO
 // ══════════════════════════════════════════════════
+// ── Bairros da Base Comunitária
+var BAIRROS_BCS=["Primavera","Panorama","Pedrinhas","Alto Marom","Europa Unida","Cruzeiro","Guarani"];
+
+function _htmlFiltrosBairro(renderFn, cor){
+  cor=cor||"#c8a84b";
+  var dark=cor==="navy"?"#1e3d6a":cor;
+  var h="<div style='display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center'>";
+  h+="<span style='color:#5a5535;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap'>Bairro:</span>";
+  var todos=!state.filtroBairro;
+  h+="<button onclick=\"state.filtroBairro='';"+renderFn+"\" style='background:"+(todos?""+cor+"22":"transparent")+";border:1px solid "+(todos?cor:"#3a3820")+";color:"+(todos?cor:"#5a5535")+";padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;cursor:pointer'>Todos</button>";
+  BAIRROS_BCS.forEach(function(b){
+    var sel=state.filtroBairro===b;
+    h+="<button onclick=\"state.filtroBairro='"+b+"';"+renderFn+"\" style='background:"+(sel?cor+"22":"transparent")+";border:1px solid "+(sel?cor:"#3a3820")+";color:"+(sel?cor:"#5a5535")+";padding:4px 10px;border-radius:20px;font-size:10px;font-weight:700;cursor:pointer'>"+b+"</button>";
+  });
+  h+="</div>";
+  return h;
+}
+
+function _matchBairro(o){
+  if(!state.filtroBairro) return true;
+  var b=state.filtroBairro.toLowerCase();
+  return (o.bairro||"").toLowerCase().includes(b)||(o.local||"").toLowerCase().includes(b);
+}
+
 function setTela(t){ state.tela=t; closeSidebar(); if(SHEETS_URL&&state.db.ocorrencias.length===0) carregarDoSheets(); render(); }
 
 function updateNavBtns(){
@@ -8521,6 +8557,7 @@ function renderOcorrenciasGestor(el, perfil_atual){
   h.push("</div>");
 
   // Busca por texto
+  h.push(_htmlFiltrosBairro("renderOcorrenciasGestor(document.getElementById('main-content'),state._ocPerfil)","#c8a84b"));
   h.push("<input id='oc-busca' type='text' placeholder='Buscar por nome, bairro, tipo, suspeito...' value='"+(state.filtroOcBusca||"")+"' style='width:100%;background:#0e0c06;border:1px solid #2a3818;color:#e8e0cc;padding:10px 13px;border-radius:8px;font-size:13px;margin-bottom:12px;box-sizing:border-box;outline:none'/>");
 
   // Filtro periodo
@@ -8547,6 +8584,9 @@ function renderOcorrenciasGestor(el, perfil_atual){
       return !dt||dt>=lim;
     });
   }
+
+  // Filtrar por bairro
+  if(state.filtroBairro) ocs=ocs.filter(_matchBairro);
 
   // Filtrar por busca
   var busca = (state.filtroOcBusca||"").toLowerCase().trim();
