@@ -8343,13 +8343,17 @@ function renderOcorrenciasGestor(el, perfil_atual){
     };
   });
 
-  // Busca por texto
+  // Busca por texto — debounce 300ms para não travar a cada tecla
   var buscaInput = el.querySelector("#oc-busca");
   if(buscaInput){
+    var _buscaTimer = null;
     buscaInput.oninput = function(){
       state.filtroOcBusca = this.value;
-      renderOcorrenciasGestor(el, state._ocPerfil);
-    };
+      clearTimeout(_buscaTimer);
+      _buscaTimer = setTimeout(function(){
+        renderOcorrenciasGestor(el, state._ocPerfil);
+      }, this.value ? 300 : 0);
+    }.bind(buscaInput);
     buscaInput.onfocus = function(){ this.style.borderColor="#c8a84b"; };
     buscaInput.onblur  = function(){ this.style.borderColor="#2a3818"; };
   }
