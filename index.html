@@ -464,16 +464,17 @@ async function carregarDadosAppDoSheets(){
       state.alertasProjetos = alertas;
     }
 
-    // 📅 Calendário — agendamentos, visitas e atendimentos
-    if(agendamentos && Array.isArray(agendamentos) && agendamentos.length > 0){
-      state.db.agendamentos = agendamentos;
+    // 📅 Calendário — merge: mantém locais + adiciona do Sheets que não existem localmente
+    function _mergeById(local, remoto){
+      if(!remoto || !Array.isArray(remoto) || !remoto.length) return local||[];
+      var ids = new Set((local||[]).map(function(x){ return String(x.id); }));
+      var merged = (local||[]).slice();
+      remoto.forEach(function(x){ if(!ids.has(String(x.id))) merged.push(x); });
+      return merged;
     }
-    if(visitas && Array.isArray(visitas) && visitas.length > 0){
-      state.db.visitas = visitas;
-    }
-    if(atendimentos && Array.isArray(atendimentos) && atendimentos.length > 0){
-      state.db.atendimentos = atendimentos;
-    }
+    state.db.agendamentos  = _mergeById(state.db.agendamentos,  agendamentos);
+    state.db.visitas       = _mergeById(state.db.visitas,       visitas);
+    state.db.atendimentos  = _mergeById(state.db.atendimentos,  atendimentos);
 
     _salvarLocalSemSync();
     render();
