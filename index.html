@@ -735,6 +735,34 @@ function normHora(h){
 }
 const norm=s=>(s||"").toLowerCase().trim().replace(/\s+/g," ");
 function fmtData(d){if(!d)return"";const s=String(d).trim();if(/^\d{2}\/\d{2}\/\d{4}$/.test(s))return s;const m=s.match(/(\d{4})-(\d{2})-(\d{2})/);if(m)return m[3]+"/"+m[2]+"/"+m[1];try{const dt=new Date(s);if(!isNaN(dt))return dt.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});}catch(e){}return s;}
+// Normaliza qualquer formato de data para "YYYY-MM-DD" (usado internamente)
+function _normData(d){
+  if(!d)return"";
+  var s=String(d).trim();
+  if(/^\d{4}-\d{2}-\d{2}$/.test(s))return s;
+  var m=s.match(/^(\d{2})\/(\d{2})\/(\d{4})/); if(m)return m[3]+"-"+m[2]+"-"+m[1];
+  try{var dt=new Date(s);if(!isNaN(dt))return dt.toISOString().slice(0,10);}catch(e){}
+  return"";
+}
+// Limpar registros antigos do Sheets — mantém SIGESPOL e últimos 60 dias
+function limparRegistrosAntigos(){
+  var total=state.db.ocorrencias.length;
+  var corte=new Date(Date.now()-60*86400000);
+  state.db.ocorrencias=state.db.ocorrencias.filter(function(o){
+    if(o.fonte==="SIGESPOL")return true;
+    // Manter registros recentes (lançados nos últimos 60 dias)
+    var ds=_normData(o.data||o.criadoEm||"");
+    if(!ds)return false;
+    return new Date(ds)>=corte;
+  });
+  var removidos=total-state.db.ocorrencias.length;
+  // Atualizar backup SIGESPOL
+  var sp=(state.db.ocorrencias||[]).filter(function(o){return o.fonte==="SIGESPOL";});
+  if(sp.length)localStorage.setItem("bcs_sigespol_backup",JSON.stringify(sp));
+  salvarLocal();
+  showToast("✅ "+removidos+" registros antigos removidos. "+state.db.ocorrencias.length+" mantidos.");
+  render();
+}
 function fmtHora(h){if(!h)return"";const m=String(h).match(/(\d{2}:\d{2})/);return m?m[1]:"";}
 const id = prefix => `${prefix}-${Date.now()}-${Math.floor(Math.random()*1000)}`;
 
@@ -4284,7 +4312,7 @@ function renderProjetosSociais(main){
 
   // Filtro temporal
   var agora=new Date();
-  function _pd(ds){ if(!ds)return null; var p=ds.split("-"); if(p.length!==3)return null; return new Date(+p[0],+p[1]-1,+p[2],12); }
+  function _pd(ds){ var n=_normData(ds); if(!n)return null; var p=n.split("-"); return new Date(+p[0],+p[1]-1,+p[2],12); }
   var limDe=null, limAte=new Date(agora.getTime()+86400000);
   if(f.periodo==="semana") limDe=new Date(agora-7*86400000);
   else if(f.periodo==="mes") limDe=new Date(agora-30*86400000);
@@ -6489,6 +6517,7 @@ function renderTela() {
     g.push("<span style='color:#3a4a28;font-size:11px;flex:1'>"+ocs.length+" ocorrências · "+ags.length+" agendamentos</span>");
     g.push("<button onclick=\"carregarDoSheets()\" style='background:#1e2a14;border:1px solid #3a4a28;color:#6b8c42;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600'>↻ Sincronizar</button>");
     g.push("<button onclick=\"deduplicarPlanilha()\" style='background:#1a1808;border:1px solid #5a3a10;color:#c8601a;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600'>🧹 Duplicatas</button>");
+    g.push("<button onclick=\"if(confirm('Remover registros antigos do Sheets (+ de 60 dias) mantendo SIGESPOL e lançamentos recentes?')){limparRegistrosAntigos();}\" style='background:#1a0808;border:1px solid #8b2020;color:#c05050;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600'>🗑️ Limpar Antigos</button>");
     var importLockAtivo=localStorage.getItem("bcs_import_lock");
     var spBackup=null; try{ var _sp=localStorage.getItem("bcs_sigespol_backup"); if(_sp) spBackup=JSON.parse(_sp); }catch(e){}
     if(importLockAtivo){
