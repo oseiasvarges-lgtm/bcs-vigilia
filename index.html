@@ -213,10 +213,58 @@ const CONCEITO_VISITA = {"Visita Solidária":"🤝 Apoio emocional e orientaçã
 // ══════════════════════════════════════════════════
 // PERSISTÊNCIA LOCAL
 // ══════════════════════════════════════════════════
+// Salva mapa separado de campos críticos dos módulos — imune ao sync do Sheets
+function _salvarModulos(){
+  try{
+    var m={};
+    (state.db.ocorrencias||[]).forEach(function(o){
+      if(!o.id) return;
+      var k=String(o.id).trim();
+      if(o.classificacao||o.escolaNome||o.escolaId||
+         (o.esc_registros&&o.esc_registros.length)||
+         (o.ps_registros&&o.ps_registros.length)){
+        m[k]={
+          classificacao:o.classificacao||"",
+          escolaNome:o.escolaNome||"",
+          escolaId:o.escolaId||"",
+          tipoOcEscola:o.tipoOcEscola||"",
+          tipoViolenciaEscola:o.tipoViolenciaEscola||"",
+          esc_registros:o.esc_registros||[],
+          ps_registros:o.ps_registros||[]
+        };
+      }
+    });
+    localStorage.setItem("bcs_oc_modulos",JSON.stringify(m));
+  }catch(e){}
+}
+
+// Restaura campos de módulo a partir do mapa dedicado — chamado após qualquer carga/sync
+function _restaurarModulos(ocs){
+  try{
+    var raw=localStorage.getItem("bcs_oc_modulos");
+    if(!raw) return;
+    var m=JSON.parse(raw);
+    (ocs||[]).forEach(function(o){
+      if(!o.id) return;
+      var k=String(o.id).trim();
+      var saved=m[k];
+      if(!saved) return;
+      if(saved.classificacao && !o.classificacao) o.classificacao=saved.classificacao;
+      if(saved.escolaNome   && !o.escolaNome)     o.escolaNome=saved.escolaNome;
+      if(saved.escolaId     && !o.escolaId)       o.escolaId=saved.escolaId;
+      if(saved.tipoOcEscola && !o.tipoOcEscola)   o.tipoOcEscola=saved.tipoOcEscola;
+      if(saved.tipoViolenciaEscola && !o.tipoViolenciaEscola) o.tipoViolenciaEscola=saved.tipoViolenciaEscola;
+      if(saved.esc_registros&&saved.esc_registros.length&&(!o.esc_registros||!o.esc_registros.length)) o.esc_registros=saved.esc_registros;
+      if(saved.ps_registros &&saved.ps_registros.length &&(!o.ps_registros ||!o.ps_registros.length))  o.ps_registros =saved.ps_registros;
+    });
+  }catch(e){}
+}
+
 function salvarLocal() {
   // Invalidar índice de busca ao salvar
   (state.db.ocorrencias||[]).forEach(function(o){ delete o._idx; });
   try {
+    _salvarModulos(); // persiste campos de módulo em chave separada, imune ao sync
     const light={
       ocorrencias:state.db.ocorrencias,
       atendimentos:state.db.atendimentos,
@@ -265,6 +313,8 @@ function carregarLocal() {
         }
       }
     } catch(e2){ console.warn("[BCS] Erro ao restaurar SIGESPOL backup:",e2); }
+    // Restaurar campos de módulo (classificacao, escolaNome…) do mapa dedicado
+    _restaurarModulos(db.ocorrencias);
     console.log("[BCS] Carregado local - OC:",db.ocorrencias.length,"Ag:",db.agendamentos.length);
     return db;
   } catch(e){
@@ -658,6 +708,9 @@ async function carregarDoSheets() {
     } else {
       state.db.ocorrencias = sigespolLocais.concat(sheetsNaoSigespol).concat(ocApenas);
     }
+
+    // Segurança extra: restaurar campos de módulo do mapa dedicado (imune ao sync)
+    _restaurarModulos(state.db.ocorrencias);
 
     // Restaurar dados FRIDA nas ocorrências (campos locais perdidos no reload)
     if(rj0.dados.frida && rj0.dados.frida.length > 0){
