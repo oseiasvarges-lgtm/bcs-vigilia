@@ -248,8 +248,8 @@ function carregarLocal() {
       db.atendimentos = l.atendimentos||[];
       db.visitas = l.visitas||[];
       db.agendamentos = l.agendamentos||[];
-      console.log("[BCS] Carregado local - OC:",db.ocorrencias.length,"Ag:",db.agendamentos.length);
     }
+    console.log("[BCS] Carregado local - OC:",db.ocorrencias.length,"Ag:",db.agendamentos.length);
     return db;
   } catch(e){
     console.error("Erro ao carregar local:",e);
@@ -308,6 +308,9 @@ function importarDadosBCS(input){
       if(dados.ocorrenciasEncerradas) state.ocorrenciasEncerradas=dados.ocorrenciasEncerradas;
       if(dados.alertasGraves) state.alertasGraves=dados.alertasGraves;
       if(dados.filaPendente) state.filaPendente=dados.filaPendente;
+      // 🔒 Guardar registros importados em chave própria — imune ao Sheets
+      localStorage.setItem("bcs_import_lock","1");
+      localStorage.setItem("bcs_protected_ocs", JSON.stringify(state.db.ocorrencias||[]));
       salvarLocal();
       var b=document.getElementById("banner-importacao"); if(b) b.remove();
       showToast("✅ Dados importados! Recarregando...");
@@ -448,6 +451,11 @@ async function carregarDadosAppDoSheets(){
 let _carregando = false;
 let _carregandoSince = null;
 async function carregarDoSheets() {
+  // 🔒 Modo protegido: dados importados têm prioridade — ignorar Sheets
+  if(localStorage.getItem("bcs_import_lock")){
+    console.log("[BCS] carregarDoSheets bloqueado — modo protegido ativo");
+    return;
+  }
   // Resetar mutex se travado há mais de 60 segundos
   if(_carregando){
     var ageSec = _carregandoSince ? (Date.now() - _carregandoSince) / 1000 : 999;
@@ -551,13 +559,12 @@ async function carregarDoSheets() {
     // Aplicar edições locais sobre dados do servidor
     const ocMescladas = ocDeduplicadas;
 
-    // Mesclar com ocorrências locais (que podem ter anotações novas)
+    // Merge padrão
     const idsSheets = new Set(ocMescladas.map(function(o){return String(o.id).trim();}));
     const ocLocais = state.db.ocorrencias || [];
     const ocApenas = ocLocais.filter(function(o){
       return !idsSheets.has(String(o.id).trim()) && !idsArquivadas.has(String(o.id).trim());
     });
-    
     state.db.ocorrencias = ocMescladas.concat(ocApenas);
 
     // Restaurar texto_original (não enviado ao Sheets em versões antigas) a partir do cache local
@@ -5384,33 +5391,36 @@ function renderTela() {
       h.push("</div>");
       h.push("</div>");
 
+      // ── SOLICITANTE / ENTENDIDO ──
+      h.push("<div style='"+SC+"'>");
+      h.push("<div style='display:flex;align-items:center;gap:0;margin-bottom:14px'>");
+      h.push("<div style='flex:1;display:flex;align-items:center;gap:8px;background:#1a0d2e;border-left:3px solid #8b5cf6;padding:7px 13px;border-radius:0 5px 5px 0;margin-bottom:0'><span style='font-size:14px'>📞</span><p style='"+ST+"'>Solicitante / Entendido</p></div>");
+      h.push("</div>");
+      h.push("<div style='display:grid;grid-template-columns:3fr 150px;gap:10px;margin-bottom:10px'>");
+      h.push("<div><label style='"+LS+"'>Nome</label><input id='oc-sol-nome' type='text' placeholder='Nome do solicitante ou entendido' style='"+IS+"'></div>");
+      h.push("<div><label style='"+LS+"'>Telefone</label><input id='oc-sol-tel' type='text' placeholder='(77) 9 ____-____' style='"+IS+"'></div>");
+      h.push("</div>");
+      h.push("<div><label style='"+LS+"'>Endereço</label><input id='oc-sol-end' type='text' placeholder='Endereço do solicitante (opcional)' style='"+IS+"'></div>");
+      h.push("</div>");
+
       // ── 2. VÍTIMA ──
       h.push("<div style='"+SC+"'>");
-      h.push("<div style='"+SH+"'><span style='font-size:14px'>👤</span><p style='"+ST+"'>2 — Vítima</p></div>");
-      h.push("<div style='display:grid;grid-template-columns:3fr 100px 80px 150px;gap:10px;margin-bottom:10px'>");
-      h.push("<div><label style='"+LS+"'>Nome Completo</label><input id='oc-vit-nome' type='text' placeholder='Nome completo da vítima' style='"+IS+"'></div>");
-      h.push("<div><label style='"+LS+"'>Sexo</label><select id='oc-vit-sexo' style='"+IS+"'><option value='F'>Feminino</option><option value='M'>Masculino</option><option value=''>N/I</option></select></div>");
-      h.push("<div><label style='"+LS+"'>Idade</label><input id='oc-vit-idade' type='number' min='0' max='120' placeholder='--' style='"+IS+"'></div>");
-      h.push("<div><label style='"+LS+"'>Telefone</label><input id='oc-vit-tel' type='text' placeholder='(77) 9 ____-____' style='"+IS+"'></div>");
+      h.push("<div style='display:flex;align-items:center;gap:0;margin-bottom:14px'>");
+      h.push("<div style='flex:1;"+SH.replace("margin-bottom:14px","margin-bottom:0")+";border-radius:0 5px 5px 0'><span style='font-size:14px'>👤</span><p style='"+ST+"'>2 — Vítima</p></div>");
+      h.push("<button onclick='_addVitima()' style='background:#091830;border:1px solid #4a9fd4;border-left:none;color:#4a9fd4;padding:6px 14px;border-radius:0 5px 5px 0;font-size:11px;font-weight:700;cursor:pointer;height:34px;white-space:nowrap'>+ Adicionar</button>");
       h.push("</div>");
-      h.push("<div><label style='"+LS+"'>Endereço Residencial</label><input id='oc-vit-end' type='text' placeholder='Endereço residencial da vítima' style='"+IS+"'></div>");
+      h.push("<div id='lista-vitimas'></div>");
       h.push("</div>");
 
       // ── 3. AUTOR ──
       h.push("<div style='"+SC+"'>");
-      h.push("<div style='display:flex;align-items:center;gap:8px;background:#0a1a3a;border-left:3px solid #c05050;padding:7px 13px;border-radius:0 5px 5px 0;margin-bottom:14px'>");
-      h.push("<span style='font-size:14px'>🚨</span><p style='"+ST+"'>3 — Autor / Suspeito</p>");
-      h.push("<label style='margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;color:#9ab;font-weight:600'>");
-      h.push("<input type='checkbox' id='oc-autor-niid' onchange=\"var b=document.getElementById('bloco-autor');b.style.opacity=this.checked?'0.3':'1';b.style.pointerEvents=this.checked?'none':'auto'\"> Não Identificado</label>");
+      h.push("<div style='display:flex;align-items:center;gap:0;margin-bottom:14px'>");
+      h.push("<div style='flex:1;display:flex;align-items:center;gap:8px;background:#0a1a3a;border-left:3px solid #c05050;padding:7px 13px;border-radius:0 5px 5px 0;margin-bottom:0'><span style='font-size:14px'>🚨</span><p style='"+ST+"'>3 — Autor / Suspeito</p>");
+      h.push("<label style='margin-left:auto;display:flex;align-items:center;gap:6px;cursor:pointer;font-size:10px;color:#9ab;font-weight:600'><input type='checkbox' id='oc-autor-niid' onchange='_toggleNaoId(this.checked)'> Não Identificado</label>");
       h.push("</div>");
-      h.push("<div id='bloco-autor'>");
-      h.push("<div style='display:grid;grid-template-columns:3fr 100px 80px;gap:10px;margin-bottom:10px'>");
-      h.push("<div><label style='"+LS+"'>Nome / Apelido</label><input id='oc-aut-nome' type='text' placeholder='Nome, apelido ou alcunha do autor' style='"+IS+"'></div>");
-      h.push("<div><label style='"+LS+"'>Sexo</label><select id='oc-aut-sexo' style='"+IS+"'><option value='M'>Masculino</option><option value='F'>Feminino</option><option value=''>N/I</option></select></div>");
-      h.push("<div><label style='"+LS+"'>Idade aprox.</label><input id='oc-aut-idade' type='number' min='0' max='120' placeholder='--' style='"+IS+"'></div>");
+      h.push("<button onclick='_addAutor()' style='background:#1a0808;border:1px solid #c05050;border-left:none;color:#c05050;padding:6px 14px;border-radius:0 5px 5px 0;font-size:11px;font-weight:700;cursor:pointer;height:34px;white-space:nowrap'>+ Adicionar</button>");
       h.push("</div>");
-      h.push("<div><label style='"+LS+"'>Endereço / Localidade Conhecida</label><input id='oc-aut-end' type='text' placeholder='Endereço ou localidade do autor' style='"+IS+"'></div>");
-      h.push("</div>");
+      h.push("<div id='lista-autores'></div>");
       h.push("</div>");
 
       // ── 4. OBJETOS ──
@@ -5422,10 +5432,8 @@ function renderTela() {
       // ── 5. NARRATIVA ──
       h.push("<div style='"+SC+"'>");
       h.push("<div style='"+SH+"'><span style='font-size:14px'>📝</span><p style='"+ST+"'>5 — Narrativa</p></div>");
-      h.push("<div style='margin-bottom:10px'><label style='"+LS+"'>Descrição — Resumo da Ocorrência</label><input id='oc-descricao' type='text' placeholder='Resumo em uma linha do fato' style='"+IS+"'></div>");
-      h.push("<div style='margin-bottom:10px'><label style='"+LS+"'>Dinâmica dos Fatos *</label><textarea id='oc-texto' oninput='detectarEscolaNaOc()' placeholder='Descreva detalhadamente: circunstâncias, ações das partes, cronologia dos fatos, características de suspeitos e veículos...' rows='7' style='"+IS+";resize:vertical;font-family:inherit;line-height:1.6'></textarea></div>");
-      h.push("<div id='painel-escola-detectada' style='margin-bottom:10px'></div>");
-      h.push("<div><label style='"+LS+"'>Medidas Adotadas pela Guarnição</label><textarea id='oc-medidas' placeholder='Ex: Conduzido à delegacia, local preservado, acionado perito criminal, medida protetiva solicitada...' rows='3' style='"+IS+";resize:vertical;font-family:inherit;line-height:1.5'></textarea></div>");
+      h.push("<div><label style='"+LS+"'>Descrição / Dinâmica dos Fatos / Medidas Adotadas *</label><textarea id='oc-texto' oninput='detectarEscolaNaOc()' placeholder='Descreva o fato: resumo, circunstâncias, ações das partes, cronologia, características de suspeitos e veículos, medidas adotadas pela guarnição...' rows='12' style='"+IS+";resize:vertical;font-family:inherit;line-height:1.6'></textarea></div>");
+      h.push("<div id='painel-escola-detectada' style='margin-top:8px'></div>");
       h.push("</div>");
 
       // ── 6. POLICIAIS ──
@@ -5444,6 +5452,54 @@ function renderTela() {
       h.push("</div>");
       h.push("</div>");
       main.innerHTML=h.join("");
+
+      // ── Listas dinâmicas: Vítimas ──
+      var _vitimas=[{nome:"",sexo:"F",idade:"",telefone:"",endereco:""}];
+      function _renderVitimas(){
+        var li=document.getElementById("lista-vitimas"); if(!li) return;
+        var vh=[];
+        _vitimas.forEach(function(v,i){
+          vh.push("<div style='border:1px solid #1a3358;border-radius:6px;padding:10px;margin-bottom:8px;background:#070e1c'>");
+          if(_vitimas.length>1) vh.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px'><span style='color:#4a9fd4;font-size:10px;font-weight:700'>VÍTIMA "+(i+1)+"</span><button onclick='_remVitima("+i+")' style='background:#120808;border:1px solid #4a1515;color:#c05050;padding:2px 10px;border-radius:4px;font-size:11px;cursor:pointer'>× Remover</button></div>");
+          vh.push("<div style='display:grid;grid-template-columns:3fr 100px 80px 150px;gap:8px;margin-bottom:8px'>");
+          vh.push("<div><label style='"+LS+"'>Nome Completo</label><input type='text' value='"+esc(v.nome)+"' oninput='_vitimas["+i+"].nome=this.value' placeholder='Nome completo da vítima' style='"+IS+"'></div>");
+          vh.push("<div><label style='"+LS+"'>Sexo</label><select onchange='_vitimas["+i+"].sexo=this.value' style='"+IS+"'><option value='F'"+(v.sexo==="F"?" selected":"")+" >Feminino</option><option value='M'"+(v.sexo==="M"?" selected":"")+">Masculino</option><option value=''"+(v.sexo===''?" selected":"")+">N/I</option></select></div>");
+          vh.push("<div><label style='"+LS+"'>Idade</label><input type='number' min='0' max='120' value='"+esc(v.idade)+"' oninput='_vitimas["+i+"].idade=this.value' placeholder='--' style='"+IS+"'></div>");
+          vh.push("<div><label style='"+LS+"'>Telefone</label><input type='text' value='"+esc(v.telefone)+"' oninput='_vitimas["+i+"].telefone=this.value' placeholder='(77) 9 ____-____' style='"+IS+"'></div>");
+          vh.push("</div>");
+          vh.push("<div><label style='"+LS+"'>Endereço Residencial</label><input type='text' value='"+esc(v.endereco)+"' oninput='_vitimas["+i+"].endereco=this.value' placeholder='Endereço residencial' style='"+IS+"'></div>");
+          vh.push("</div>");
+        });
+        li.innerHTML=vh.join("");
+      }
+      window._addVitima=function(){ _vitimas.push({nome:"",sexo:"F",idade:"",telefone:"",endereco:""}); _renderVitimas(); };
+      window._remVitima=function(i){ if(_vitimas.length>1){ _vitimas.splice(i,1); _renderVitimas(); } };
+      _renderVitimas();
+
+      // ── Listas dinâmicas: Autores ──
+      var _autores=[{nome:"",sexo:"M",idade:"",endereco:""}];
+      var _autorNaoId=false;
+      function _renderAutores(){
+        var li=document.getElementById("lista-autores"); if(!li) return;
+        if(_autorNaoId){ li.innerHTML="<div style='padding:10px;color:#7a6a4a;font-size:11px;font-style:italic'>Autor não identificado</div>"; return; }
+        var ah=[];
+        _autores.forEach(function(a,i){
+          ah.push("<div style='border:1px solid #2a1a1a;border-radius:6px;padding:10px;margin-bottom:8px;background:#0d0a0a'>");
+          if(_autores.length>1) ah.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px'><span style='color:#c05050;font-size:10px;font-weight:700'>AUTOR "+(i+1)+"</span><button onclick='_remAutor("+i+")' style='background:#120808;border:1px solid #4a1515;color:#c05050;padding:2px 10px;border-radius:4px;font-size:11px;cursor:pointer'>× Remover</button></div>");
+          ah.push("<div style='display:grid;grid-template-columns:3fr 100px 80px;gap:8px;margin-bottom:8px'>");
+          ah.push("<div><label style='"+LS+"'>Nome / Apelido</label><input type='text' value='"+esc(a.nome)+"' oninput='_autores["+i+"].nome=this.value' placeholder='Nome, apelido ou alcunha' style='"+IS+"'></div>");
+          ah.push("<div><label style='"+LS+"'>Sexo</label><select onchange='_autores["+i+"].sexo=this.value' style='"+IS+"'><option value='M'"+(a.sexo==="M"?" selected":"")+" >Masculino</option><option value='F'"+(a.sexo==="F"?" selected":"")+">Feminino</option><option value=''"+(a.sexo===''?" selected":"")+">N/I</option></select></div>");
+          ah.push("<div><label style='"+LS+"'>Idade aprox.</label><input type='number' min='0' max='120' value='"+esc(a.idade)+"' oninput='_autores["+i+"].idade=this.value' placeholder='--' style='"+IS+"'></div>");
+          ah.push("</div>");
+          ah.push("<div><label style='"+LS+"'>Endereço / Localidade Conhecida</label><input type='text' value='"+esc(a.endereco)+"' oninput='_autores["+i+"].endereco=this.value' placeholder='Endereço ou localidade' style='"+IS+"'></div>");
+          ah.push("</div>");
+        });
+        li.innerHTML=ah.join("");
+      }
+      window._addAutor=function(){ _autores.push({nome:"",sexo:"M",idade:"",endereco:""}); _renderAutores(); };
+      window._remAutor=function(i){ if(_autores.length>1){ _autores.splice(i,1); _renderAutores(); } };
+      window._toggleNaoId=function(checked){ _autorNaoId=checked; _renderAutores(); };
+      _renderAutores();
 
       // Gerenciar lista de policiais dinâmica
       var _policiais=[{grad:"Sd",nome:"",matricula:""}];
@@ -5493,7 +5549,7 @@ function renderTela() {
         if(!classificacao){ showToast("Selecione a Classificação da Atividade","error"); document.getElementById("classif-btns").scrollIntoView({behavior:"smooth",block:"center"}); return; }
         var dinamica=(document.getElementById("oc-texto")||{value:""}).value.trim();
         var tipo=(document.getElementById("oc-tipo")||{value:"Ocorrência"}).value||"Ocorrência";
-        if(!dinamica){ showToast("Preencha a Dinâmica dos Fatos","error"); return; }
+        if(!dinamica){ showToast("Preencha a Narrativa da Ocorrência","error"); return; }
         try {
           var localVal=(document.getElementById("oc-local")||{value:""}).value.trim();
           var lPartes=localVal.split(",");
@@ -5501,7 +5557,7 @@ function renderTela() {
           var dataVal=(document.getElementById("oc-data")||{value:hoje()}).value||hoje();
           var horaVal=(document.getElementById("oc-hora")||{value:""}).value||new Date().toTimeString().slice(0,5);
           var vd=/maria da penha|violência doméstica|violencia domestica|\bvd\b/i.test(dinamica);
-          var naoId=!!(document.getElementById("oc-autor-niid")&&document.getElementById("oc-autor-niid").checked);
+          var naoId=_autorNaoId;
           var _det=_detectarEscolaNaOc(dinamica);
           var policiaisTexto=_policiais.filter(function(p){return p.nome.trim();})
             .map(function(p){return p.grad+" "+p.nome+(p.matricula?" ("+p.matricula+")":"");}).join("; ");
@@ -5515,19 +5571,29 @@ function renderTela() {
             zona:(document.getElementById("oc-zona")||{value:"Urbana"}).value,
             local:localVal, bairro:bairro, municipio:"Vitória da Conquista",
             referencia:(document.getElementById("oc-referencia")||{value:""}).value.trim(),
-            vitima_nome:(document.getElementById("oc-vit-nome")||{value:""}).value.trim(),
-            vitima_sexo:(document.getElementById("oc-vit-sexo")||{value:"F"}).value,
-            vitima_idade:(document.getElementById("oc-vit-idade")||{value:""}).value.trim(),
-            vitima_telefone:(document.getElementById("oc-vit-tel")||{value:""}).value.trim(),
-            vitima_endereco:(document.getElementById("oc-vit-end")||{value:""}).value.trim(),
-            suspeito_nome:naoId?"Não identificado":(document.getElementById("oc-aut-nome")||{value:""}).value.trim(),
-            suspeito_sexo:(document.getElementById("oc-aut-sexo")||{value:"M"}).value,
-            suspeito_idade:(document.getElementById("oc-aut-idade")||{value:""}).value.trim(),
-            suspeito_endereco:(document.getElementById("oc-aut-end")||{value:""}).value.trim(),
+            // Vítimas (múltiplas)
+            vitimas:_vitimas.filter(function(v){return v.nome.trim();}),
+            vitima_nome:(_vitimas[0]&&_vitimas[0].nome)||"",
+            vitima_sexo:(_vitimas[0]&&_vitimas[0].sexo)||"",
+            vitima_idade:(_vitimas[0]&&_vitimas[0].idade)||"",
+            vitima_telefone:(_vitimas[0]&&_vitimas[0].telefone)||"",
+            vitima_endereco:(_vitimas[0]&&_vitimas[0].endereco)||"",
+            // Autores (múltiplos)
+            autores:_autorNaoId?[]:(function(){return _autores.filter(function(a){return a.nome.trim();});}()),
+            suspeito_nome:_autorNaoId?"Não identificado":((_autores[0]&&_autores[0].nome)||""),
+            suspeito_sexo:(_autores[0]&&_autores[0].sexo)||"",
+            suspeito_idade:(_autores[0]&&_autores[0].idade)||"",
+            suspeito_endereco:(_autores[0]&&_autores[0].endereco)||"",
+            // Solicitante / Entendido
+            solicitante:{
+              nome:(document.getElementById("oc-sol-nome")||{value:""}).value.trim(),
+              telefone:(document.getElementById("oc-sol-tel")||{value:""}).value.trim(),
+              endereco:(document.getElementById("oc-sol-end")||{value:""}).value.trim()
+            },
             objetos:(document.getElementById("oc-objetos")||{value:""}).value.trim(),
-            descricao:(document.getElementById("oc-descricao")||{value:""}).value.trim()||dinamica.slice(0,120),
+            descricao:dinamica.slice(0,150),
             descricao_dinamica:dinamica,
-            medidas:(document.getElementById("oc-medidas")||{value:""}).value.trim(),
+            medidas:"",
             policiais:policiaisTexto,
             escolaId:(_det.escolaId||""), escolaNome:(_det.escolaNome||""),
             tipoOcEscola:(_det.tipoOcEscola||""),
@@ -6331,7 +6397,16 @@ function renderTela() {
     g.push("<span style='color:#3a4a28;font-size:11px;flex:1'>"+ocs.length+" ocorrências · "+ags.length+" agendamentos</span>");
     g.push("<button onclick=\"carregarDoSheets()\" style='background:#1e2a14;border:1px solid #3a4a28;color:#6b8c42;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600'>↻ Sincronizar</button>");
     g.push("<button onclick=\"deduplicarPlanilha()\" style='background:#1a1808;border:1px solid #5a3a10;color:#c8601a;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-weight:600'>🧹 Duplicatas</button>");
-    g.push("<div id='sheets-status' style='color:#3a4a28;font-size:10px;width:100%'>Sincronização automática ativa.</div>");
+    var importLockAtivo=localStorage.getItem("bcs_import_lock");
+    if(importLockAtivo){
+      g.push("<div style='width:100%;background:#1a0d00;border:1px solid #c8601a;border-radius:5px;padding:6px 10px;display:flex;align-items:center;gap:8px;margin-top:4px'>");
+      g.push("<span style='font-size:13px'>🔒</span>");
+      g.push("<span style='color:#e07030;font-size:10px;font-weight:700;flex:1'>Modo protegido ativo — dados importados preservados. Sheets não vai sobrescrever.</span>");
+      g.push("<button onclick=\"localStorage.removeItem('bcs_import_lock');localStorage.removeItem('bcs_ids_importados');showToast('Proteção removida. Próximo sync usará o Sheets.');render()\" style='background:#2a1000;border:1px solid #c8601a;color:#c8601a;padding:3px 10px;border-radius:4px;font-size:10px;font-weight:700;cursor:pointer'>🔓 Liberar</button>");
+      g.push("</div>");
+    } else {
+      g.push("<div id='sheets-status' style='color:#3a4a28;font-size:10px;width:100%'>Sincronização automática ativa.</div>");
+    }
     g.push("</div>");
 
     g.push("</div>"); // max-width
@@ -8242,6 +8317,22 @@ function renderOcorrenciasGestor(el, perfil_atual){
       mh.push("<div><h3 style='color:#c5daf5;font-size:15px;font-weight:700;margin:0 0 2px'>✏️ Editar Ocorrência</h3><p style='color:#4a9fd4;font-size:10px;margin:0'>SIGESPOL · 77ª CIPM / BCS</p></div>");
       mh.push("<button id='btn-fechar-editar' style='background:#0a1628;border:1px solid #1e3d6a;color:#4a9fd4;font-size:18px;cursor:pointer;border-radius:7px;width:32px;height:32px;line-height:1'>×</button>");
       mh.push("</div>");
+      // ── Classificação da Atividade ──
+      var edClassifs=[
+        {v:"Ocorrência",ic:"🚔"},{v:"Visita Solidária",ic:"🤝"},
+        {v:"Acompanhamento VCM",ic:"💜"},{v:"Ronda Escolar",ic:"🏫"},
+        {v:"Visita Comunitária",ic:"🏘️"},{v:"Projeto Social",ic:"🌱"}
+      ];
+      mh.push("<div style='background:#0d1c0a;border:2px solid #4a8a30;border-radius:7px;padding:12px 14px;margin-bottom:11px'>");
+      mh.push("<label style='color:#7ec850;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:.8px;display:flex;align-items:center;gap:6px;margin-bottom:8px'>🏷️ Classificação da Atividade</label>");
+      mh.push("<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:7px' id='ed-classif-btns'>");
+      edClassifs.forEach(function(c){
+        var sel=(ocM.classificacao===c.v);
+        mh.push("<button type='button' data-classif='"+c.v+"' onclick='_edSelecionarClassif(this)' style='background:"+(sel?"#1a4a0a":"#0a1808")+";border:1px solid "+(sel?"#7ec850":"#2a4a18")+";color:"+(sel?"#c8f090":"#6a9a50")+";padding:8px 6px;border-radius:5px;font-size:10px;font-weight:"+(sel?"700":"600")+";cursor:pointer;text-align:center'>"+c.ic+" "+c.v+"</button>");
+      });
+      mh.push("</div>");
+      mh.push("<input type='hidden' id='ed-classificacao' value='"+esc(ocM.classificacao||"")+"'>");
+      mh.push("</div>");
       // Seção 1 — Identificação
       mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>🔎</span><p style='"+mST+"'>1 — Identificação</p></div>");
       mh.push("<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px'>");
@@ -8259,31 +8350,37 @@ function renderOcorrenciasGestor(el, perfil_atual){
       mh.push("<div><label style='"+mLS+"'>Local</label><input id='ed-local' type='text' value='"+esc(ocM.local||ocM.bairro||"")+"' style='"+mIS+"'></div>");
       mh.push("<div><label style='"+mLS+"'>Referência</label><input id='ed-referencia' type='text' value='"+esc(ocM.referencia||"")+"' style='"+mIS+"'></div>");
       mh.push("</div></div>");
-      // Seção 2 — Vítima
-      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>👤</span><p style='"+mST+"'>2 — Vítima</p></div>");
-      mh.push("<div style='display:grid;grid-template-columns:3fr 90px 70px 140px;gap:8px;margin-bottom:8px'>");
-      mh.push("<div><label style='"+mLS+"'>Nome</label><input id='ed-vit-nome' type='text' value='"+esc(ocM.vitima_nome||"")+"' style='"+mIS+"'></div>");
-      mh.push("<div><label style='"+mLS+"'>Sexo</label><select id='ed-vit-sexo' style='"+mIS+"'><option value='F'"+(ocM.vitima_sexo==="F"?" selected":"")+" >Feminino</option><option value='M'"+(ocM.vitima_sexo==="M"?" selected":"")+">Masculino</option><option value=''"+((!ocM.vitima_sexo||ocM.vitima_sexo==="")?" selected":"")+">N/I</option></select></div>");
-      mh.push("<div><label style='"+mLS+"'>Idade</label><input id='ed-vit-idade' type='number' value='"+esc(ocM.vitima_idade||"")+"' style='"+mIS+"'></div>");
-      mh.push("<div><label style='"+mLS+"'>Telefone</label><input id='ed-vit-tel' type='text' value='"+esc(ocM.vitima_telefone||"")+"' style='"+mIS+"'></div>");
+      // Seção Solicitante / Entendido
+      var edSol=ocM.solicitante||{};
+      mh.push("<div style='"+mSC+"'><div style='display:flex;align-items:center;gap:7px;background:#1a0d2e;border-left:3px solid #8b5cf6;padding:6px 12px;border-radius:0 4px 4px 0;margin-bottom:12px'><span>📞</span><p style='"+mST+"'>Solicitante / Entendido</p></div>");
+      mh.push("<div style='display:grid;grid-template-columns:3fr 140px;gap:8px;margin-bottom:8px'>");
+      mh.push("<div><label style='"+mLS+"'>Nome</label><input id='ed-sol-nome' type='text' value='"+esc(edSol.nome||"")+"' placeholder='Nome do solicitante' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Telefone</label><input id='ed-sol-tel' type='text' value='"+esc(edSol.telefone||"")+"' style='"+mIS+"'></div>");
       mh.push("</div>");
-      mh.push("<div><label style='"+mLS+"'>Endereço</label><input id='ed-vit-end' type='text' value='"+esc(ocM.vitima_endereco||"")+"' style='"+mIS+"'></div></div>");
-      // Seção 3 — Autor
-      mh.push("<div style='"+mSC+"'><div style='display:flex;align-items:center;gap:7px;background:#0a1a3a;border-left:3px solid #c05050;padding:6px 12px;border-radius:0 4px 4px 0;margin-bottom:12px'><span>🚨</span><p style='"+mST+"'>3 — Autor / Suspeito</p></div>");
-      mh.push("<div style='display:grid;grid-template-columns:3fr 90px 70px;gap:8px;margin-bottom:8px'>");
-      mh.push("<div><label style='"+mLS+"'>Nome / Apelido</label><input id='ed-aut-nome' type='text' value='"+esc(ocM.suspeito_nome||"")+"' style='"+mIS+"'></div>");
-      mh.push("<div><label style='"+mLS+"'>Sexo</label><select id='ed-aut-sexo' style='"+mIS+"'><option value='M'"+(ocM.suspeito_sexo==="M"?" selected":"")+" >Masculino</option><option value='F'"+(ocM.suspeito_sexo==="F"?" selected":"")+">Feminino</option><option value=''"+((!ocM.suspeito_sexo)?" selected":"")+">N/I</option></select></div>");
-      mh.push("<div><label style='"+mLS+"'>Idade</label><input id='ed-aut-idade' type='number' value='"+esc(ocM.suspeito_idade||"")+"' style='"+mIS+"'></div>");
+      mh.push("<div><label style='"+mLS+"'>Endereço</label><input id='ed-sol-end' type='text' value='"+esc(edSol.endereco||"")+"' style='"+mIS+"'></div></div>");
+      // Seção 2 — Vítima (múltiplas)
+      var edVitimas=(ocM.vitimas&&ocM.vitimas.length)?ocM.vitimas:[{nome:ocM.vitima_nome||"",sexo:ocM.vitima_sexo||"F",idade:ocM.vitima_idade||"",telefone:ocM.vitima_telefone||"",endereco:ocM.vitima_endereco||""}];
+      mh.push("<div style='"+mSC+"'>");
+      mh.push("<div style='display:flex;align-items:center;gap:0;margin-bottom:12px'>");
+      mh.push("<div style='flex:1;display:flex;align-items:center;gap:7px;"+mSH.replace("margin-bottom:12px","margin-bottom:0")+";border-radius:0 4px 4px 0'><span>👤</span><p style='"+mST+"'>2 — Vítima</p></div>");
+      mh.push("<button onclick='_edAddVitima()' style='background:#091830;border:1px solid #4a9fd4;border-left:none;color:#4a9fd4;padding:5px 12px;border-radius:0 4px 4px 0;font-size:11px;font-weight:700;cursor:pointer;height:32px'>+ Adicionar</button>");
       mh.push("</div>");
-      mh.push("<div><label style='"+mLS+"'>Endereço / Localidade</label><input id='ed-aut-end' type='text' value='"+esc(ocM.suspeito_endereco||"")+"' style='"+mIS+"'></div></div>");
+      mh.push("<div id='ed-lista-vitimas'></div></div>");
+      // Seção 3 — Autor (múltiplos)
+      var edAutores=(ocM.autores&&ocM.autores.length)?ocM.autores:[{nome:ocM.suspeito_nome||"",sexo:ocM.suspeito_sexo||"M",idade:ocM.suspeito_idade||"",endereco:ocM.suspeito_endereco||""}];
+      mh.push("<div style='"+mSC+"'>");
+      mh.push("<div style='display:flex;align-items:center;gap:0;margin-bottom:12px'>");
+      mh.push("<div style='flex:1;display:flex;align-items:center;gap:7px;background:#0a1a3a;border-left:3px solid #c05050;padding:6px 12px;border-radius:0 4px 4px 0;margin-bottom:0'><span>🚨</span><p style='"+mST+"'>3 — Autor / Suspeito</p></div>");
+      mh.push("<button onclick='_edAddAutor()' style='background:#1a0808;border:1px solid #c05050;border-left:none;color:#c05050;padding:5px 12px;border-radius:0 4px 4px 0;font-size:11px;font-weight:700;cursor:pointer;height:32px'>+ Adicionar</button>");
+      mh.push("</div>");
+      mh.push("<div id='ed-lista-autores'></div></div>");
       // Seção 4 — Objetos
       mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>📦</span><p style='"+mST+"'>4 — Objetos Relacionados</p></div>");
       mh.push("<textarea id='ed-objetos' rows='2' style='"+mIS+";resize:vertical;font-family:inherit'>"+esc(ocM.objetos||"")+"</textarea></div>");
-      // Seção 5 — Narrativa
+      // Seção 5 — Narrativa (campo único)
+      var edNarrativa=(ocM.descricao_dinamica||ocM.texto_original||ocM.descricao||"");
       mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>📝</span><p style='"+mST+"'>5 — Narrativa</p></div>");
-      mh.push("<div style='margin-bottom:8px'><label style='"+mLS+"'>Descrição (resumo)</label><input id='ed-desc' type='text' value='"+esc(ocM.descricao||"")+"' style='"+mIS+"'></div>");
-      mh.push("<div style='margin-bottom:8px'><label style='"+mLS+"'>Dinâmica dos Fatos</label><textarea id='ed-dinamica' rows='5' style='"+mIS+";resize:vertical;font-family:inherit;line-height:1.6'>"+esc(ocM.descricao_dinamica||ocM.texto_original||"")+"</textarea></div>");
-      mh.push("<div><label style='"+mLS+"'>Medidas Adotadas</label><textarea id='ed-medidas' rows='2' style='"+mIS+";resize:vertical;font-family:inherit'>"+esc(ocM.medidas||"")+"</textarea></div></div>");
+      mh.push("<div><label style='"+mLS+"'>Descrição / Dinâmica dos Fatos / Medidas Adotadas</label><textarea id='ed-narrativa' rows='10' style='"+mIS+";resize:vertical;font-family:inherit;line-height:1.6'>"+esc(edNarrativa)+"</textarea></div></div>");
       // Seção 6 — Policiais
       mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>👮</span><p style='"+mST+"'>6 — Policiais que Atenderam</p></div>");
       mh.push("<div><label style='"+mLS+"'>Policiais (Grad. Nome – Matrícula; ...)</label><input id='ed-policiais' type='text' value='"+esc(ocM.policiais||"")+"' style='"+mIS+"' placeholder='Ex: Sd João Silva (123456); Cb Maria Santos (789012)'></div></div>");
@@ -8295,9 +8392,62 @@ function renderOcorrenciasGestor(el, perfil_atual){
       modal.innerHTML = mh.join("");
       modal.onclick = function(e){ if(e.target===this){ state.popEditarOc=null; renderOcorrenciasGestor(el); } };
       document.body.appendChild(modal);
+
+      // ── Funções dinâmicas do modal edição ──
+      var _edVitimas=JSON.parse(JSON.stringify(edVitimas));
+      var _edAutores=JSON.parse(JSON.stringify(edAutores));
+      function _edRenderVitimas(){
+        var li=document.getElementById("ed-lista-vitimas"); if(!li) return;
+        var vh=[];
+        _edVitimas.forEach(function(v,i){
+          vh.push("<div style='border:1px solid #1a3358;border-radius:5px;padding:8px;margin-bottom:7px;background:#070e1c'>");
+          if(_edVitimas.length>1) vh.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:7px'><span style='color:#4a9fd4;font-size:10px;font-weight:700'>VÍTIMA "+(i+1)+"</span><button onclick='_edRemVitima("+i+")' style='background:#120808;border:1px solid #4a1515;color:#c05050;padding:2px 9px;border-radius:4px;font-size:11px;cursor:pointer'>× Remover</button></div>");
+          vh.push("<div style='display:grid;grid-template-columns:3fr 90px 70px 140px;gap:8px;margin-bottom:8px'>");
+          vh.push("<div><label style='"+mLS+"'>Nome</label><input type='text' value='"+esc(v.nome||"")+"' oninput='_edVitimas["+i+"].nome=this.value' style='"+mIS+"'></div>");
+          vh.push("<div><label style='"+mLS+"'>Sexo</label><select onchange='_edVitimas["+i+"].sexo=this.value' style='"+mIS+"'><option value='F'"+(v.sexo==="F"?" selected":"")+" >Feminino</option><option value='M'"+(v.sexo==="M"?" selected":"")+">Masculino</option><option value=''"+((!v.sexo)?" selected":"")+">N/I</option></select></div>");
+          vh.push("<div><label style='"+mLS+"'>Idade</label><input type='number' value='"+esc(v.idade||"")+"' oninput='_edVitimas["+i+"].idade=this.value' style='"+mIS+"'></div>");
+          vh.push("<div><label style='"+mLS+"'>Telefone</label><input type='text' value='"+esc(v.telefone||"")+"' oninput='_edVitimas["+i+"].telefone=this.value' style='"+mIS+"'></div>");
+          vh.push("</div>");
+          vh.push("<div><label style='"+mLS+"'>Endereço</label><input type='text' value='"+esc(v.endereco||"")+"' oninput='_edVitimas["+i+"].endereco=this.value' style='"+mIS+"'></div>");
+          vh.push("</div>");
+        });
+        li.innerHTML=vh.join("");
+      }
+      window._edSelecionarClassif=function(btn){
+        document.querySelectorAll("#ed-classif-btns button").forEach(function(b){
+          b.style.background="#0a1808"; b.style.borderColor="#2a4a18"; b.style.color="#6a9a50"; b.style.fontWeight="600";
+        });
+        btn.style.background="#1a4a0a"; btn.style.borderColor="#7ec850"; btn.style.color="#c8f090"; btn.style.fontWeight="700";
+        document.getElementById("ed-classificacao").value=btn.dataset.classif;
+      };
+      window._edAddVitima=function(){ _edVitimas.push({nome:"",sexo:"F",idade:"",telefone:"",endereco:""}); _edRenderVitimas(); };
+      window._edRemVitima=function(i){ if(_edVitimas.length>1){ _edVitimas.splice(i,1); _edRenderVitimas(); } };
+      _edRenderVitimas();
+
+      function _edRenderAutores(){
+        var li=document.getElementById("ed-lista-autores"); if(!li) return;
+        var ah=[];
+        _edAutores.forEach(function(a,i){
+          ah.push("<div style='border:1px solid #2a1a1a;border-radius:5px;padding:8px;margin-bottom:7px;background:#0d0a0a'>");
+          if(_edAutores.length>1) ah.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:7px'><span style='color:#c05050;font-size:10px;font-weight:700'>AUTOR "+(i+1)+"</span><button onclick='_edRemAutor("+i+")' style='background:#120808;border:1px solid #4a1515;color:#c05050;padding:2px 9px;border-radius:4px;font-size:11px;cursor:pointer'>× Remover</button></div>");
+          ah.push("<div style='display:grid;grid-template-columns:3fr 90px 70px;gap:8px;margin-bottom:8px'>");
+          ah.push("<div><label style='"+mLS+"'>Nome / Apelido</label><input type='text' value='"+esc(a.nome||"")+"' oninput='_edAutores["+i+"].nome=this.value' style='"+mIS+"'></div>");
+          ah.push("<div><label style='"+mLS+"'>Sexo</label><select onchange='_edAutores["+i+"].sexo=this.value' style='"+mIS+"'><option value='M'"+(a.sexo==="M"?" selected":"")+" >Masculino</option><option value='F'"+(a.sexo==="F"?" selected":"")+">Feminino</option><option value=''"+((!a.sexo)?" selected":"")+">N/I</option></select></div>");
+          ah.push("<div><label style='"+mLS+"'>Idade</label><input type='number' value='"+esc(a.idade||"")+"' oninput='_edAutores["+i+"].idade=this.value' style='"+mIS+"'></div>");
+          ah.push("</div>");
+          ah.push("<div><label style='"+mLS+"'>Endereço / Localidade</label><input type='text' value='"+esc(a.endereco||"")+"' oninput='_edAutores["+i+"].endereco=this.value' style='"+mIS+"'></div>");
+          ah.push("</div>");
+        });
+        li.innerHTML=ah.join("");
+      }
+      window._edAddAutor=function(){ _edAutores.push({nome:"",sexo:"M",idade:"",endereco:""}); _edRenderAutores(); };
+      window._edRemAutor=function(i){ if(_edAutores.length>1){ _edAutores.splice(i,1); _edRenderAutores(); } };
+      _edRenderAutores();
+
       document.getElementById("btn-fechar-editar").onclick = function(){ state.popEditarOc=null; renderOcorrenciasGestor(el); };
       document.getElementById("btn-cancelar-editar").onclick = function(){ state.popEditarOc=null; renderOcorrenciasGestor(el); };
       document.getElementById("btn-salvar-editar").onclick = function(){
+        ocM.classificacao = (document.getElementById("ed-classificacao")||{value:""}).value.trim();
         ocM.numero  = document.getElementById("ed-numero").value.trim();
         ocM.relatorio = document.getElementById("ed-relatorio").value.trim();
         ocM.posto   = document.getElementById("ed-posto").value.trim()||"BCS";
@@ -8310,21 +8460,32 @@ function renderOcorrenciasGestor(el, perfil_atual){
         var lPts = localVal.split(",");
         ocM.bairro  = lPts.length>1?lPts[lPts.length-1].trim():localVal;
         ocM.referencia = document.getElementById("ed-referencia").value.trim();
-        ocM.vitima_nome = document.getElementById("ed-vit-nome").value.trim();
-        ocM.vitima_sexo = document.getElementById("ed-vit-sexo").value;
-        ocM.vitima_idade = document.getElementById("ed-vit-idade").value.trim();
-        ocM.vitima_telefone = document.getElementById("ed-vit-tel").value.trim();
-        ocM.vitima_endereco = document.getElementById("ed-vit-end").value.trim();
-        ocM.suspeito_nome = document.getElementById("ed-aut-nome").value.trim();
-        ocM.suspeito_sexo = document.getElementById("ed-aut-sexo").value;
-        ocM.suspeito_idade = document.getElementById("ed-aut-idade").value.trim();
-        ocM.suspeito_endereco = document.getElementById("ed-aut-end").value.trim();
+        // Vítimas
+        ocM.vitimas = _edVitimas.filter(function(v){return v.nome.trim();});
+        ocM.vitima_nome = (_edVitimas[0]&&_edVitimas[0].nome)||"";
+        ocM.vitima_sexo = (_edVitimas[0]&&_edVitimas[0].sexo)||"";
+        ocM.vitima_idade = (_edVitimas[0]&&_edVitimas[0].idade)||"";
+        ocM.vitima_telefone = (_edVitimas[0]&&_edVitimas[0].telefone)||"";
+        ocM.vitima_endereco = (_edVitimas[0]&&_edVitimas[0].endereco)||"";
+        // Autores
+        ocM.autores = _edAutores.filter(function(a){return a.nome.trim();});
+        ocM.suspeito_nome = (_edAutores[0]&&_edAutores[0].nome)||"";
+        ocM.suspeito_sexo = (_edAutores[0]&&_edAutores[0].sexo)||"";
+        ocM.suspeito_idade = (_edAutores[0]&&_edAutores[0].idade)||"";
+        ocM.suspeito_endereco = (_edAutores[0]&&_edAutores[0].endereco)||"";
+        // Solicitante
+        ocM.solicitante = {
+          nome:(document.getElementById("ed-sol-nome")||{value:""}).value.trim(),
+          telefone:(document.getElementById("ed-sol-tel")||{value:""}).value.trim(),
+          endereco:(document.getElementById("ed-sol-end")||{value:""}).value.trim()
+        };
         ocM.objetos  = document.getElementById("ed-objetos").value.trim();
-        ocM.descricao = document.getElementById("ed-desc").value.trim();
-        ocM.descricao_dinamica = document.getElementById("ed-dinamica").value.trim();
-        ocM.medidas  = document.getElementById("ed-medidas").value.trim();
+        var narrativa = document.getElementById("ed-narrativa").value.trim();
+        ocM.descricao_dinamica = narrativa;
+        ocM.descricao = narrativa.slice(0,150);
+        ocM.medidas  = "";
         ocM.policiais = document.getElementById("ed-policiais").value.trim();
-        var vd = /maria da penha|violência doméstica|violencia domestica|\bvd\b/i.test(ocM.descricao_dinamica||"");
+        var vd = /maria da penha|violência doméstica|violencia domestica|\bvd\b/i.test(narrativa);
         if(vd){ ocM.violencia_domestica=true; ocM.requer_visita=true; ocM.medida_protetiva=ocM.medida_protetiva||"Sim"; }
         ocM._editadoLocal = true;
         salvarLocal();
