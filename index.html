@@ -4276,9 +4276,10 @@ function renderProjetosSociais(main){
   if(!state._psF) state._psF={periodo:"mes",busca:"",de:"",ate:""};
   var f=state._psF;
 
-  // Todos os projetos sociais (classificacao === "Projeto Social")
+  // Todas as atividades comunitárias/sociais (exceto ocorrências criminais puras)
+  var _classifsProjeto=["Projeto Social","Visita Solidária","Ronda Escolar","Visita Comunitária","Acompanhamento VCM"];
   var todos=(state.db.ocorrencias||[]).filter(function(o){
-    return (o.classificacao||"")==="Projeto Social";
+    return _classifsProjeto.indexOf(o.classificacao||"")>=0;
   });
 
   // Filtro temporal
