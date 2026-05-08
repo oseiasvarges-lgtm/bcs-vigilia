@@ -2449,7 +2449,7 @@ function renderDashComandante(main){
       h.push("<div class='cmd-case-detail' style='display:none;margin-top:10px;padding-top:10px;border-top:1px solid #2a2218'>");
       if(temSusp) h.push("<p style='color:#7a5050;font-size:11px;margin:0 0 4px'><span style='color:#5a3a3a;font-weight:700'>Suspeito:</span> "+esc(o.suspeito_nome)+(o.suspeito_apelido?" ("+esc(o.suspeito_apelido)+")":"")+"</p>");
       if(o.veiculo) h.push("<p style='color:#7a5050;font-size:11px;margin:0 0 4px'><span style='color:#5a3a3a;font-weight:700'>Veículo/Objeto:</span> "+esc(o.veiculo)+"</p>");
-      var textoOc=(o.texto_original||o.descricao||"").trim();
+      var textoOc=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
       if(textoOc) h.push("<pre style='background:#0a0c06;border:1px solid #2a2a18;border-radius:6px;padding:10px;font-size:10px;color:#8a8060;white-space:pre-wrap;font-family:monospace;max-height:180px;overflow-y:auto;margin-top:6px'>"+esc(textoOc)+"</pre>");
       h.push("</div>");
       h.push("</div>"); // fim caso
@@ -4178,7 +4178,7 @@ function abrirVarreduraEscolar(){
   var semVinculo=(state.db.ocorrencias||[]).filter(function(o){return !o.escolaId&&!o._naoEscolar;});
   var resultados=[];
   semVinculo.forEach(function(o){
-    var texto=(o.texto_original||o.descricao||o.tipo||"");
+    var texto=(o.texto_original||o.descricao_dinamica||o.descricao||o.tipo||"");
     var det=_detectarEscolaNaOc(texto);
     if(det.ehEscolar) resultados.push({oc:o,det:det});
   });
@@ -4209,7 +4209,7 @@ function abrirVarreduraEscolar(){
     resultados.forEach(function(r,idx){
       var o=r.oc; var det=r.det;
       var corConf=det.confidence>=70?"#22c55e":det.confidence>=40?"#f59e0b":"#38bdf8";
-      var trecho=(o.texto_original||o.descricao||"").trim().slice(0,180);
+      var trecho=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim().slice(0,180);
       var icone=det.ehPalestra?"🎤":"🏫";
       h.push("<div id='var-item-"+idx+"' style='background:#141208;border:1px solid #2a2818;border-radius:10px;padding:14px;margin-bottom:10px'>");
       h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap'>");
@@ -4285,7 +4285,7 @@ function _ignorarOcEscolar(idx,ocId){
 function _vincularTodasDetectadas(){
   var vinculadas=0;
   (state.db.ocorrencias||[]).filter(function(o){return !o.escolaId&&!o._naoEscolar;}).forEach(function(o){
-    var texto=(o.texto_original||o.descricao||o.tipo||"");
+    var texto=(o.texto_original||o.descricao_dinamica||o.descricao||o.tipo||"");
     var det=_detectarEscolaNaOc(texto);
     if(det.escolaId){
       o.escolaId=det.escolaId; o.escolaNome=det.escolaNome;
@@ -4609,7 +4609,7 @@ function renderModuloEscolar(main){
 
   // Candidatas retroativas (sem escolaId, mas texto indica escola)
   var candidatas=(state.db.ocorrencias||[]).filter(function(o){
-    return !o.escolaId&&!o._naoEscolar&&_detectarEscolaNaOc((o.texto_original||o.descricao||o.tipo||"")).ehEscolar;
+    return !o.escolaId&&!o._naoEscolar&&_detectarEscolaNaOc((o.texto_original||o.descricao_dinamica||o.descricao||o.tipo||"")).ehEscolar;
   });
 
   var h=[];
@@ -6850,7 +6850,7 @@ function _executarFiltroImediato() {
           o.suspeito_nome,o.veiculo,o.numero,
           o.violencia_domestica?"violência doméstica":"",
           o.medida_protetiva==="Sim"?"medida protetiva":"",
-          (o.texto_original||o.descricao||"").slice(0,400)
+          (o.texto_original||o.descricao_dinamica||o.descricao||"").slice(0,400)
         ].join(" ").toLowerCase();
       }
       return o._idx.includes(q);
@@ -6940,7 +6940,7 @@ function _executarFiltroImediato() {
   <div>
     <p style="color:#5a5535;font-size:10px;letter-spacing:1px;text-transform:uppercase;margin-bottom:10px">Ocorrências (${ocs.length})</p>
     ${ocs.slice(0,10).map((o,idx)=>{
-      var textoExib = (o.texto_original||o.descricao||"").trim();
+      var textoExib = (o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
       var preview = textoExib.split("\n").slice(0,2).join(" · ").slice(0,120)+(textoExib.length>120?"…":"");
       return `
     <div onclick="toggleOcorrencia('oc-det-${idx}',this)" style="background:#141208;border:1px solid #3a3820;border-radius:8px;padding:12px 14px;margin-bottom:6px;cursor:pointer;transition:border-color 0.2s${o.reincidente?";border-left:3px solid #e8943a":""}">
@@ -7199,7 +7199,7 @@ function renderAlertas(el){
 function renderDetalheAlerta(oc){
   var t=(oc.tipo||"").toLowerCase();
   var cor=t.includes("homic")&&!t.includes("tentativa")?"#ef4444":t.includes("tentativa")?"#ff6b6b":t.includes("roubo")?"#f97316":t.includes("estupro")||t.includes("sequestro")||oc.medida_protetiva==="Sim"?"#f97316":t.includes("violência")||t.includes("violencia")||t.includes("maria")?"#a855f7":"#c8a84b";
-  var textoExib=(oc.texto_original||oc.descricao||"").trim();
+  var textoExib=(oc.texto_original||oc.descricao_dinamica||oc.descricao||"").trim();
 
   // Outras ocorrências da mesma vítima (histórico rápido)
   var historico=[];
@@ -7243,7 +7243,7 @@ function renderDetalheAlerta(oc){
     historico.forEach(function(o){
       var tt=(o.tipo||"").toLowerCase();
       var cc=tt.includes("homic")?"#ef4444":tt.includes("roubo")?"#f97316":tt.includes("violência")||tt.includes("maria")?"#a855f7":"#c8a84b";
-      var prevTxt=(o.texto_original||o.descricao||"").trim().slice(0,120);
+      var prevTxt=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim().slice(0,120);
       h+="<div style='background:#0e0c06;border:1px solid #2a2818;border-left:3px solid "+cc+";border-radius:8px;padding:10px 12px;margin-bottom:6px'>";
       h+="<div style='display:flex;gap:6px;align-items:center;margin-bottom:4px'>";
       h+="<span style='background:"+cc+"20;color:"+cc+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+((o.tipo||"—").toUpperCase().slice(0,25))+"</span>";
@@ -8349,7 +8349,7 @@ function gerarJanelaPDF(oc){
     }
     h+="</table>";
     // Dinâmica dos Fatos
-    var dinamica = (o.descricao_dinamica||o.texto_original||o.descricao||"").trim();
+    var dinamica = (o.descricao_dinamica||o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
     if(dinamica){
       h+="<p style='font-size:9px;font-weight:700;text-transform:uppercase;color:#1a3a6a;margin:8px 0 3px'>Dinâmica dos Fatos</p>";
       h+="<pre class='oc-texto'>"+esc(dinamica)+"</pre>";
@@ -8963,12 +8963,12 @@ function renderOcorrenciasGestor(el, perfil_atual){
       if(o.suspeito_nome) h.push("<div><span style='"+fcS+"'>Autor/Suspeito</span><span style='"+fcV+"'>"+esc(o.suspeito_nome)+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+"</span></div>");
       if(o.objetos) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Objetos</span><span style='"+fcV+"'>"+esc(o.objetos)+"</span></div>");
       h.push("</div>");
-      var dinamica=o.descricao_dinamica||o.descricao||"";
+      var dinamica=o.descricao_dinamica||o.texto_original||o.descricao||"";
       if(dinamica) h.push("<div style='background:#060d1c;border:1px solid #1a3358;border-radius:6px;padding:10px;margin-bottom:8px'><span style='"+fcS+"'>Dinâmica dos Fatos</span><p style='color:#c8d8f0;font-size:11px;line-height:1.7;margin:0;white-space:pre-wrap'>"+esc(dinamica)+"</p></div>");
       if(o.medidas) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Medidas Adotadas</span><p style='"+fcV+";margin:0;white-space:pre-wrap'>"+esc(o.medidas)+"</p></div>");
       if(o.policiais) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Policiais</span><span style='"+fcV+"'>"+esc(o.policiais)+"</span></div>");
     } else {
-      var relatoExib=(o.texto_original||o.descricao||"").trim();
+      var relatoExib=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
       if(relatoExib) h.push("<pre style='white-space:pre-wrap;word-break:break-word;color:#c8c0a8;font-size:11px;line-height:1.8;font-family:inherit;margin:0 0 10px;background:#0e0c06;border-radius:8px;padding:12px'>"+esc(relatoExib)+"</pre>");
     }
     h.push("<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'>");
