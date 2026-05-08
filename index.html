@@ -448,14 +448,23 @@ async function carregarDadosAppDoSheets(){
     var localProj  = state.projetos||[];
     var localEv    = state.eventosAvulsos||[];
 
+    // Merge: mantém local quando ID já existe (preserva edições locais), adiciona novos do Sheets
+    function _mergeById(local, remoto){
+      if(!remoto || !Array.isArray(remoto) || !remoto.length) return local||[];
+      var ids = new Set((local||[]).map(function(x){ return String(x.id); }));
+      var merged = (local||[]).slice();
+      remoto.forEach(function(x){ if(!ids.has(String(x.id))) merged.push(x); });
+      return merged;
+    }
+
     if(projetos && Array.isArray(projetos) && projetos.length > 0){
-      state.projetos = projetos;
+      state.projetos = _mergeById(localProj, projetos);
     } else if(projetos === null){
       if(localProj.length > 0) sincronizarSheets();
     }
 
     if(eventos && Array.isArray(eventos) && eventos.length > 0){
-      state.eventosAvulsos = eventos;
+      state.eventosAvulsos = _mergeById(localEv, eventos);
     } else if(eventos === null && localEv.length > 0){
       sincronizarSheets();
     }
@@ -464,14 +473,7 @@ async function carregarDadosAppDoSheets(){
       state.alertasProjetos = alertas;
     }
 
-    // 📅 Calendário — merge: mantém locais + adiciona do Sheets que não existem localmente
-    function _mergeById(local, remoto){
-      if(!remoto || !Array.isArray(remoto) || !remoto.length) return local||[];
-      var ids = new Set((local||[]).map(function(x){ return String(x.id); }));
-      var merged = (local||[]).slice();
-      remoto.forEach(function(x){ if(!ids.has(String(x.id))) merged.push(x); });
-      return merged;
-    }
+    // 📅 Calendário
     state.db.agendamentos  = _mergeById(state.db.agendamentos,  agendamentos);
     state.db.visitas       = _mergeById(state.db.visitas,       visitas);
     state.db.atendimentos  = _mergeById(state.db.atendimentos,  atendimentos);
