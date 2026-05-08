@@ -4652,7 +4652,7 @@ function renderModuloEscolar(main){
     return (o.classificacao||"")==="Ronda Escolar";
   });
 
-  // Filtro temporal (igual ao PS)
+  // Filtro temporal
   var agora=new Date();
   function _pd(ds){ var n=_normData(ds); if(!n)return null; var p=n.split("-"); return new Date(+p[0],+p[1]-1,+p[2],12); }
   var limDe=null, limAte=new Date(agora.getTime()+86400000);
@@ -4670,9 +4670,7 @@ function renderModuloEscolar(main){
     if(limAte && dt>limAte) return false;
     return true;
   });
-
   if(state.filtroBairro) filtrados=filtrados.filter(_matchBairro);
-
   var busca=(f.busca||"").toLowerCase().trim();
   if(busca) filtrados=filtrados.filter(function(o){
     return (o.tipo||"").toLowerCase().includes(busca)||
@@ -4682,7 +4680,7 @@ function renderModuloEscolar(main){
   });
   filtrados.sort(function(a,b){return (_pd(b.data)||0)-(_pd(a.data)||0);});
 
-  // KPIs a partir dos registros de complemento
+  // KPIs globais
   var totalRondas=filtrados.length;
   var nVisitas=0,nPalestras=0,nProjEduc=0,nReunioes=0,nViolencia=0,nAlunos=0;
   filtrados.forEach(function(o){
@@ -4696,128 +4694,177 @@ function renderModuloEscolar(main){
     });
   });
 
+  // Agendamentos futuros de Ronda Escolar
+  var hj=hoje();
+  var proxRondas=(state.eventosAvulsos||[]).filter(function(e){
+    return e.tipo==="Ronda Escolar Agendada" && e.data>=hj;
+  }).sort(function(a,b){return a.data>b.data?1:-1;}).slice(0,5);
+
+  // Agrupar por escola
+  var escolaMap={};
+  filtrados.forEach(function(o){
+    var k=o.escolaNome||"(Escola nao identificada)";
+    if(!escolaMap[k]) escolaMap[k]={nome:k,ocs:[],regs:[]};
+    escolaMap[k].ocs.push(o);
+    (o.esc_registros||[]).forEach(function(r){ escolaMap[k].regs.push(r); });
+  });
+  var escolas=Object.values(escolaMap).sort(function(a,b){return b.ocs.length-a.ocs.length;});
+
   var IS2="width:100%;background:#0e1c2a;border:1px solid #1a3a5a;color:#d0e8f5;padding:9px 11px;border-radius:5px;font-size:12px;outline:none;box-sizing:border-box";
   var h=[];
-  h.push("<div style='max-width:800px;margin:0 auto;padding:16px 20px 40px'>");
+  h.push("<div style='max-width:820px;margin:0 auto;padding:16px 20px 50px'>");
 
-  // Cabeçalho
-  h.push("<div style='display:flex;align-items:center;gap:14px;margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#0a1e2a,#0a2a1a);border:1px solid #1a4a3a;border-radius:8px'>");
-  h.push("<div style='width:42px;height:42px;border-radius:50%;background:#0a2a1e;border:2px solid #38bdf8;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0'>🏫</div>");
-  h.push("<div><h2 style='font-size:15px;font-weight:700;color:#e8f5ff;margin:0 0 2px'>Módulo Escolar</h2><p style='color:#38bdf8;font-size:10px;margin:0;letter-spacing:.5px'>MONITORAMENTO · 77ª CIPM / BCS</p></div>");
-  h.push("<div style='margin-left:auto;text-align:right'><p style='color:#38bdf8;font-size:10px;margin:0'>Rondas no período</p><p style='color:#e8f5ff;font-size:18px;font-weight:700;margin:0'>"+totalRondas+"</p></div>");
-  h.push("</div>");
+  // Cabecalho com botoes
+  h.push("<div style='display:flex;align-items:center;gap:12px;margin-bottom:16px;padding:12px 16px;background:linear-gradient(135deg,#0a1e2a,#0a2a1a);border:1px solid #1a4a3a;border-radius:8px;flex-wrap:wrap'>");
+  h.push("<div style='width:42px;height:42px;border-radius:50%;background:#0a2a1e;border:2px solid #38bdf8;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0'>&#127979;</div>");
+  h.push("<div style='flex:1'><h2 style='font-size:15px;font-weight:700;color:#e8f5ff;margin:0 0 2px'>Modulo Escolar</h2><p style='color:#38bdf8;font-size:10px;margin:0;letter-spacing:.5px'>MONITORAMENTO · 77a CIPM / BCS</p></div>");
+  h.push("<div style='display:flex;gap:7px;flex-wrap:wrap'>");
+  h.push("<button onclick='agendarRondaEscolar("")' style='background:#0a2a1e;border:1px solid #22c55e;color:#22c55e;padding:7px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>&#128197; Agendar Ronda</button>");
+  h.push("<button onclick='gerarPDFEscolar("")' style='background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:7px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>&#128424; Gerar PDF</button>");
+  h.push("</div></div>");
 
   // KPIs
-  h.push("<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px'>");
-  [[nVisitas,"Visitas","🚗","#22c55e"],[nPalestras,"Palestras","🎤","#a78bfa"],[nProjEduc,"Proj. Educacionais","📚","#38bdf8"],[nReunioes,"Reuniões","🤝","#f59e0b"],[nViolencia,"Ocorr. Violência","⚠","#ef4444"],[nAlunos,"Alunos Atingidos","👥","#34d399"]].forEach(function(k){
-    h.push("<div style='background:#0a1e2a;border:1px solid "+k[3]+"44;border-top:3px solid "+k[3]+";border-radius:8px;padding:11px 12px;text-align:center'>");
-    h.push("<div style='font-size:18px;margin-bottom:3px'>"+k[2]+"</div>");
-    h.push("<div style='font-size:18px;font-weight:700;color:"+k[3]+";margin-bottom:2px'>"+k[0]+"</div>");
+  h.push("<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px'>");
+  [[totalRondas,"Rondas","&#128660;","#38bdf8"],[nVisitas,"Visitas","&#128663;","#22c55e"],[nPalestras,"Palestras","&#127908;","#a78bfa"],[nProjEduc,"Proj.Educ.","&#128218;","#0ea5e9"],[nReunioes,"Reuniões","&#129309;","#f59e0b"],[nViolencia,"Violencia","&#9888;","#ef4444"]].forEach(function(k){
+    h.push("<div style='background:#0a1e2a;border:1px solid "+k[3]+"44;border-top:3px solid "+k[3]+";border-radius:8px;padding:10px;text-align:center'>");
+    h.push("<div style='font-size:16px;margin-bottom:2px'>"+k[2]+"</div>");
+    h.push("<div style='font-size:18px;font-weight:700;color:"+k[3]+";margin-bottom:1px'>"+k[0]+"</div>");
     h.push("<div style='font-size:9px;color:#4a7a9a;font-weight:600;text-transform:uppercase;letter-spacing:.5px'>"+k[1]+"</div>");
     h.push("</div>");
   });
   h.push("</div>");
+  if(nAlunos>0) h.push("<div style='background:#0a1e2a;border:1px solid #34d39944;border-radius:8px;padding:9px 14px;margin-bottom:12px;text-align:center;color:#34d399;font-size:13px;font-weight:700'>&#128100; "+nAlunos+" Alunos Atingidos no Periodo</div>");
+
+  // Proximas rondas agendadas
+  if(proxRondas.length){
+    h.push("<div style='background:#0a2a1e;border:1px solid #22c55e44;border-radius:8px;padding:11px 14px;margin-bottom:12px'>");
+    h.push("<p style='color:#22c55e;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px'>&#128197; Proximas Rondas Agendadas</p>");
+    proxRondas.forEach(function(e){
+      h.push("<div style='display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid #1a3a2a'>");
+      h.push("<span style='color:#c8f0d8;font-size:11px;font-weight:600'>&#127979; "+esc(e.escolaNome||e.titulo||"Ronda Escolar")+(e.responsavel?" · "+esc(e.responsavel):"")+"</span>");
+      h.push("<div style='text-align:right'><span style='color:#22c55e;font-size:10px;font-weight:700'>"+fmtData(e.data)+(e.hora?" "+e.hora:"")+"</span></div>");
+      h.push("</div>");
+    });
+    h.push("</div>");
+  }
 
   // Filtros temporais
   h.push("<div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center'>");
-  [["semana","7 dias"],["mes","Mês"],["ano","Ano"],["periodo","Período"]].forEach(function(fp){
+  [["semana","7 dias"],["mes","Mes"],["ano","Ano"],["periodo","Periodo"]].forEach(function(fp){
     var sel=f.periodo===fp[0];
-    h.push("<button onclick=\"state._escF.periodo='"+fp[0]+"';renderModuloEscolar(document.getElementById('main')||document.getElementById('main-content'));\" style='background:"+(sel?"#0a2a1e":"#0a1a2a")+";border:1px solid "+(sel?"#38bdf8":"#1a3a5a")+";color:"+(sel?"#e8f5ff":"#4a7a9a")+";padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer'>"+fp[1]+"</button>");
+    h.push("<button onclick="state._escF.periodo='"+fp[0]+"';var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);" style='background:"+(sel?"#0a2a1e":"#0a1a2a")+";border:1px solid "+(sel?"#38bdf8":"#1a3a5a")+";color:"+(sel?"#e8f5ff":"#4a7a9a")+";padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer'>"+fp[1]+"</button>");
   });
   if(f.periodo==="periodo"){
-    h.push("<input type='date' value='"+esc(f.de||"")+"' onchange=\"state._escF.de=this.value;renderModuloEscolar(document.getElementById('main')||document.getElementById('main-content'));\" style='"+IS2+";width:140px'>");
-    h.push("<span style='color:#4a7a9a;font-size:11px'>até</span>");
-    h.push("<input type='date' value='"+esc(f.ate||"")+"' onchange=\"state._escF.ate=this.value;renderModuloEscolar(document.getElementById('main')||document.getElementById('main-content'));\" style='"+IS2+";width:140px'>");
+    h.push("<input type='date' value='"+esc(f.de||"")+"' onchange="state._escF.de=this.value;var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);" style='"+IS2+";width:140px'>");
+    h.push("<span style='color:#4a7a9a;font-size:11px'>ate</span>");
+    h.push("<input type='date' value='"+esc(f.ate||"")+"' onchange="state._escF.ate=this.value;var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);" style='"+IS2+";width:140px'>");
   }
   h.push("</div>");
-
-  h.push(_htmlFiltrosBairro("renderModuloEscolar(document.getElementById('main')||document.getElementById('main-content'))","#38bdf8"));
-
-  // Busca
+  h.push(_htmlFiltrosBairro("(function(){var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);})()","#38bdf8"));
   h.push("<input id='esc-busca' type='text' placeholder='Buscar por escola, tipo, bairro, narrativa...' value='"+esc(f.busca||"")+"' style='"+IS2+";margin-bottom:14px'>");
 
-  // Lista
-  if(!filtrados.length){
+  // Lista agrupada por escola
+  if(!escolas.length){
     h.push("<div style='text-align:center;padding:50px 20px;color:#1a3a5a'>");
-    h.push("<div style='font-size:40px;margin-bottom:12px'>🏫</div>");
-    h.push("<p style='font-size:14px;font-weight:600;margin:0 0 6px;color:#2a5a7a'>Nenhuma ronda escolar no período</p>");
-    h.push("<p style='font-size:11px;margin:0;color:#1a3a5a'>Lance uma ocorrência e classifique como <b style='color:#38bdf8'>Ronda Escolar</b></p>");
+    h.push("<div style='font-size:40px;margin-bottom:12px'>&#127979;</div>");
+    h.push("<p style='font-size:14px;font-weight:600;margin:0 0 6px;color:#2a5a7a'>Nenhuma ronda escolar no periodo</p>");
+    h.push("<p style='font-size:11px;margin:0;color:#1a3a5a'>Lance uma ocorrencia e classifique como <b style='color:#38bdf8'>Ronda Escolar</b></p>");
     h.push("</div>");
   }
 
-  filtrados.forEach(function(o){
-    var regs=o.esc_registros||[];
-    var sumAlunos=regs.reduce(function(s,r){return s+(+r.nAlunos||0);},0);
+  escolas.forEach(function(ei){
+    var kV=0,kP=0,kPE=0,kR=0,kVi=0,kA=0;
+    ei.regs.forEach(function(r){
+      if(r.tipo==="Visita") kV++;
+      else if(r.tipo==="Palestra") kP++;
+      else if(r.tipo==="Projeto Educacional") kPE++;
+      else if(r.tipo==="Reunião") kR++;
+      else if(r.tipo==="Ocorrência de Violência") kVi++;
+      kA+=(+r.nAlunos||0);
+    });
+    var ultimaData=ei.ocs[0]&&ei.ocs[0].data;
+    var escNomeSafe=ei.nome.replace(/\\/g,"\\\\").replace(/"/g,"\\x22").replace(/'/g,"\\x27");
 
-    var cor="#38bdf8";
-    var t=(o.tipo||"").toLowerCase();
-    if(/homicídio|homicidio|feminicídio/.test(t)) cor="#ef4444";
-    else if(/roubo/.test(t)) cor="#f97316";
-    else if(/furto/.test(t)) cor="#eab308";
-    else if(/violência|violencia/.test(t)) cor="#ef4444";
-    else if(/droga|entorpecente/.test(t)) cor="#a78bfa";
+    // Card da escola
+    h.push("<div style='background:#080e1a;border:2px solid #1a3a5a;border-radius:12px;margin-bottom:14px;overflow:hidden'>");
 
-    var fcS="font-size:10px;color:#38bdf8;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px";
-    var fcV="font-size:11px;color:#c5e0f5;line-height:1.5";
-
-    h.push("<div style='background:#0a1e2a;border:1px solid #1a3a5a;border-left:3px solid "+cor+";border-radius:12px;padding:14px;margin-bottom:10px'>");
-
-    // Linha 1: tipo + escola + nAlunos
-    h.push("<div style='display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px;margin-bottom:6px'>");
-    h.push("<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center'>");
-    h.push("<span style='background:"+cor+"18;color:"+cor+";padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase'>🏫 "+esc((o.tipo||"Ronda Escolar").toUpperCase())+"</span>");
-    if(o.numero) h.push("<span style='background:#0a2a3a;color:#38bdf8;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600'>Nº "+esc(o.numero)+"</span>");
-    if(o.escolaNome) h.push("<span style='background:#0a2a1e;color:#22c55e;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600'>"+esc(o.escolaNome)+"</span>");
+    // Cabecalho do card escola
+    h.push("<div style='background:linear-gradient(135deg,#0a1e2a,#0a2a18);padding:12px 14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap'>");
+    h.push("<div style='display:flex;align-items:center;gap:10px;flex:1;min-width:0'>");
+    h.push("<div style='width:36px;height:36px;border-radius:8px;background:#0a2a1e;border:1px solid #38bdf8;display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0'>&#127979;</div>");
+    h.push("<div style='min-width:0'><p style='color:#e8f5ff;font-size:13px;font-weight:700;margin:0 0 2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+esc(ei.nome)+"</p>");
+    h.push("<p style='color:#38bdf8;font-size:10px;margin:0'>"+ei.ocs.length+" ronda(s) · ultima: "+fmtData(ultimaData||"")+"</p></div>");
     h.push("</div>");
-    if(sumAlunos){
-      h.push("<span style='background:#0a2a1e;border:1px solid #34d39944;color:#34d399;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>👥 "+sumAlunos+"</span>");
-    }
-    h.push("</div>");
+    h.push("<div style='display:flex;gap:6px;flex-shrink:0'>");
+    h.push("<button onclick='agendarRondaEscolar(""+escNomeSafe+"")' style='background:#0a2a1e;border:1px solid #22c55e;color:#22c55e;padding:5px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap'>&#128197; Agendar</button>");
+    h.push("<button onclick='gerarPDFEscolar(""+escNomeSafe+"")' style='background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:5px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap'>&#128424; PDF</button>");
+    h.push("</div></div>");
 
-    // Linha 2: data · bairro
-    h.push("<p style='color:#4a7a9a;font-size:11px;margin:0 0 10px'>"+fmtData(o.data)+(o.hora?" · "+o.hora:"")+(o.bairro?" · "+o.bairro:o.local?" · "+o.local:"")+"</p>");
-
-    // Campos estruturados
-    var temCampos=o.vitima_nome||o.local||o.descricao_dinamica||o.texto_original;
-    if(temCampos){
-      h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px'>");
-      if(o.local||o.bairro) h.push("<div><span style='"+fcS+"'>Local</span><span style='"+fcV+"'>"+esc(o.local||o.bairro||"")+"</span></div>");
-      if(o.vitima_nome) h.push("<div><span style='"+fcS+"'>Envolvido</span><span style='"+fcV+"'>"+esc(o.vitima_nome)+(o.vitima_idade?" · "+o.vitima_idade+" anos":"")+"</span></div>");
-      h.push("</div>");
-      var dinamica=o.descricao_dinamica||o.texto_original||o.descricao||"";
-      if(dinamica) h.push("<div style='background:#060d1c;border:1px solid #1a3358;border-radius:6px;padding:10px;margin-bottom:10px'><span style='"+fcS+"'>Narrativa</span><p style='color:#c8d8f0;font-size:11px;line-height:1.7;margin:0;white-space:pre-wrap'>"+esc(dinamica)+"</p></div>");
-    } else {
-      var relato=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
-      if(relato) h.push("<pre style='white-space:pre-wrap;word-break:break-word;color:#c8d8f0;font-size:11px;line-height:1.8;font-family:inherit;margin:0 0 10px;background:#060d1c;border-radius:8px;padding:12px'>"+esc(relato)+"</pre>");
-    }
-
-    // Registros de complemento
-    if(regs.length){
-      h.push("<div style='margin-bottom:10px'>");
-      regs.slice().reverse().slice(0,2).forEach(function(r){
-        var rcor=ESC_REG_CORS[r.tipo]||"#6b7280";
-        var rico=ESC_REG_ICOS[r.tipo]||"📋";
-        h.push("<div style='background:#060d1c;border:1px solid #1a2a3a;border-left:2px solid "+rcor+";border-radius:6px;padding:8px 10px;margin-bottom:6px'>");
-        h.push("<div style='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:"+(r.resultado||r.observacoes?"4px":"0")+"'>");
-        h.push("<span style='background:"+rcor+"22;color:"+rcor+";padding:1px 7px;border-radius:4px;font-size:9px;font-weight:700'>"+rico+" "+esc(r.tipo+(r.subtipo?" — "+r.subtipo:""))+"</span>");
-        h.push("<span style='color:#4a7a9a;font-size:10px'>📅 "+esc(r.data)+(r.hora?" "+r.hora:"")+"</span>");
-        if(r.nAlunos) h.push("<span style='color:#34d399;font-size:10px;font-weight:700'>👥 "+r.nAlunos+"</span>");
-        if(r.turmas) h.push("<span style='color:#60a5fa;font-size:10px'>🎓 "+esc(r.turmas)+"</span>");
-        h.push("</div>");
-        if(r.tema) h.push("<p style='color:#c8d8f0;font-size:10px;margin:0 0 3px;font-weight:600'>"+esc(r.tema)+"</p>");
-        if(r.resultado||r.observacoes) h.push("<p style='color:#7a9ab0;font-size:10px;line-height:1.5;margin:0'>"+esc(r.resultado||r.observacoes||"")+"</p>");
+    // Mini KPIs da escola
+    var temKpi=kV||kP||kPE||kR||kVi||kA;
+    if(temKpi){
+      h.push("<div style='display:flex;gap:0;border-bottom:1px solid #1a2a3a;overflow-x:auto'>");
+      [[kV,"Visitas","&#128663;","#22c55e"],[kP,"Palestras","&#127908;","#a78bfa"],[kPE,"Proj.Educ.","&#128218;","#0ea5e9"],[kR,"Reuniões","&#129309;","#f59e0b"],[kVi,"Violencia","&#9888;","#ef4444"],[kA,"Alunos","&#128100;","#34d399"]].forEach(function(k){
+        if(!k[0]) return;
+        h.push("<div style='padding:7px 12px;text-align:center;flex:1;min-width:60px;border-right:1px solid #1a2a3a'>");
+        h.push("<div style='font-size:11px'>"+k[2]+"</div>");
+        h.push("<div style='font-size:13px;font-weight:700;color:"+k[3]+"'>"+k[0]+"</div>");
+        h.push("<div style='font-size:8px;color:#4a7a9a;text-transform:uppercase;letter-spacing:.3px'>"+k[1]+"</div>");
         h.push("</div>");
       });
-      if(regs.length>2) h.push("<p style='color:#4a7a9a;font-size:10px;text-align:center;margin:4px 0 0'>+ "+(regs.length-2)+" registro(s) anteriores</p>");
       h.push("</div>");
     }
 
-    // Botões
-    h.push("<div style='display:flex;gap:8px'>");
-    h.push("<button data-oc='"+o.id+"' onclick=\"state.popEditarOc='"+o.id+"';renderOcorrenciasGestor(document.getElementById('main-content'),'gestor')\" style='background:#0a1a2a;border:1px solid #2a3a5a;color:#6a8aba;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>✏ Editar</button>");
-    h.push("<button data-oc='"+o.id+"' onclick='abrirRegistroEsc(this.dataset.oc)' style='flex:1;background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:7px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>📋 Registrar Complemento</button>");
-    h.push("</div>");
-    h.push("</div>");
+    // Historico de rondas
+    h.push("<div style='padding:10px 14px'>");
+    ei.ocs.forEach(function(o,oi){
+      var regs=o.esc_registros||[];
+      var isLast=oi===ei.ocs.length-1;
+      h.push("<div style='border:1px solid #1a3a5a;border-radius:8px;padding:10px 12px;margin-bottom:"+(isLast?"0":"8px")+";background:#0a1a2a'>");
+
+      // Linha topo
+      h.push("<div style='display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:5px;margin-bottom:5px'>");
+      h.push("<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center'>");
+      h.push("<span style='background:#38bdf822;color:#38bdf8;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>&#128660; "+esc((o.tipo||"Ronda").toUpperCase())+"</span>");
+      if(o.numero) h.push("<span style='color:#4a7a9a;font-size:10px'>N&#186; "+esc(o.numero)+"</span>");
+      h.push("</div>");
+      h.push("<span style='color:#22c55e;font-size:10px;font-weight:700'>"+fmtData(o.data)+(o.hora?" · "+o.hora:"")+"</span>");
+      h.push("</div>");
+
+      if(o.local||o.bairro) h.push("<p style='color:#4a7a9a;font-size:10px;margin:0 0 5px'>&#128205; "+esc(o.local||o.bairro||"")+"</p>");
+      var dinamica=(o.descricao_dinamica||o.texto_original||o.descricao||"").trim();
+      if(dinamica){
+        var trunc=dinamica.length>200?dinamica.slice(0,200)+"...":dinamica;
+        h.push("<div style='background:#060d1c;border-radius:5px;padding:7px 9px;margin-bottom:7px'><p style='color:#c0d0e0;font-size:10px;line-height:1.6;margin:0;white-space:pre-wrap'>"+esc(trunc)+"</p></div>");
+      }
+
+      // Registros de complemento
+      if(regs.length){
+        regs.slice().reverse().forEach(function(r){
+          var rcor=ESC_REG_CORS[r.tipo]||"#6b7280";
+          var rico=ESC_REG_ICOS[r.tipo]||"&#128203;";
+          h.push("<div style='background:#060d1c;border-left:2px solid "+rcor+";border-radius:4px;padding:6px 9px;margin-bottom:4px'>");
+          h.push("<div style='display:flex;gap:5px;flex-wrap:wrap;align-items:center;margin-bottom:2px'>");
+          h.push("<span style='background:"+rcor+"22;color:"+rcor+";padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700'>"+rico+" "+esc(r.tipo+(r.subtipo?" — "+r.subtipo:""))+"</span>");
+          h.push("<span style='color:#4a7a9a;font-size:9px'>"+esc(r.data)+(r.hora?" "+r.hora:"")+"</span>");
+          if(r.nAlunos) h.push("<span style='color:#34d399;font-size:9px;font-weight:700'>&#128100; "+r.nAlunos+"</span>");
+          if(r.turmas) h.push("<span style='color:#60a5fa;font-size:9px'>&#127891; "+esc(r.turmas)+"</span>");
+          h.push("</div>");
+          if(r.tema) h.push("<p style='color:#c8d8f0;font-size:10px;margin:0 0 2px;font-weight:600'>"+esc(r.tema)+"</p>");
+          if(r.resultado||r.observacoes) h.push("<p style='color:#7a9ab0;font-size:10px;line-height:1.4;margin:0'>"+esc(r.resultado||r.observacoes||"")+"</p>");
+          if(r.tipoViolencia) h.push("<p style='color:#ef4444;font-size:10px;margin:2px 0 0;font-weight:700'>&#9888; "+esc(r.tipoViolencia)+"</p>");
+          h.push("</div>");
+        });
+      }
+
+      // Botoes da ronda
+      h.push("<div style='display:flex;gap:6px;margin-top:8px'>");
+      h.push("<button data-oc='"+o.id+"' onclick=\"state.popEditarOc='"+o.id+"';var _m=document.getElementById('main')||document.getElementById('main-content');renderOcorrenciasGestor(_m,'gestor')\" style='background:#070e1c;border:1px solid #1a3a5a;color:#4a7a9a;padding:5px 12px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>&#9999; Editar</button>");
+      h.push("<button data-oc='"+o.id+"' onclick='abrirRegistroEsc(this.dataset.oc)' style='flex:1;background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:5px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>&#128203; Registrar Complemento</button>");
+      h.push("</div>");
+      h.push("</div>");
+    });
+    h.push("</div></div>");
   });
 
   h.push("</div>");
@@ -4830,10 +4877,113 @@ function renderModuloEscolar(main){
     bEl.oninput=function(){
       state._escF.busca=this.value;
       clearTimeout(_t);
-      _t=setTimeout(function(){renderModuloEscolar(document.getElementById("main")||document.getElementById("main-content"));},300);
+      _t=setTimeout(function(){var _m=document.getElementById("main")||document.getElementById("main-content");if(_m)renderModuloEscolar(_m);},300);
     };
   }
 }
+
+// Agendar Ronda Escolar
+function agendarRondaEscolar(escolaNome){
+  var modal=document.createElement("div");
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto;box-sizing:border-box";
+  var IS="width:100%;background:#0a1e2a;border:1px solid #1a3a5a;color:#d0e8f5;padding:9px 10px;border-radius:5px;font-size:12px;outline:none;box-sizing:border-box";
+  var LS="color:#38bdf8;font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.5px;display:block;margin-bottom:4px";
+  var mh=[];
+  mh.push("<div style='background:#070e1c;border:2px solid #1a4a6a;border-radius:14px;max-width:500px;width:100%;margin:auto;padding:20px;box-sizing:border-box'>");
+  mh.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #1a3a5a;padding-bottom:12px'>");
+  mh.push("<div><h3 style='color:#e8f5ff;font-size:15px;font-weight:700;margin:0 0 2px'>&#128197; Agendar Ronda Escolar</h3><p style='color:#38bdf8;font-size:10px;margin:0'>Calendario · 77a CIPM / BCS</p></div>");
+  mh.push("<button onclick='this.closest("[style*=fixed]").remove()' style='background:#0a1a2a;border:1px solid #1a3a5a;color:#4a7a9a;font-size:18px;cursor:pointer;border-radius:7px;width:32px;height:32px;line-height:1'>&#215;</button>");
+  mh.push("</div>");
+  mh.push("<div style='margin-bottom:12px'><label style='"+LS+"'>&#127979; Escola / Unidade</label><input id='ag-escola' type='text' value='"+esc(escolaNome||"")+"' placeholder='Nome da escola ou unidade' style='"+IS+"'></div>");
+  mh.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px'>");
+  mh.push("<div><label style='"+LS+"'>&#128197; Data</label><input id='ag-data' type='date' value='"+hoje()+"' style='"+IS+"'></div>");
+  mh.push("<div><label style='"+LS+"'>&#128336; Hora</label><input id='ag-hora' type='time' value='08:00' style='"+IS+"'></div>");
+  mh.push("</div>");
+  mh.push("<div style='margin-bottom:12px'><label style='"+LS+"'>&#128110; Policial Responsavel</label><input id='ag-resp' type='text' placeholder='Graduacao e nome' style='"+IS+"'></div>");
+  mh.push("<div style='margin-bottom:16px'><label style='"+LS+"'>&#128221; Observacoes</label><textarea id='ag-obs' rows='3' placeholder='Objetivo da ronda, solicitacao...' style='"+IS+";resize:vertical;font-family:inherit'></textarea></div>");
+  mh.push("<div style='display:grid;grid-template-columns:1fr 2fr;gap:10px'>");
+  mh.push("<button onclick='this.closest("[style*=fixed]").remove()' style='background:#070e1c;border:1px solid #1a3a5a;color:#4a6a8a;padding:11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button>");
+  mh.push("<button id='btn-salvar-ag-ronda' style='background:linear-gradient(135deg,#0a2a18,#0a3a20);border:1px solid #22c55e;color:#c8f0d8;padding:11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>&#128197; Agendar no Calendario</button>");
+  mh.push("</div></div>");
+  modal.innerHTML=mh.join("");
+  document.body.appendChild(modal);
+  modal.onclick=function(e){ if(e.target===this) this.remove(); };
+  document.getElementById("btn-salvar-ag-ronda").onclick=function(){
+    var escNome=(document.getElementById("ag-escola")||{value:""}).value.trim();
+    var data=(document.getElementById("ag-data")||{value:hoje()}).value||hoje();
+    var hora=(document.getElementById("ag-hora")||{value:"08:00"}).value||"08:00";
+    var resp=(document.getElementById("ag-resp")||{value:""}).value.trim();
+    var obs=(document.getElementById("ag-obs")||{value:""}).value.trim();
+    if(!escNome){showToast("Informe o nome da escola","error");return;}
+    var id="RONDA_ESC_"+Date.now();
+    var ev={id:id,tipo:"Ronda Escolar Agendada",titulo:"&#127979; Ronda Escolar — "+escNome,
+      escolaNome:escNome,data:data,hora:hora,responsavel:resp,observacoes:obs,
+      cor:"#38bdf8",criadoEm:new Date().toISOString()};
+    if(!state.eventosAvulsos) state.eventosAvulsos=[];
+    state.eventosAvulsos.push(ev);
+    salvarLocal();
+    showToast("Ronda agendada e adicionada ao Calendario!");
+    modal.remove();
+    var m=document.getElementById("main")||document.getElementById("main-content");
+    if(m) renderModuloEscolar(m);
+  };
+}
+
+// Gerar PDF do Modulo Escolar
+function gerarPDFEscolar(escolaNome){
+  var todos=(state.db.ocorrencias||[]).filter(function(o){ return (o.classificacao||"")==="Ronda Escolar"; });
+  var lista=escolaNome ? todos.filter(function(o){ return (o.escolaNome||"")===escolaNome; }) : todos;
+  lista=lista.slice().sort(function(a,b){ return (b.data||"")>(a.data||"")?1:-1; });
+  var titulo=escolaNome?"Historico Escolar: "+escolaNome:"Relatorio do Modulo Escolar";
+  var dataRel=new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
+  var nV=0,nP=0,nPE=0,nR=0,nVi=0,nA=0;
+  lista.forEach(function(o){(o.esc_registros||[]).forEach(function(r){
+    if(r.tipo==="Visita")nV++; else if(r.tipo==="Palestra")nP++; else if(r.tipo==="Projeto Educacional")nPE++;
+    else if(r.tipo==="Reunião")nR++; else if(r.tipo==="Ocorrência de Violência")nVi++;
+    nA+=(+r.nAlunos||0);
+  });});
+
+  var rows=lista.map(function(o){
+    var rRows=(o.esc_registros||[]).map(function(r){
+      return "<tr style='background:#f8fbff'><td style='padding:5px 8px;font-size:10px;color:#555'>"+esc(r.tipo+(r.subtipo?" - "+r.subtipo:""))+"</td><td style='padding:5px 8px;font-size:10px'>"+esc(r.data+(r.hora?" "+r.hora:""))+"</td><td style='padding:5px 8px;font-size:10px'>"+esc(r.tema||"-")+"</td><td style='padding:5px 8px;font-size:10px;text-align:center'>"+esc(String(r.nAlunos||"-"))+"</td><td style='padding:5px 8px;font-size:10px'>"+esc(r.resultado||r.observacoes||"-")+"</td></tr>";
+    }).join("");
+    return "<tr style='background:#dde8f5'><td colspan='5' style='padding:8px;font-size:11px;font-weight:700;color:#1a3a6a'>"+esc(fmtData(o.data)+(o.hora?" "+o.hora:""))+" — "+esc(o.tipo||"Ronda Escolar")+(o.escolaNome?" · "+esc(o.escolaNome):"")+(o.numero?" (No "+esc(o.numero)+")":"")+"</td></tr>"
+      +(o.local||o.bairro?"<tr><td colspan='5' style='padding:3px 8px;font-size:9px;color:#555'>Local: "+esc(o.local||o.bairro||"")+"</td></tr>":"")
+      +rRows;
+  }).join("");
+
+  var proxRondas=(state.eventosAvulsos||[]).filter(function(e){
+    return e.tipo==="Ronda Escolar Agendada" && (!escolaNome||(e.escolaNome||e.titulo||"").includes(escolaNome)) && e.data>=hoje();
+  }).sort(function(a,b){return a.data>b.data?1:-1;}).slice(0,10);
+
+  var proxRows=proxRondas.map(function(e){
+    return "<tr><td style='padding:5px 8px;font-size:10px'>"+esc(e.escolaNome||e.titulo||"")+"</td><td style='padding:5px 8px;font-size:10px'>"+esc(fmtData(e.data)+" "+e.hora)+"</td><td style='padding:5px 8px;font-size:10px'>"+esc(e.responsavel||"-")+"</td><td style='padding:5px 8px;font-size:10px'>"+esc(e.observacoes||"-")+"</td></tr>";
+  }).join("");
+
+  var html="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>"+titulo+"</title><style>body{font-family:Arial,sans-serif;margin:24px;color:#222;font-size:12px}h1{font-size:17px;color:#1a3a6a;border-bottom:3px solid #38bdf8;padding-bottom:8px;margin-bottom:4px}h2{font-size:13px;color:#1a3a6a;margin:20px 0 6px}table{width:100%;border-collapse:collapse;margin-top:6px}th{background:#1a3a6a;color:#fff;padding:7px 8px;font-size:10px;text-align:left;font-weight:600}td{border-bottom:1px solid #dde}tr:hover{background:#f0f5ff}@media print{.no-print{display:none!important}}</style></head><body>";
+  html+="<div style='display:flex;justify-content:space-between;align-items:start;margin-bottom:14px'>";
+  html+="<div><h1>"+esc(titulo)+"</h1><p style='color:#555;font-size:11px;margin:0'>77a CIPM / BCS · Gerado em "+esc(dataRel)+"</p></div>";
+  html+="<button class='no-print' onclick='window.print()' style='background:#1a3a6a;color:#fff;border:none;padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer'>Imprimir / PDF</button>";
+  html+="</div>";
+  html+="<div style='display:flex;gap:18px;flex-wrap:wrap;background:#e8f0ff;border-radius:8px;padding:10px 16px;margin-bottom:14px'>";
+  [[lista.length,"Rondas"],[nV,"Visitas"],[nP,"Palestras"],[nPE,"Proj.Educ."],[nR,"Reuniões"],[nVi,"Ocorr.Violencia"],[nA,"Alunos Atingidos"]].forEach(function(k){
+    html+="<div style='text-align:center'><div style='font-size:22px;font-weight:700;color:#1a3a6a'>"+k[0]+"</div><div style='font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.3px'>"+k[1]+"</div></div>";
+  });
+  html+="</div>";
+  if(lista.length){
+    html+="<h2>Historico de Rondas</h2><table><thead><tr><th>Atividade</th><th>Data/Hora</th><th>Tema</th><th>Alunos</th><th>Resultado / Obs.</th></tr></thead><tbody>"+rows+"</tbody></table>";
+  } else {
+    html+="<p style='color:#888;text-align:center;padding:30px'>Nenhuma ronda registrada.</p>";
+  }
+  if(proxRondas.length){
+    html+="<h2>Proximas Rondas Agendadas</h2><table><thead><tr><th>Escola</th><th>Data / Hora</th><th>Responsavel</th><th>Observacoes</th></tr></thead><tbody>"+proxRows+"</tbody></table>";
+  }
+  html+="</body></html>";
+  var w=window.open("","_blank");
+  if(w){ w.document.write(html); w.document.close(); w.focus(); }
+  else showToast("Permita popups para gerar o PDF","error");
+}
+
 
 // Modal de complemento de Ronda Escolar
 function abrirRegistroEsc(ocId){
