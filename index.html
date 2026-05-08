@@ -4384,34 +4384,64 @@ function renderProjetosSociais(main){
     var regs=o.ps_registros||[];
     var sumP=regs.reduce(function(s,r){return s+(+r.pessoas||0);},0);
     var sumA=regs.reduce(function(s,r){return s+(+r.alimentos_kg||0);},0);
-    var temItens=regs.some(function(r){return r.itens&&r.itens.trim();});
-    h.push("<div style='background:#0d0820;border:1px solid #2a1850;border-left:3px solid #a78bfa;border-radius:10px;padding:14px;margin-bottom:10px'>");
-    // Header
-    h.push("<div style='display:flex;justify-content:space-between;align-items:start;gap:10px;margin-bottom:10px'>");
-    h.push("<div style='flex:1'>");
-    h.push("<div style='display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:4px'>");
-    h.push("<span style='background:#a78bfa22;color:#a78bfa;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700;text-transform:uppercase'>"+(o.tipo||"Projeto Social")+"</span>");
-    if(o.numero) h.push("<span style='background:#1e1040;color:#7060a0;padding:3px 8px;border-radius:4px;font-size:10px'>Nº "+o.numero+"</span>");
-    h.push("</div>");
+
+    // ── Data formatada
     var dtStr=(function(){var d=o.data;if(!d)return"";var p=d.split("-");return p.length===3?p[2]+"/"+p[1]+"/"+p[0]:d;})();
-    h.push("<p style='color:#5a4080;font-size:11px;margin:0'>"+dtStr+(o.hora?" · "+o.hora:"")+(o.local?" · "+o.local:o.bairro?" · "+o.bairro:"")+"</p>");
+
+    // ── Descrição limpa: pega descricao (resumo) preferindo texto depois de "Descrição:" ou "Dinâmica:"
+    var descBruta=(o.descricao||o.descricao_dinamica||"").trim();
+    // Remove rótulos de campo comuns do SIGESPOL
+    var descLimpa=descBruta
+      .replace(/^(Cód|Código|Relatório de Serviço|Tipo|Data|Hora|Município|Local|Ponto de referência|Responsável|Ocorrência Avulsa)\s*:\s*[^\n]*/gim,"")
+      .replace(/Descrição\s*:\s*/i,"").replace(/Dinâmica\s*:\s*/i,"")
+      .replace(/\n{2,}/g,"\n").trim();
+    if(!descLimpa && o.descricao_dinamica){
+      var m=o.descricao_dinamica.match(/(?:Descrição|Dinâmica)\s*:\s*([\s\S]{10,})/i);
+      if(m) descLimpa=m[1].trim().slice(0,200);
+    }
+    if(!descLimpa) descLimpa=descBruta.slice(0,200);
+
+    // ── Classificação / ícone
+    var classifIcons={"Visita Solidária":"🤝","Acompanhamento VCM":"💜","Ronda Escolar":"🏫","Visita Comunitária":"🏘️","Projeto Social":"🌱","Ocorrência":"🚔"};
+    var classif=o.classificacao||"Projeto Social";
+    var classifIc=classifIcons[classif]||"🌱";
+
+    h.push("<div style='background:#0d0820;border:1px solid #2a1850;border-left:3px solid #a78bfa;border-radius:10px;padding:14px;margin-bottom:10px'>");
+
+    // ── Linha 1: classificação + tipo + nº
+    h.push("<div style='display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:8px'>");
+    h.push("<span style='background:#a78bfa33;color:#c4b5fd;padding:3px 10px;border-radius:4px;font-size:11px;font-weight:700'>"+classifIc+" "+esc(classif)+"</span>");
+    if(o.tipo && o.tipo!==classif) h.push("<span style='background:#1e1040;color:#7060a0;padding:3px 8px;border-radius:4px;font-size:10px;font-weight:600'>"+esc(o.tipo)+"</span>");
+    if(o.numero) h.push("<span style='background:#1e1040;color:#5a4a80;padding:3px 8px;border-radius:4px;font-size:10px'>Nº "+esc(o.numero)+"</span>");
+    // Mini KPIs à direita
+    if(sumP||sumA) {
+      h.push("<div style='margin-left:auto;display:flex;gap:6px'>");
+      if(sumP) h.push("<span style='background:#0a1a14;border:1px solid #34d39944;color:#34d399;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>👥 "+sumP+" pessoas</span>");
+      if(sumA) h.push("<span style='background:#1a1200;border:1px solid #f59e0b44;color:#f59e0b;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>🍱 "+sumA+"kg</span>");
+      h.push("</div>");
+    }
     h.push("</div>");
-    // Mini KPIs do projeto
-    h.push("<div style='display:flex;gap:8px;flex-shrink:0'>");
-    if(sumP) h.push("<div style='text-align:center;background:#0a1a14;border:1px solid #34d39944;border-radius:6px;padding:4px 10px'><div style='font-size:13px;font-weight:700;color:#34d399'>"+sumP+"</div><div style='font-size:9px;color:#1a6a4a'>pessoas</div></div>");
-    if(sumA) h.push("<div style='text-align:center;background:#1a1200;border:1px solid #f59e0b44;border-radius:6px;padding:4px 10px'><div style='font-size:13px;font-weight:700;color:#f59e0b'>"+sumA+"kg</div><div style='font-size:9px;color:#6a4a00'>alimentos</div></div>");
+
+    // ── Linha 2: data · hora · local
+    h.push("<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:8px'>");
+    if(dtStr) h.push("<span style='color:#7060a0;font-size:11px'>📅 "+dtStr+(o.hora?" · "+o.hora:"")+"</span>");
+    var local=o.local||o.bairro||"";
+    if(local) h.push("<span style='color:#6a5a90;font-size:11px'>📍 "+esc(local.slice(0,60))+"</span>");
+    if(o.vitima_nome) h.push("<span style='color:#60a5fa;font-size:11px'>👤 "+esc(o.vitima_nome)+"</span>");
     h.push("</div>");
-    h.push("</div>");
-    // Descrição resumida
-    var desc=(o.descricao_dinamica||o.descricao||"").trim();
-    if(desc) h.push("<p style='color:#9080c0;font-size:11px;line-height:1.6;margin:0 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden'>"+esc(desc)+"</p>");
-    // Últimos registros
+
+    // ── Linha 3: descrição limpa (2 linhas)
+    if(descLimpa){
+      h.push("<p style='color:#9080c0;font-size:11px;line-height:1.65;margin:0 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden'>"+esc(descLimpa)+"</p>");
+    }
+
+    // ── Últimos registros
     if(regs.length){
       h.push("<div style='margin-bottom:10px'>");
       regs.slice().reverse().slice(0,2).forEach(function(r){
         h.push("<div style='background:#180d30;border:1px solid #3a2060;border-radius:6px;padding:8px 10px;margin-bottom:6px'>");
-        h.push("<div style='display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:4px'>");
-        h.push("<span style='color:#6a4a90;font-size:10px'>📅 "+r.data+(r.hora?" "+r.hora:"")+"</span>");
+        h.push("<div style='display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:"+(r.complemento?"4px":"0")+"'>");
+        h.push("<span style='color:#6a4a90;font-size:10px'>📅 "+esc(r.data)+(r.hora?" "+r.hora:"")+"</span>");
         if(r.pessoas) h.push("<span style='color:#34d399;font-size:10px;font-weight:700'>👥 "+r.pessoas+" pessoas</span>");
         if(r.alimentos_kg) h.push("<span style='color:#f59e0b;font-size:10px;font-weight:700'>🍱 "+r.alimentos_kg+"kg</span>");
         if(r.itens) h.push("<span style='color:#60a5fa;font-size:10px'>📦 "+esc(r.itens)+"</span>");
@@ -4419,10 +4449,11 @@ function renderProjetosSociais(main){
         if(r.complemento) h.push("<p style='color:#8070b0;font-size:10px;line-height:1.5;margin:0'>"+esc(r.complemento)+"</p>");
         h.push("</div>");
       });
-      if(regs.length>2) h.push("<p style='color:#5a3a80;font-size:10px;text-align:center;margin:0'>+ "+(regs.length-2)+" registro(s) anteriores</p>");
+      if(regs.length>2) h.push("<p style='color:#5a3a80;font-size:10px;text-align:center;margin:4px 0 0'>+ "+(regs.length-2)+" registro(s) anteriores</p>");
       h.push("</div>");
     }
-    // Botão Registrar
+
+    // ── Botão
     h.push("<button data-ps-id='"+o.id+"' onclick='abrirRegistroPS(this.dataset.psId)' style='width:100%;background:#1a0d35;border:1px solid #a78bfa;color:#a78bfa;padding:9px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>📋 Registrar Atendimento / Complementar</button>");
     h.push("</div>");
   });
