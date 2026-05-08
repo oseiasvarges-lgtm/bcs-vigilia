@@ -643,6 +643,8 @@ async function carregarDoSheets() {
       if(!o.texto_original && local.texto_original) o.texto_original = local.texto_original;
       // criadoEm é stripped antes de enviar ao Sheets — restaurar sempre do local
       if(!o.criadoEm && local.criadoEm) o.criadoEm = local.criadoEm;
+      // classificacao é campo crítico dos módulos — restaurar se Sheets devolveu vazio
+      if(!o.classificacao && local.classificacao) o.classificacao = local.classificacao;
       // Preservar complementos locais se Sheets não os tiver
       if((!o.esc_registros || !o.esc_registros.length) && local.esc_registros && local.esc_registros.length) o.esc_registros = local.esc_registros;
       if((!o.ps_registros  || !o.ps_registros.length)  && local.ps_registros  && local.ps_registros.length)  o.ps_registros  = local.ps_registros;
@@ -4427,16 +4429,16 @@ function renderProjetosSociais(main){
   h.push("<div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center'>");
   [["semana","7 dias"],["mes","Mês"],["ano","Ano"],["periodo","Período"]].forEach(function(fp){
     var sel=f.periodo===fp[0];
-    h.push("<button onclick=\"state._psF.periodo='"+fp[0]+"';renderProjetosSociais(document.getElementById('main-content'));\" style='background:"+(sel?"#2a1250":"#0e0820")+";border:1px solid "+(sel?"#a78bfa":"#3a1e6a")+";color:"+(sel?"#e0d0ff":"#7060a0")+";padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer'>"+fp[1]+"</button>");
+    h.push("<button onclick=\"state._psF.periodo='"+fp[0]+"';renderProjetosSociais(document.getElementById('main')||document.getElementById('main-content'));\" style='background:"+(sel?"#2a1250":"#0e0820")+";border:1px solid "+(sel?"#a78bfa":"#3a1e6a")+";color:"+(sel?"#e0d0ff":"#7060a0")+";padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer'>"+fp[1]+"</button>");
   });
   if(f.periodo==="periodo"){
-    h.push("<input type='date' value='"+esc(f.de||"")+"' onchange=\"state._psF.de=this.value;renderProjetosSociais(document.getElementById('main-content'));\" style='"+IS2+";width:140px'>");
+    h.push("<input type='date' value='"+esc(f.de||"")+"' onchange=\"state._psF.de=this.value;renderProjetosSociais(document.getElementById('main')||document.getElementById('main-content'));\" style='"+IS2+";width:140px'>");
     h.push("<span style='color:#7060a0;font-size:11px'>até</span>");
-    h.push("<input type='date' value='"+esc(f.ate||"")+"' onchange=\"state._psF.ate=this.value;renderProjetosSociais(document.getElementById('main-content'));\" style='"+IS2+";width:140px'>");
+    h.push("<input type='date' value='"+esc(f.ate||"")+"' onchange=\"state._psF.ate=this.value;renderProjetosSociais(document.getElementById('main')||document.getElementById('main-content'));\" style='"+IS2+";width:140px'>");
   }
   h.push("</div>");
 
-  h.push(_htmlFiltrosBairro("renderProjetosSociais(document.getElementById('main-content'))","#a78bfa"));
+  h.push(_htmlFiltrosBairro("renderProjetosSociais(document.getElementById('main')||document.getElementById('main-content'))","#a78bfa"));
 
   // ── Busca
   h.push("<input id='ps-busca' type='text' placeholder='Buscar por tipo, local, descrição...' value='"+esc(f.busca||"")+"' style='"+IS2+";margin-bottom:14px'>");
@@ -4519,7 +4521,7 @@ function renderProjetosSociais(main){
 
     // ── Botões
     h.push("<div style='display:flex;gap:8px'>");
-    h.push("<button data-oc='"+o.id+"' onclick=\"state.popEditarOc='"+o.id+"';renderOcorrenciasGestor(document.getElementById('main-content'),'gestor')\" style='background:#1a1a2a;border:1px solid #4a5a7a;color:#8a9aba;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>✏ Editar</button>");
+    h.push("<button data-oc='"+o.id+"' onclick=\"state.popEditarOc='"+o.id+"';renderOcorrenciasGestor(document.getElementById('main')||document.getElementById('main-content'),'gestor')\" style='background:#1a1a2a;border:1px solid #4a5a7a;color:#8a9aba;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>✏ Editar</button>");
     h.push("<button data-ps-id='"+o.id+"' onclick='abrirRegistroPS(this.dataset.psId)' style='flex:1;background:#0d0820;border:1px solid #a78bfa;color:#a78bfa;padding:7px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>📋 Registrar Atendimento / Complementar</button>");
     h.push("</div>");
     h.push("</div>");
@@ -4535,7 +4537,7 @@ function renderProjetosSociais(main){
     buscaEl.oninput=function(){
       state._psF.busca=this.value;
       clearTimeout(_t);
-      _t=setTimeout(function(){ renderProjetosSociais(document.getElementById("main-content")); },300);
+      _t=setTimeout(function(){ renderProjetosSociais(document.getElementById("main")||document.getElementById("main-content")); },300);
     };
   }
 }
@@ -4628,7 +4630,7 @@ function abrirRegistroPS(ocId){
     salvarLocal();
     showToast("✓ Registro salvo com sucesso!");
     modal.remove();
-    renderProjetosSociais(document.getElementById("main-content"));
+    renderProjetosSociais(document.getElementById("main")||document.getElementById("main-content"));
   };
 }
 
