@@ -4430,9 +4430,9 @@ function renderProjetosSociais(main){
     if(o.vitima_nome) h.push("<span style='color:#60a5fa;font-size:11px'>👤 "+esc(o.vitima_nome)+"</span>");
     h.push("</div>");
 
-    // ── Linha 3: descrição limpa (2 linhas)
+    // ── Linha 3: descrição limpa (completa)
     if(descLimpa){
-      h.push("<p style='color:#9080c0;font-size:11px;line-height:1.65;margin:0 0 10px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden'>"+esc(descLimpa)+"</p>");
+      h.push("<p style='color:#9080c0;font-size:11px;line-height:1.7;margin:0 0 10px;white-space:pre-wrap;word-break:break-word'>"+esc(descLimpa)+"</p>");
     }
 
     // ── Últimos registros
