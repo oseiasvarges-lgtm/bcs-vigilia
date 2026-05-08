@@ -110,11 +110,11 @@ button{cursor:pointer;}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);}
 .cal-day{background:#1a1808;min-height:72px;padding:6px 5px;cursor:pointer;border:1px solid #2a2818;transition:background 0.15s;}
 .cal-day:hover{background:#242214;}
-.cal-day.today .cal-num{color:#c8a84b;font-weight:700;}
+.cal-day.today .cal-num{color:#c8a84b;font-weight:800;}
 .cal-day.selected{background:#242214;border-color:#5a5535;}
-.cal-num{font-size:11px;margin-bottom:3px;color:#5a5535;}
+.cal-num{font-size:15px;font-weight:700;margin-bottom:3px;color:#9a9070;}
 .cal-event{border-radius:3px;padding:2px 4px;font-size:9px;font-weight:700;overflow:hidden;white-space:nowrap;margin-bottom:2px;}
-.cal-header-day{padding:9px 0;text-align:center;font-size:11px;color:#5a5535;font-weight:600;background:#141208;}
+.cal-header-day{padding:9px 0;text-align:center;font-size:11px;color:#7a7050;font-weight:700;background:#141208;}
 
 /* Painel operacional */
 .painel-op{background:linear-gradient(135deg,#1a1208 0%,#1e1a0a 100%);border:1px solid #5a4a1a;border-radius:14px;padding:0;margin-bottom:22px;overflow:hidden;}
@@ -1400,7 +1400,7 @@ function renderCalendar() {
     const ds=dStr(d), ev=getEvs(d), isHoje=ds===hojeStr, isSel=state.calDia===d;
     const bg=isSel?"background:#1e1c12":isHoje?"background:#242214":"background:#141208";
     html+=`<div class="cal-day${isHoje?" today":""}${isSel?" selected":""}" style="${bg}" onclick="calClick(${d})">
-      <div class="cal-num" style="color:${ev.ags.length||ev.vis.length?"#e8ddd0":"#3a3820"}">${d}</div>`;
+      <div class="cal-num" style="color:${ev.ags.length||ev.vis.length?"#e8ddd0":"#9a9070"}">${d}</div>`;
     (ev.ags||[]).slice(0,2).forEach(a=>{ html+=`<div class="cal-event" style="background:${COR_VISITA[a.tipo]||"#c8a84b"};color:#000">${normHora(a.hora)} ${(a.vitima_nome||"--").split(" ")[0]}</div>`; });
     (ev.vis||[]).slice(0,1).forEach(v=>{ html+=`<div class="cal-event" style="background:#334155;color:#94a3b8">✓ ${(v.vitima_nome||"--").split(" ")[0]}</div>`; });
     (state.eventosAvulsos||[]).filter(e=>e.data===ds).slice(0,1).forEach(e=>{ html+=`<div class="cal-event" style="background:${e.cor||"#8b5cf6"};color:#fff;font-size:9px">${e.hora||""} ${e.titulo.substring(0,10)}</div>`; });
