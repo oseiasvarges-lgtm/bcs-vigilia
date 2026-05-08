@@ -6487,7 +6487,7 @@ function _matchBairro(o){
   return (o.bairro||"").toLowerCase().includes(b)||(o.local||"").toLowerCase().includes(b);
 }
 
-function setTela(t){ state.tela=t; closeSidebar(); if(SHEETS_URL&&state.db.ocorrencias.length===0) carregarDoSheets(); render(); }
+function setTela(t){ state.tela=t; closeSidebar(); if(SHEETS_URL&&state.db.ocorrencias.length===0&&!localStorage.getItem("bcs_import_lock")) carregarDoSheets(); render(); }
 
 function updateNavBtns(){
   document.querySelectorAll(".nav-btn").forEach(b=>{
@@ -6611,8 +6611,12 @@ async function fazerLogin(tipo){
     if(res && res.ok){
       state.perfil=res.perfil;
       render();
-      // Carregar tudo do Sheets automaticamente após login (ocorrências + projetos + calendário)
-      carregarDoSheets();
+      // Só carrega do Sheets se não há dados locais ou se não está em modo protegido
+      if(state.db.ocorrencias.length===0 && !localStorage.getItem("bcs_import_lock")){
+        carregarDoSheets();
+      } else {
+        carregarDadosAppDoSheets(); // carrega só projetos/calendário, não toca ocorrências
+      }
     }
     else{ const err=document.getElementById("pin-err"); if(err) err.style.display="block"; }
   };
@@ -9216,7 +9220,7 @@ function abrirMonitorVCM(ocId){
 
 render();
 _carregando = false;
-if(SHEETS_URL){setTimeout(function(){ carregarDoSheets(); }, 300);}
+if(SHEETS_URL && (state.db.ocorrencias||[]).length===0 && !localStorage.getItem("bcs_import_lock")){setTimeout(function(){ carregarDoSheets(); }, 300);}
 </script>
 </body>
 </html>
