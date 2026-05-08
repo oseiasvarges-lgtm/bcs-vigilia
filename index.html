@@ -4719,8 +4719,8 @@ function renderModuloEscolar(main){
   h.push("<div style='width:42px;height:42px;border-radius:50%;background:#0a2a1e;border:2px solid #38bdf8;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0'>&#127979;</div>");
   h.push("<div style='flex:1'><h2 style='font-size:15px;font-weight:700;color:#e8f5ff;margin:0 0 2px'>Modulo Escolar</h2><p style='color:#38bdf8;font-size:10px;margin:0;letter-spacing:.5px'>MONITORAMENTO · 77a CIPM / BCS</p></div>");
   h.push("<div style='display:flex;gap:7px;flex-wrap:wrap'>");
-  h.push("<button onclick='agendarRondaEscolar("")' style='background:#0a2a1e;border:1px solid #22c55e;color:#22c55e;padding:7px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>&#128197; Agendar Ronda</button>");
-  h.push("<button onclick='gerarPDFEscolar("")' style='background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:7px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>&#128424; Gerar PDF</button>");
+  h.push("<button data-escola='' onclick=\"agendarRondaEscolar(this.dataset.escola)\" style='background:#0a2a1e;border:1px solid #22c55e;color:#22c55e;padding:7px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>&#128197; Agendar Ronda</button>");
+  h.push("<button data-escola='' onclick=\"gerarPDFEscolar(this.dataset.escola)\" style='background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:7px 12px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>&#128424; Gerar PDF</button>");
   h.push("</div></div>");
 
   // KPIs
@@ -4752,12 +4752,12 @@ function renderModuloEscolar(main){
   h.push("<div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center'>");
   [["semana","7 dias"],["mes","Mes"],["ano","Ano"],["periodo","Periodo"]].forEach(function(fp){
     var sel=f.periodo===fp[0];
-    h.push("<button onclick="state._escF.periodo='"+fp[0]+"';var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);" style='background:"+(sel?"#0a2a1e":"#0a1a2a")+";border:1px solid "+(sel?"#38bdf8":"#1a3a5a")+";color:"+(sel?"#e8f5ff":"#4a7a9a")+";padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer'>"+fp[1]+"</button>");
+    h.push("<button onclick=\"state._escF.periodo='"+fp[0]+"';var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);\" style='background:"+(sel?"#0a2a1e":"#0a1a2a")+";border:1px solid "+(sel?"#38bdf8":"#1a3a5a")+";color:"+(sel?"#e8f5ff":"#4a7a9a")+";padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer'>"+fp[1]+"</button>");
   });
   if(f.periodo==="periodo"){
-    h.push("<input type='date' value='"+esc(f.de||"")+"' onchange="state._escF.de=this.value;var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);" style='"+IS2+";width:140px'>");
+    h.push("<input type='date' value='"+esc(f.de||"")+"' onchange=\"state._escF.de=this.value;var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);\" style='"+IS2+";width:140px'>");
     h.push("<span style='color:#4a7a9a;font-size:11px'>ate</span>");
-    h.push("<input type='date' value='"+esc(f.ate||"")+"' onchange="state._escF.ate=this.value;var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);" style='"+IS2+";width:140px'>");
+    h.push("<input type='date' value='"+esc(f.ate||"")+"' onchange=\"state._escF.ate=this.value;var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);\" style='"+IS2+";width:140px'>");
   }
   h.push("</div>");
   h.push(_htmlFiltrosBairro("(function(){var _m=document.getElementById('main')||document.getElementById('main-content');if(_m)renderModuloEscolar(_m);})()","#38bdf8"));
@@ -4783,7 +4783,7 @@ function renderModuloEscolar(main){
       kA+=(+r.nAlunos||0);
     });
     var ultimaData=ei.ocs[0]&&ei.ocs[0].data;
-    var escNomeSafe=ei.nome.replace(/\\/g,"\\\\").replace(/"/g,"\\x22").replace(/'/g,"\\x27");
+    var escNomeSafe=ei.nome.replace(/&/g,"&amp;").replace(/'/g,"&#39;").replace(/"/g,"&quot;");
 
     // Card da escola
     h.push("<div style='background:#080e1a;border:2px solid #1a3a5a;border-radius:12px;margin-bottom:14px;overflow:hidden'>");
@@ -4796,8 +4796,8 @@ function renderModuloEscolar(main){
     h.push("<p style='color:#38bdf8;font-size:10px;margin:0'>"+ei.ocs.length+" ronda(s) · ultima: "+fmtData(ultimaData||"")+"</p></div>");
     h.push("</div>");
     h.push("<div style='display:flex;gap:6px;flex-shrink:0'>");
-    h.push("<button onclick='agendarRondaEscolar(""+escNomeSafe+"")' style='background:#0a2a1e;border:1px solid #22c55e;color:#22c55e;padding:5px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap'>&#128197; Agendar</button>");
-    h.push("<button onclick='gerarPDFEscolar(""+escNomeSafe+"")' style='background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:5px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap'>&#128424; PDF</button>");
+    h.push("<button data-escola='"+escNomeSafe+"' onclick=\"agendarRondaEscolar(this.dataset.escola)\" style='background:#0a2a1e;border:1px solid #22c55e;color:#22c55e;padding:5px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap'>&#128197; Agendar</button>");
+    h.push("<button data-escola='"+escNomeSafe+"' onclick=\"gerarPDFEscolar(this.dataset.escola)\" style='background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:5px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap'>&#128424; PDF</button>");
     h.push("</div></div>");
 
     // Mini KPIs da escola
@@ -4892,7 +4892,7 @@ function agendarRondaEscolar(escolaNome){
   mh.push("<div style='background:#070e1c;border:2px solid #1a4a6a;border-radius:14px;max-width:500px;width:100%;margin:auto;padding:20px;box-sizing:border-box'>");
   mh.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid #1a3a5a;padding-bottom:12px'>");
   mh.push("<div><h3 style='color:#e8f5ff;font-size:15px;font-weight:700;margin:0 0 2px'>&#128197; Agendar Ronda Escolar</h3><p style='color:#38bdf8;font-size:10px;margin:0'>Calendario · 77a CIPM / BCS</p></div>");
-  mh.push("<button onclick='this.closest("[style*=fixed]").remove()' style='background:#0a1a2a;border:1px solid #1a3a5a;color:#4a7a9a;font-size:18px;cursor:pointer;border-radius:7px;width:32px;height:32px;line-height:1'>&#215;</button>");
+  mh.push("<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#0a1a2a;border:1px solid #1a3a5a;color:#4a7a9a;font-size:18px;cursor:pointer;border-radius:7px;width:32px;height:32px;line-height:1'>&#215;</button>");
   mh.push("</div>");
   mh.push("<div style='margin-bottom:12px'><label style='"+LS+"'>&#127979; Escola / Unidade</label><input id='ag-escola' type='text' value='"+esc(escolaNome||"")+"' placeholder='Nome da escola ou unidade' style='"+IS+"'></div>");
   mh.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px'>");
@@ -4902,7 +4902,7 @@ function agendarRondaEscolar(escolaNome){
   mh.push("<div style='margin-bottom:12px'><label style='"+LS+"'>&#128110; Policial Responsavel</label><input id='ag-resp' type='text' placeholder='Graduacao e nome' style='"+IS+"'></div>");
   mh.push("<div style='margin-bottom:16px'><label style='"+LS+"'>&#128221; Observacoes</label><textarea id='ag-obs' rows='3' placeholder='Objetivo da ronda, solicitacao...' style='"+IS+";resize:vertical;font-family:inherit'></textarea></div>");
   mh.push("<div style='display:grid;grid-template-columns:1fr 2fr;gap:10px'>");
-  mh.push("<button onclick='this.closest("[style*=fixed]").remove()' style='background:#070e1c;border:1px solid #1a3a5a;color:#4a6a8a;padding:11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button>");
+  mh.push("<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#070e1c;border:1px solid #1a3a5a;color:#4a6a8a;padding:11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>Cancelar</button>");
   mh.push("<button id='btn-salvar-ag-ronda' style='background:linear-gradient(135deg,#0a2a18,#0a3a20);border:1px solid #22c55e;color:#c8f0d8;padding:11px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>&#128197; Agendar no Calendario</button>");
   mh.push("</div></div>");
   modal.innerHTML=mh.join("");
