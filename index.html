@@ -559,13 +559,25 @@ async function carregarDoSheets() {
     // Aplicar edições locais sobre dados do servidor
     const ocMescladas = ocDeduplicadas;
 
-    // Merge padrão
-    const idsSheets = new Set(ocMescladas.map(function(o){return String(o.id).trim();}));
+    // 🔒 Registros SIGESPOL importados NUNCA são sobrescritos pelo Sheets
     const ocLocais = state.db.ocorrencias || [];
-    const ocApenas = ocLocais.filter(function(o){
+    const sigespolLocais = ocLocais.filter(function(o){ return o.fonte==='SIGESPOL'; });
+    const sigespolIds = new Set(sigespolLocais.map(function(o){ return String(o.id).trim(); }));
+
+    // Merge padrão (excluindo os IDs SIGESPOL do Sheets, caso existam)
+    const idsSheets = new Set(ocMescladas.map(function(o){return String(o.id).trim();}));
+    const ocNaoSigespol = ocLocais.filter(function(o){ return o.fonte!=='SIGESPOL'; });
+    const ocApenas = ocNaoSigespol.filter(function(o){
       return !idsSheets.has(String(o.id).trim()) && !idsArquivadas.has(String(o.id).trim());
     });
-    state.db.ocorrencias = ocMescladas.concat(ocApenas);
+    // SIGESPOL sempre na frente; Sheets preenche o resto (sem duplicar IDs SIGESPOL)
+    const sheetsNaoSigespol = ocMescladas.filter(function(o){ return !sigespolIds.has(String(o.id).trim()); });
+    // Se há dados SIGESPOL E modo protegido ativo → não adicionar registros do Sheets
+    if(sigespolLocais.length>0 && localStorage.getItem("bcs_import_lock")){
+      state.db.ocorrencias = sigespolLocais.concat(ocApenas);
+    } else {
+      state.db.ocorrencias = sigespolLocais.concat(sheetsNaoSigespol).concat(ocApenas);
+    }
 
     // Restaurar texto_original (não enviado ao Sheets em versões antigas) a partir do cache local
     var localOcMap = {};
