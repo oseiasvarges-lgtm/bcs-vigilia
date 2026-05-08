@@ -401,7 +401,10 @@ async function sincronizarSheets(){
     await salvarDadoAppSheets("bcs_projetos",        state.projetos||[]);
     await salvarDadoAppSheets("bcs_eventos_avulsos",  state.eventosAvulsos||[]);
     await salvarDadoAppSheets("bcs_alertas_projetos", state.alertasProjetos||[]);
-    console.log("[BCS] Sync Sheets OK — projetos:"+(state.projetos||[]).length+" eventos:"+(state.eventosAvulsos||[]).length);
+    await salvarDadoAppSheets("bcs_agendamentos",     state.db.agendamentos||[]);
+    await salvarDadoAppSheets("bcs_visitas",          state.db.visitas||[]);
+    await salvarDadoAppSheets("bcs_atendimentos",     state.db.atendimentos||[]);
+    console.log("[BCS] Sync Sheets OK — projetos:"+(state.projetos||[]).length+" agendamentos:"+(state.db.agendamentos||[]).length);
   } catch(e){
     console.log("[BCS] Sync Sheets erro:", e);
   }
@@ -435,20 +438,19 @@ function _salvarLocalSemSync(){
 async function carregarDadosAppDoSheets(){
   if(!SHEETS_URL) return;
   try{
-    var projetos = await lerDadoAppSheets("bcs_projetos");
-    var eventos  = await lerDadoAppSheets("bcs_eventos_avulsos");
-    var alertas  = await lerDadoAppSheets("bcs_alertas_projetos");
+    var projetos     = await lerDadoAppSheets("bcs_projetos");
+    var eventos      = await lerDadoAppSheets("bcs_eventos_avulsos");
+    var alertas      = await lerDadoAppSheets("bcs_alertas_projetos");
+    var agendamentos = await lerDadoAppSheets("bcs_agendamentos");
+    var visitas      = await lerDadoAppSheets("bcs_visitas");
+    var atendimentos = await lerDadoAppSheets("bcs_atendimentos");
 
-    // Só substitui local se o Sheets tiver dados reais.
-    // Nunca apaga dados locais com lista vazia vinda do Sheets.
     var localProj  = state.projetos||[];
     var localEv    = state.eventosAvulsos||[];
-    var localAlert = state.alertasProjetos||[];
 
     if(projetos && Array.isArray(projetos) && projetos.length > 0){
       state.projetos = projetos;
     } else if(projetos === null){
-      // Sheets ainda não tem o dado — mantém local, e sobe o local para o Sheets
       if(localProj.length > 0) sincronizarSheets();
     }
 
@@ -462,9 +464,20 @@ async function carregarDadosAppDoSheets(){
       state.alertasProjetos = alertas;
     }
 
-    // Salva sem disparar novo sync (evita loop)
+    // 📅 Calendário — agendamentos, visitas e atendimentos
+    if(agendamentos && Array.isArray(agendamentos) && agendamentos.length > 0){
+      state.db.agendamentos = agendamentos;
+    }
+    if(visitas && Array.isArray(visitas) && visitas.length > 0){
+      state.db.visitas = visitas;
+    }
+    if(atendimentos && Array.isArray(atendimentos) && atendimentos.length > 0){
+      state.db.atendimentos = atendimentos;
+    }
+
     _salvarLocalSemSync();
-    console.log("[BCS] Dados app Sheets — projetos:"+(state.projetos||[]).length+" eventos:"+(state.eventosAvulsos||[]).length);
+    render();
+    console.log("[BCS] Dados app Sheets — projetos:"+(state.projetos||[]).length+" agendamentos:"+(state.db.agendamentos||[]).length);
   } catch(e){
     console.log("[BCS] Erro ao carregar dados app do Sheets:", e);
   }
@@ -9348,7 +9361,15 @@ function abrirMonitorVCM(ocId){
 
 render();
 _carregando = false;
-if(SHEETS_URL && (state.db.ocorrencias||[]).length===0 && !localStorage.getItem("bcs_import_lock")){setTimeout(function(){ carregarDoSheets(); }, 300);}
+if(SHEETS_URL){
+  setTimeout(function(){
+    if((state.db.ocorrencias||[]).length===0 && !localStorage.getItem("bcs_import_lock")){
+      carregarDoSheets(); // primeira carga: tudo do Sheets
+    } else {
+      carregarDadosAppDoSheets(); // sempre sincroniza calendário/projetos
+    }
+  }, 300);
+}
 </script>
 </body>
 </html>
