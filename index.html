@@ -459,6 +459,8 @@ async function sincronizarSheets(){
     await salvarDadoAppSheets("bcs_atendimentos",     state.db.atendimentos||[]);
     await salvarDadoAppSheets("bcs_escolas",          state.escolas||[]);
     await salvarDadoAppSheets("bcs_atividades_esc",   state.atividadesEscolares||[]);
+    // 🏫 Módulo Escolar — sincronizar mapa de campos (classificacao, escolaNome…) entre dispositivos
+    try{ var _mods=JSON.parse(localStorage.getItem("bcs_oc_modulos")||"{}"); if(Object.keys(_mods).length>0) await salvarDadoAppSheets("bcs_oc_modulos",_mods); }catch(e2){}
     console.log("[BCS] Sync Sheets OK — projetos:"+(state.projetos||[]).length+" agendamentos:"+(state.db.agendamentos||[]).length);
   } catch(e){
     console.log("[BCS] Sync Sheets erro:", e);
@@ -489,6 +491,7 @@ function _salvarLocalSemSync(){
     if(state.alertasProjetos) localStorage.setItem("bcs_alertas_projetos",JSON.stringify(state.alertasProjetos));
     if(state.escolas) localStorage.setItem("bcs_escolas",JSON.stringify(state.escolas));
     if(state.atividadesEscolares) localStorage.setItem("bcs_atividades_escolares",JSON.stringify(state.atividadesEscolares));
+    _salvarModulos(); // garante que bcs_oc_modulos reflita o estado atual após merge do Sheets
   }catch(e){ console.error("[BCS] _salvarLocalSemSync:",e); }
 }
 
@@ -503,6 +506,7 @@ async function carregarDadosAppDoSheets(){
     var atendimentos   = await lerDadoAppSheets("bcs_atendimentos");
     var escolasSheets  = await lerDadoAppSheets("bcs_escolas");
     var atividEscSheets= await lerDadoAppSheets("bcs_atividades_esc");
+    var ocModulosSheets= await lerDadoAppSheets("bcs_oc_modulos");
 
     var localProj  = state.projetos||[];
     var localEv    = state.eventosAvulsos||[];
@@ -540,7 +544,19 @@ async function carregarDadosAppDoSheets(){
     state.escolas             = _mergeById(state.escolas||[],         escolasSheets);
     state.atividadesEscolares = _mergeById(state.atividadesEscolares||[], atividEscSheets);
 
+    // 🏫 Restaurar classificacao/escolaNome de outros dispositivos via Sheets
+    if(ocModulosSheets && typeof ocModulosSheets==="object" && !Array.isArray(ocModulosSheets)){
+      try{
+        var _localMods=JSON.parse(localStorage.getItem("bcs_oc_modulos")||"{}");
+        // Sheets é base; local sobrepõe (edição local é mais recente)
+        var _mergedMods=Object.assign({},ocModulosSheets,_localMods);
+        localStorage.setItem("bcs_oc_modulos",JSON.stringify(_mergedMods));
+        _restaurarModulos(state.db.ocorrencias); // aplica imediatamente em memória
+      }catch(e2){}
+    }
+
     _salvarLocalSemSync();
+    _salvarModulos(); // garante bcs_oc_modulos local atualizado
     render();
     console.log("[BCS] Dados app Sheets — projetos:"+(state.projetos||[]).length+" agendamentos:"+(state.db.agendamentos||[]).length);
   } catch(e){
@@ -736,9 +752,9 @@ async function carregarDoSheets() {
 
     // Carregar projetos / calendário / alertas do Sheets
     await carregarDadosAppDoSheets();
-    // Re-renderizar se tela for projetos/calendário/dashprojetos
+    // Re-renderizar telas que dependem dos dados carregados
     var mRe=document.getElementById("main");
-    if(mRe&&(state.tela==="projetos"||state.tela==="dashprojetos"||state.tela==="calendario")) renderTela();
+    if(mRe&&(state.tela==="projetos"||state.tela==="dashprojetos"||state.tela==="calendario"||state.tela==="escolas"||state.tela==="dashvcm")) renderTela();
 
   } catch(e) {
     _carregando = false;
@@ -1736,7 +1752,8 @@ function renderDashboardVCM(main){
   h+="<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px'>";
   h+="<div><h2 style='font-size:20px;font-weight:700;color:#ff69b4;margin:0 0 2px'>🌸 Dashboard VCM</h2>";
   h+="<p style='color:#7a5050;font-size:12px;margin:0'>Bairros: Primavera · Panorama · Pedrinhas · Alto Marom · Europa Unida · Cruzeiro · Guarani</p></div>";
-  h+="<div style='display:flex;flex-direction:column;align-items:flex-end;gap:4px'>";
+  h+="<div style='display:flex;flex-direction:column;align-items:flex-end;gap:8px'>";
+  h+="<a href='https://delegaciavirtual.sinesp.gov.br/portal/comunicacaofato/BA/natureza' target='_blank' rel='noopener' style='background:linear-gradient(135deg,#6a1a2a,#9a2a3a);border:1px solid #ef4444;color:#ffaaaa;padding:7px 14px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block'>🚨 Delegacia Virtual</a>";
   h+="<p style='color:#5a4040;font-size:9px;margin:0;text-transform:uppercase;letter-spacing:1px'>Período dos gráficos</p>";
   h+="<div style='display:flex;gap:6px;flex-wrap:wrap'>";
   FILTROS.forEach(function(f){
