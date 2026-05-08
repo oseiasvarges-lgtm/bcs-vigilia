@@ -107,11 +107,15 @@ button{cursor:pointer;}
 .chat-label{font-size:10px;color:#c8a84b;font-weight:700;letter-spacing:1px;margin-bottom:6px;}
 
 /* Calendar */
+@keyframes cal-piscar-amarelo{0%,100%{border-color:#c8a84b;box-shadow:0 0 6px #c8a84b88;}50%{border-color:#f5d070;box-shadow:0 0 14px #f5d07099;}}
+@keyframes cal-piscar-vermelho{0%,100%{border-color:#ef4444;box-shadow:0 0 6px #ef444488;}50%{border-color:#ff7070;box-shadow:0 0 16px #ff707099;}}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);}
 .cal-day{background:#1a1808;min-height:72px;padding:6px 5px;cursor:pointer;border:1px solid #2a2818;transition:background 0.15s;}
 .cal-day:hover{background:#242214;}
 .cal-day.today .cal-num{color:#c8a84b;font-weight:800;}
 .cal-day.selected{background:#242214;border-color:#5a5535;}
+.cal-day.alerta-2{animation:cal-piscar-amarelo 1.4s ease-in-out infinite;border-width:2px;}
+.cal-day.alerta-3{animation:cal-piscar-vermelho 0.9s ease-in-out infinite;border-width:2px;background:#1f0808;}
 .cal-num{font-size:15px;font-weight:700;margin-bottom:3px;color:#9a9070;}
 .cal-event{border-radius:3px;padding:2px 4px;font-size:9px;font-weight:700;overflow:hidden;white-space:nowrap;margin-bottom:2px;}
 .cal-header-day{padding:9px 0;text-align:center;font-size:11px;color:#7a7050;font-weight:700;background:#141208;}
@@ -1398,12 +1402,15 @@ function renderCalendar() {
   for(let i=0;i<primeiro;i++) html+=`<div class="cal-day"></div>`;
   for(let d=1;d<=total;d++){
     const ds=dStr(d), ev=getEvs(d), isHoje=ds===hojeStr, isSel=state.calDia===d;
-    const bg=isSel?"background:#1e1c12":isHoje?"background:#242214":"background:#141208";
-    html+=`<div class="cal-day${isHoje?" today":""}${isSel?" selected":""}" style="${bg}" onclick="calClick(${d})">
-      <div class="cal-num" style="color:${ev.ags.length||ev.vis.length?"#e8ddd0":"#9a9070"}">${d}</div>`;
+    const _evAvDia=(state.eventosAvulsos||[]).filter(e=>e.data===ds);
+    const totalEvDia=ev.ags.length+ev.vis.length+_evAvDia.length;
+    const alertaCls=totalEvDia>=3?" alerta-3":totalEvDia===2?" alerta-2":"";
+    const bg=isSel?"background:#1e1c12":isHoje?"background:#242214":(totalEvDia>=3?"background:#1f0808":"background:#141208");
+    html+=`<div class="cal-day${isHoje?" today":""}${isSel?" selected":""}${alertaCls}" style="${bg}" onclick="calClick(${d})">
+      <div class="cal-num" style="color:${totalEvDia?"#e8ddd0":"#9a9070"}">${d}</div>`;
     (ev.ags||[]).slice(0,2).forEach(a=>{ html+=`<div class="cal-event" style="background:${COR_VISITA[a.tipo]||"#c8a84b"};color:#000">${normHora(a.hora)} ${(a.vitima_nome||"--").split(" ")[0]}</div>`; });
     (ev.vis||[]).slice(0,1).forEach(v=>{ html+=`<div class="cal-event" style="background:#334155;color:#94a3b8">✓ ${(v.vitima_nome||"--").split(" ")[0]}</div>`; });
-    (state.eventosAvulsos||[]).filter(e=>e.data===ds).slice(0,1).forEach(e=>{ html+=`<div class="cal-event" style="background:${e.cor||"#8b5cf6"};color:#fff;font-size:9px">${e.hora||""} ${e.titulo.substring(0,10)}</div>`; });
+    _evAvDia.slice(0,1).forEach(e=>{ html+=`<div class="cal-event" style="background:${e.cor||"#8b5cf6"};color:#fff;font-size:9px">${e.hora||""} ${e.titulo.substring(0,10)}</div>`; });
     html+=`</div>`;
   }
   html+=`</div></div>`;
