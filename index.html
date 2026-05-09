@@ -318,6 +318,32 @@ function carregarLocal() {
       }
     } catch(e2){ console.warn("[BCS] Erro ao restaurar SIGESPOL backup:",e2); }
     // Restaurar campos de módulo (classificacao, escolaNome…) do mapa dedicado
+    // e, se bcs_oc_modulos estiver vazio, reconstruí-lo a partir de bcs_db_light
+    // (garante que o push ao Sheets tenha dados mesmo sem salvarLocal() explícito)
+    try{
+      var _rawMods=localStorage.getItem("bcs_oc_modulos");
+      var _existingMods=_rawMods?JSON.parse(_rawMods):{};
+      if(Object.keys(_existingMods).length===0){
+        // bcs_oc_modulos vazio: reconstruir a partir das ocorrências que estão em bcs_db_light
+        var _rebuilt={};
+        (db.ocorrencias||[]).forEach(function(o){
+          if(!o.id) return;
+          var k=String(o.id).trim();
+          if(o.classificacao||o.escolaNome||o.escolaId||(o.esc_registros&&o.esc_registros.length)){
+            _rebuilt[k]={
+              classificacao:o.classificacao||"",
+              escolaNome:o.escolaNome||"",
+              escolaId:o.escolaId||"",
+              tipoOcEscola:o.tipoOcEscola||"",
+              tipoViolenciaEscola:o.tipoViolenciaEscola||"",
+              esc_registros:o.esc_registros||[],
+              ps_registros:o.ps_registros||[]
+            };
+          }
+        });
+        if(Object.keys(_rebuilt).length>0) localStorage.setItem("bcs_oc_modulos",JSON.stringify(_rebuilt));
+      }
+    }catch(e3){}
     _restaurarModulos(db.ocorrencias);
     console.log("[BCS] Carregado local - OC:",db.ocorrencias.length,"Ag:",db.agendamentos.length);
     return db;
@@ -545,15 +571,18 @@ async function carregarDadosAppDoSheets(){
     state.atividadesEscolares = _mergeById(state.atividadesEscolares||[], atividEscSheets);
 
     // 🏫 Restaurar classificacao/escolaNome de outros dispositivos via Sheets
-    if(ocModulosSheets && typeof ocModulosSheets==="object" && !Array.isArray(ocModulosSheets)){
-      try{
-        var _localMods=JSON.parse(localStorage.getItem("bcs_oc_modulos")||"{}");
-        // Sheets é base; local sobrepõe (edição local é mais recente)
+    try{
+      var _localMods=JSON.parse(localStorage.getItem("bcs_oc_modulos")||"{}");
+      if(ocModulosSheets && typeof ocModulosSheets==="object" && !Array.isArray(ocModulosSheets)){
+        // Sheets tem dados → mesclar (local prevalece por ser mais recente)
         var _mergedMods=Object.assign({},ocModulosSheets,_localMods);
         localStorage.setItem("bcs_oc_modulos",JSON.stringify(_mergedMods));
-        _restaurarModulos(state.db.ocorrencias); // aplica imediatamente em memória
-      }catch(e2){}
-    }
+        _restaurarModulos(state.db.ocorrencias); // aplica classificacao/escolaNome em memória
+      } else if(ocModulosSheets===null && Object.keys(_localMods).length>0){
+        // Sheets ainda não tem → fazer push imediato (bootstrap cross-device)
+        salvarDadoAppSheets("bcs_oc_modulos",_localMods);
+      }
+    }catch(e2){}
 
     _salvarLocalSemSync();
     _salvarModulos(); // garante bcs_oc_modulos local atualizado
