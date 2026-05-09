@@ -596,11 +596,7 @@ async function carregarDadosAppDoSheets(){
 let _carregando = false;
 let _carregandoSince = null;
 async function carregarDoSheets() {
-  // 🔒 Modo protegido: dados importados têm prioridade — ignorar Sheets
-  if(localStorage.getItem("bcs_import_lock")){
-    console.log("[BCS] carregarDoSheets bloqueado — modo protegido ativo");
-    return;
-  }
+  // Sempre carrega do Sheets — merge local protege dados existentes
   // Resetar mutex se travado há mais de 60 segundos
   if(_carregando){
     var ageSec = _carregandoSince ? (Date.now() - _carregandoSince) / 1000 : 999;
@@ -7591,6 +7587,7 @@ function render(){
       <div style="padding:0 4px 8px">
         <p style="color:#2a2818;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px;text-align:center">Backup de Dados</p>
         <div style="display:flex;gap:6px">
+          <button onclick="abrirPlanilha()" title="Abrir a planilha Google Sheets" style="width:100%;background:#0a1a0a;border:1px solid #1a3a2a;color:#4a9a5a;padding:7px 4px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;text-align:center;margin-bottom:6px">🗂 Abrir Planilha</button>
           <button onclick="exportarDadosBCS()" title="Exportar todos os dados — use ao trocar de navegador" style="flex:1;background:#0a1a2a;border:1px solid #1a3a4a;color:#3a8ab0;padding:7px 4px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;text-align:center">⬇ Exportar</button>
           <label title="Importar backup de outro navegador" style="flex:1;background:#0a1a0a;border:1px solid #1a4a1a;color:#3a8a5a;padding:7px 4px;border-radius:7px;font-size:10px;font-weight:700;cursor:pointer;text-align:center;display:block">⬆ Importar<input type="file" accept=".json" onchange="importarDadosBCS(this)" style="display:none"/></label>
         </div>
@@ -7608,6 +7605,19 @@ function render(){
 // ══════════════════════════════════════════════════
 // LOGIN
 // ══════════════════════════════════════════════════
+function abrirPlanilha(){
+  const cb="bcs_planilha_"+Date.now();
+  const s=document.createElement("script");
+  window[cb]=function(res){
+    delete window[cb]; s.remove();
+    if(res&&res.ok&&res.url){ window.open(res.url,"_blank"); }
+    else { showToast("Não foi possível obter o link da planilha","error"); }
+  };
+  s.onerror=function(){delete window[cb];s.remove();showToast("Erro ao buscar planilha","error");};
+  s.src=SHEETS_URL+"?acao=info&token="+encodeURIComponent(BCS_TOKEN)+"&callback="+cb;
+  document.head.appendChild(s);
+}
+
 async function fazerLogin(tipo){
   const pin = document.getElementById("pin-input")?.value;
   const hash = await hashPin(pin);
@@ -7620,12 +7630,8 @@ async function fazerLogin(tipo){
     if(res && res.ok){
       state.perfil=res.perfil;
       render();
-      // Só carrega do Sheets se não há dados locais ou se não está em modo protegido
-      if(state.db.ocorrencias.length===0 && !localStorage.getItem("bcs_import_lock")){
-        carregarDoSheets();
-      } else {
-        carregarDadosAppDoSheets(); // carrega só projetos/calendário, não toca ocorrências
-      }
+      // Sempre busca dados do Sheets ao fazer login
+      carregarDoSheets();
     }
     else{ const err=document.getElementById("pin-err"); if(err) err.style.display="block"; }
   };
