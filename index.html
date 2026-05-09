@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
 <meta http-equiv="Expires" content="0"/>
-<title>IARA v0508b</title>
+<title>IARA v0508c</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -6957,7 +6957,7 @@ function _matchBairro(o){
   return (o.bairro||"").toLowerCase().includes(b)||(o.local||"").toLowerCase().includes(b);
 }
 
-function setTela(t){ state.tela=t; closeSidebar(); if(SHEETS_URL&&state.db.ocorrencias.length===0&&!localStorage.getItem("bcs_import_lock")) carregarDoSheets(); render(); }
+function setTela(t){ state.tela=t; closeSidebar(); render(); }
 
 function updateNavBtns(){
   document.querySelectorAll(".nav-btn").forEach(b=>{
@@ -9693,10 +9693,10 @@ render();
 _carregando = false;
 if(SHEETS_URL){
   setTimeout(function(){
-    if((state.db.ocorrencias||[]).length===0 && !localStorage.getItem("bcs_import_lock")){
-      carregarDoSheets(); // primeira carga: tudo do Sheets
+    if(!localStorage.getItem("bcs_import_lock")){
+      carregarDoSheets(); // sempre sincroniza ocorrências do Sheets (modo protegido usa apenas local)
     } else {
-      carregarDadosAppDoSheets(); // sempre sincroniza calendário/projetos
+      carregarDadosAppDoSheets(); // modo protegido: só app data (agendamentos, eventos…)
     }
   }, 300);
 }
