@@ -9250,8 +9250,13 @@ function gerarJanelaPDF(oc){
       h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.objetos)+"</td></tr>";
     }
     h+="</table>";
+    // Descrição
+    if(o.descricao){
+      h+="<p style='font-size:9px;font-weight:700;text-transform:uppercase;color:#1a3a6a;margin:8px 0 3px'>Descrição</p>";
+      h+="<p style='font-size:10px;line-height:1.6;margin:0;padding:6px 10px;border-left:3px solid #1a3a6a;background:#fafafa'>"+esc(o.descricao)+"</p>";
+    }
     // Dinâmica dos Fatos
-    var dinamica = (o.descricao_dinamica||o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
+    var dinamica = (o.descricao_dinamica||o.texto_original||"").trim();
     if(dinamica){
       h+="<p style='font-size:9px;font-weight:700;text-transform:uppercase;color:#1a3a6a;margin:8px 0 3px'>Dinâmica dos Fatos</p>";
       h+="<pre class='oc-texto'>"+esc(dinamica)+"</pre>";
