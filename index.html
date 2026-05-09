@@ -7271,6 +7271,7 @@ function renderTela() {
     g.push("<div style='display:flex;gap:7px;flex-wrap:wrap'>");
     g.push("<button class='btn btn-gold' onclick=\"setTela('lancar')\" style='font-size:12px;padding:8px 14px'>+ Lançar</button>");
     g.push("<button class='btn btn-ghost' onclick=\"abrirFormAgend();setTela('agendamentos')\" style='font-size:12px;padding:8px 14px;color:#b87333;border-color:#b87333'>📅 Agendar</button>");
+    g.push("<button onclick=\"setTela('importar_zap')\" style='font-size:12px;padding:8px 14px;background:rgba(200,168,75,0.12);border:1px solid rgba(200,168,75,0.5);color:#c8a84b;border-radius:8px;cursor:pointer;font-weight:700'>📥 Importar Dados</button>");
     g.push("<button onclick=\"carregarDoSheets();carregarDadosAppDoSheets()\" style='background:#1e2a14;border:1px solid #3a4a28;color:#6b8c42;padding:8px 14px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600'>↻ Sync</button>");
     g.push("</div></div>");
 
@@ -7993,13 +7994,13 @@ function renderMobileNav(){
     b1.innerHTML="<span>🛡</span><p>Painel</p>";
     b1.onclick=function(){setTela("dashboard");};
     const b2=mk("filtro","🔍","Filtro",function(){setTela("filtro");});
-    const b3=mk("wpp_upload","📱","WhatsApp",function(){abrirUploadWpp();});
+    const b3=mk("importar_zap","📥","Importar",function(){setTela("importar_zap");});
     nav.appendChild(b1);nav.appendChild(b2);nav.appendChild(b3);nav.appendChild(menu());
   } else {
     [["dashboard","📊","Painel",function(){setTela("dashboard");}],
-     ["calendario","🗓","Agenda",function(){setTela("calendario");}],
-     ["projetos","🟢","Projetos",function(){setTela("projetos");}],
-     ["dashcomandante","⚔️","Comando",function(){setTela("dashcomandante");}]
+     ["ocorrencias","🔍","Ocorrências",function(){setTela("ocorrencias");}],
+     ["importar_zap","📥","Importar",function(){setTela("importar_zap");}],
+     ["projetos","🟢","Projetos",function(){setTela("projetos");}]
     ].forEach(function(x){nav.appendChild(mk(x[0],x[1],x[2],x[3]));});
     nav.appendChild(menu());
   }
