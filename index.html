@@ -6,7 +6,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
 <meta http-equiv="Pragma" content="no-cache"/>
 <meta http-equiv="Expires" content="0"/>
-<title>IARA v0508c</title>
+<title>IARA v0508d</title>
 <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
@@ -713,34 +713,53 @@ async function carregarDoSheets() {
     var _localFullMap = {};
     ocLocais.forEach(function(o){ _localFullMap[String(o.id).trim()] = o; });
 
-    // ✅ ESTRATÉGIA: local é sempre a verdade — Sheets só traz ocorrências NOVAS
-    // Ocorrências já existentes no local NUNCA são sobrescritas pelo Sheets
-    // (evita truncar descrições, perder campos de módulo, etc.)
-    var sheetsNovas = ocDeduplicadas.filter(function(o){
+    // Helper: valor considerado "preenchido" (não nulo, não vazio, array não vazio)
+    function _temValor(v){ if(v===null||v===undefined||v==='') return false; if(Array.isArray(v)) return v.length>0; return true; }
+
+    // ✅ MERGE HÍBRIDO:
+    // • Registros em ambos (local + Sheets): Sheets como base, campos LOCAL não-nulos prevalecem
+    //   → corrige dados locais incompletos usando Sheets, preserva edições locais
+    // • Registros só no Sheets (genuinamente novos): usa Sheets como veio
+    // • Registros só no local: preservados integralmente (não estão no Sheets)
+    var ocMescladas = ocDeduplicadas
+      .filter(function(o){
+        var k = String(o.id).trim();
+        return !sigespolIds.has(k) && !idsArquivadas.has(k);
+      })
+      .map(function(o){
+        var k = String(o.id).trim();
+        var loc = _localFullMap[k];
+        if(!loc) return o; // novo do Sheets: usa como veio
+        // Existe no local: Sheets como base, local preenche/sobrepõe campos não-nulos
+        var merged = Object.assign({}, o);
+        Object.keys(loc).forEach(function(f){ if(_temValor(loc[f])) merged[f] = loc[f]; });
+        return merged;
+      });
+
+    // Ocorrências locais que NÃO estão no Sheets e não estão arquivadas
+    var idsSheetsMerge = new Set(ocMescladas.map(function(o){ return String(o.id).trim(); }));
+    var ocApenasLocais = ocNaoSigespol.filter(function(o){
       var k = String(o.id).trim();
-      if(sigespolIds.has(k))    return false; // SIGESPOL: nunca vem do Sheets
-      if(idsArquivadas.has(k))  return false; // arquivada: não recarregar
-      if(_localFullMap[k])      return false; // já existe local → local prevalece
-      return true; // realmente nova: adicionar
+      return !idsSheetsMerge.has(k) && !idsArquivadas.has(k);
     });
 
-    // Ocorrências locais válidas (não-SIGESPOL, não-arquivadas) — preservadas integralmente
-    var ocLocaisValidas = ocNaoSigespol.filter(function(o){
-      return !idsArquivadas.has(String(o.id).trim());
-    });
+    var _nNovas = ocDeduplicadas.filter(function(o){
+      var k = String(o.id).trim();
+      return !sigespolIds.has(k) && !idsArquivadas.has(k) && !_localFullMap[k];
+    }).length;
 
-    // Resultado: SIGESPOL + tudo local válido + novas do Sheets
+    // Resultado: SIGESPOL + merge(Sheets∪local) + apenas-local
     if(sigespolLocais.length>0 && localStorage.getItem("bcs_import_lock")){
-      state.db.ocorrencias = sigespolLocais.concat(ocLocaisValidas);
+      state.db.ocorrencias = sigespolLocais.concat(ocApenasLocais);
     } else {
-      state.db.ocorrencias = sigespolLocais.concat(ocLocaisValidas).concat(sheetsNovas);
+      state.db.ocorrencias = sigespolLocais.concat(ocMescladas).concat(ocApenasLocais);
     }
 
-    // 🛡 SAFETY: merge NUNCA deve reduzir o total — se reduzir, algo errou → manter local
-    var _minEsperado = sigespolLocais.length + ocLocaisValidas.length;
+    // 🛡 SAFETY: merge NUNCA deve reduzir o total de registros locais
+    var _minEsperado = ocLocais.filter(function(o){ return !idsArquivadas.has(String(o.id).trim()); }).length;
     if(state.db.ocorrencias.length < _minEsperado){
-      console.warn("[BCS] ⚠ Merge reduziu "+ocLocais.length+"→"+state.db.ocorrencias.length+", revertendo para local");
-      state.db.ocorrencias = sigespolLocais.concat(ocLocaisValidas);
+      console.warn("[BCS] ⚠ Merge cortou registros "+ocLocais.length+"→"+state.db.ocorrencias.length+", revertendo");
+      state.db.ocorrencias = ocLocais.filter(function(o){ return !idsArquivadas.has(String(o.id).trim()); });
     }
 
     // Segurança extra: restaurar campos de módulo do mapa dedicado (imune ao sync)
@@ -760,7 +779,6 @@ async function carregarDoSheets() {
 
     salvarLocal();
     const n = state.db.ocorrencias.length;
-    const _nNovas = sheetsNovas.length;
     showToast(n+" oc · "+(_nNovas>0?"+"+_nNovas+" novas do Sheets":"sem novas do Sheets"));
     setS("<span style='color:#6b8c42'>✓ "+n+" ocorrências"+(_nNovas?" ("+_nNovas+" novas)":"")+" · "+new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"})+"</span>");
     _carregando = false;
