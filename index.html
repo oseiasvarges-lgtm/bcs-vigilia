@@ -9857,7 +9857,8 @@ function renderOcorrenciasGestor(el, perfil_atual){
       if(o.suspeito_nome) h.push("<div><span style='"+fcS+"'>Autor/Suspeito</span><span style='"+fcV+"'>"+esc(o.suspeito_nome)+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+"</span></div>");
       if(o.objetos) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Objetos</span><span style='"+fcV+"'>"+esc(o.objetos)+"</span></div>");
       h.push("</div>");
-      var dinamica=o.descricao_dinamica||o.texto_original||o.descricao||"";
+      if(o.descricao) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Descrição</span><p style='"+fcV+";margin:0;white-space:pre-wrap'>"+esc(o.descricao)+"</p></div>");
+      var dinamica=o.descricao_dinamica||o.texto_original||"";
       if(dinamica) h.push("<div style='background:#060d1c;border:1px solid #1a3358;border-radius:6px;padding:10px;margin-bottom:8px'><span style='"+fcS+"'>Dinâmica dos Fatos</span><p style='color:#c8d8f0;font-size:11px;line-height:1.7;margin:0;white-space:pre-wrap'>"+esc(dinamica)+"</p></div>");
       if(o.medidas) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Medidas Adotadas</span><p style='"+fcV+";margin:0;white-space:pre-wrap'>"+esc(o.medidas)+"</p></div>");
       if(o.policiais) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Policiais</span><span style='"+fcV+"'>"+esc(o.policiais)+"</span></div>");
