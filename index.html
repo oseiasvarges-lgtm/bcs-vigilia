@@ -6116,10 +6116,12 @@ async function enviarMensagemIA(pergunta){
     if(data.error){
       var emsg=data.error.message||JSON.stringify(data.error);
       if(data.error.type==="authentication_error"){
-        emsg="Chave de API inválida. Verifique em console.anthropic.com → API Keys.";
+        emsg="Chave de API inválida. Insira uma chave válida no campo acima.";
         localStorage.removeItem("bcs_anthropic_key");
+        var sec=document.getElementById("ia-key-section");
+        if(sec){sec.style.display="block";var inp=document.getElementById("ia-key-input");if(inp)inp.dataset.pending=pergunta;}
       }
-      state.iaChat.push({role:"assistant",content:"❌ Erro da API: "+emsg});
+      state.iaChat.push({role:"assistant",content:"❌ "+emsg});
     } else {
       var resposta=(data.content&&data.content[0])?data.content[0].text:"Resposta vazia da IA.";
       state.iaChat.push({role:"assistant",content:resposta});
