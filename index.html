@@ -6071,14 +6071,16 @@ function _renderChatIA(){
   chatEl.scrollTop=chatEl.scrollHeight;
 }
 
-function _getIAKey(){ return localStorage.getItem("bcs_anthropic_key")||ANTHROPIC_KEY||""; }
+function _getIAKey(){ return localStorage.getItem("bcs_gemini_key")||""; }
 function _salvarIAKey(){
   var v=(document.getElementById("ia-key-input")||{}).value||"";
   if(!v){showToast("Informe a chave","error");return;}
-  localStorage.setItem("bcs_anthropic_key",v.trim());
-  showToast("✓ Chave salva! Enviando pergunta...");
-  var pending=document.getElementById("ia-key-input").dataset.pending;
-  document.getElementById("ia-key-section").style.display="none";
+  localStorage.setItem("bcs_gemini_key",v.trim());
+  showToast("✓ Chave Gemini salva!");
+  var el=document.getElementById("ia-key-input");
+  var pending=el?el.dataset.pending:"";
+  var sec=document.getElementById("ia-key-section");
+  if(sec) sec.style.display="none";
   if(pending) enviarMensagemIA(pending);
 }
 
@@ -6102,30 +6104,32 @@ async function enviarMensagemIA(pergunta){
     var sys=_buildIASystem(ctx);
     var msgs=state.iaChat.slice(-12);
     if(!chave){
-      state.iaChat.push({role:"assistant",content:"🔑 Insira sua chave de API Anthropic no campo abaixo para usar o assistente."});
+      state.iaChat.push({role:"assistant",content:"🔑 Insira sua chave do Google Gemini no campo abaixo (obtenha grátis em aistudio.google.com → Get API Key)."});
       _renderChatIA();
       var sec=document.getElementById("ia-key-section");
-      if(sec){sec.style.display="block";}
+      if(sec) sec.style.display="block";
       return;
     }
-    var res=await fetch("https://api.anthropic.com/v1/messages",{
+    // Converter histórico para formato Gemini (role: user/model)
+    var contents=msgs.map(function(m){return{role:m.role==="assistant"?"model":"user",parts:[{text:m.content}]};});
+    var geminiBody={system_instruction:{parts:[{text:sys}]},contents:contents,generationConfig:{maxOutputTokens:2000,temperature:0.7}};
+    var res=await fetch("https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key="+chave,{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":chave,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-3-5-haiku-20241022",max_tokens:2000,system:sys,messages:msgs})
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify(geminiBody)
     });
     var data=await res.json();
-    console.log("[IA] resposta API:",JSON.stringify(data).substring(0,300));
+    console.log("[IA] Gemini:",JSON.stringify(data).substring(0,300));
     if(data.error){
       var emsg=data.error.message||JSON.stringify(data.error);
-      if(data.error.type==="authentication_error"){
-        localStorage.removeItem("bcs_anthropic_key");
-        emsg="Chave inválida ou expirada. Cole a chave completa do console.anthropic.com → API Keys.";
+      if(data.error.code===400||data.error.code===401||data.error.code===403){
+        localStorage.removeItem("bcs_gemini_key");
         var sec2=document.getElementById("ia-key-section");
-        if(sec2){sec2.style.display="block";}
+        if(sec2) sec2.style.display="block";
       }
-      state.iaChat.push({role:"assistant",content:"❌ "+emsg});
+      state.iaChat.push({role:"assistant",content:"❌ Erro Gemini: "+emsg});
     } else {
-      var resposta=(data.content&&data.content[0])?data.content[0].text:"Resposta vazia da IA.";
+      var resposta=data.candidates&&data.candidates[0]&&data.candidates[0].content&&data.candidates[0].content.parts?data.candidates[0].content.parts[0].text:"Resposta vazia.";
       state.iaChat.push({role:"assistant",content:resposta});
     }
   } catch(err){
@@ -6162,9 +6166,10 @@ function renderAssistenteIA(main){
   // Campo de chave
   var temChave2=!!_getIAKey();
   h+="<div id='ia-key-section' style='display:"+(temChave2?"none":"block")+";background:#1a0e00;border:1px solid #c8a84b44;border-radius:10px;padding:14px 16px;flex-shrink:0'>";
-  h+="<p style='color:#c8a84b;font-size:12px;font-weight:700;margin:0 0 8px'>🔑 Chave de API Anthropic (opcional)</p>";
+  h+="<p style='color:#c8a84b;font-size:12px;font-weight:700;margin:0 0 4px'>🔑 Chave Google Gemini</p>";
+  h+="<p style='color:#5a5535;font-size:11px;margin:0 0 10px'>Gratuito em <a href='https://aistudio.google.com' target='_blank' style='color:#c8a84b'>aistudio.google.com</a> → Get API Key</p>";
   h+="<div style='display:flex;gap:8px'>";
-  h+="<input id='ia-key-input' type='password' placeholder='sk-ant-api03-...' style='flex:1;background:#0e0c06;border:1px solid #3a3820;color:#e8e0cc;padding:9px 12px;border-radius:8px;font-size:12px;font-family:monospace' onkeydown=\"if(event.key==='Enter')_salvarIAKey()\">";
+  h+="<input id='ia-key-input' type='password' placeholder='AIzaSy...' style='flex:1;background:#0e0c06;border:1px solid #3a3820;color:#e8e0cc;padding:9px 12px;border-radius:8px;font-size:12px;font-family:monospace' onkeydown=\"if(event.key==='Enter')_salvarIAKey()\">";
   h+="<button onclick='_salvarIAKey()' style='background:#c8a84b;border:none;color:#0e0c06;padding:9px 18px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>Salvar</button>";
   h+="</div></div>";
   // Área de chat
