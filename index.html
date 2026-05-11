@@ -5994,6 +5994,157 @@ function _salvarTipoEscolar(ocId){
   salvarLocal(); showToast("Classificação escolar salva!");
 }
 
+// ══════════════════════════════════════════════════════════════════
+// ASSISTENTE IA — Chat com Claude sobre ocorrências
+// ══════════════════════════════════════════════════════════════════
+
+function _buildIAContext(){
+  var ocs=state.db.ocorrencias||[];
+  var hojeD=new Date();
+  var mes=hojeD.getMonth(), ano=hojeD.getFullYear();
+  var mesStr=String(ano)+"-"+String(mes+1).padStart(2,"0");
+  var mesPas=mes===0?String(ano-1)+"-12":String(ano)+"-"+String(mes).padStart(2,"0");
+  var ocMes=ocs.filter(function(o){return (o.data||"").startsWith(mesStr);});
+  var ocMesAnt=ocs.filter(function(o){return (o.data||"").startsWith(mesPas);});
+  var porTipo={};
+  ocs.forEach(function(o){var t=o.tipo||"Não informado";porTipo[t]=(porTipo[t]||0)+1;});
+  var tiposOrd=Object.entries(porTipo).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  var porBairro={};
+  ocs.forEach(function(o){var b=o.bairro||"Não informado";porBairro[b]=(porBairro[b]||0)+1;});
+  var bairrosOrd=Object.entries(porBairro).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+  var porMes={};
+  ocs.forEach(function(o){var m=(o.data||"").substring(0,7);if(m)porMes[m]=(porMes[m]||0)+1;});
+  var mesesOrd=Object.entries(porMes).sort(function(a,b){return b[0]<a[0]?1:-1;}).slice(-6);
+  var feminino=ocs.filter(function(o){return o.vitima_sexo==="F"||o.vitima_sexo==="Feminino";}).length;
+  var masculino=ocs.filter(function(o){return o.vitima_sexo==="M"||o.vitima_sexo==="Masculino";}).length;
+  var vd=ocs.filter(function(o){return o.violencia_domestica||((o.tipo||"").toLowerCase().includes("maria da penha"));}).length;
+  var vcm=ocs.filter(function(o){var t=(o.tipo||"").toLowerCase();return t.includes("violência contra a mulher")||t.includes("vcm")||t.includes("violencia contra");}).length;
+  var reinc=ocs.filter(function(o){return o.reincidente;}).length;
+  var mp=ocs.filter(function(o){return o.medida_protetiva==="Sim";}).length;
+  var recentes=ocs.slice(0,8).map(function(o){return (o.data||"—")+" · "+(o.tipo||"—")+" · "+(o.vitima_nome||"—")+" · Bairro: "+(o.bairro||"—");});
+  return {total:ocs.length,mesAtual:{nome:mesStr,total:ocMes.length},mesAnterior:{nome:mesPas,total:ocMesAnt.length},porTipo:tiposOrd,porBairro:bairrosOrd,porMes:mesesOrd,feminino:feminino,masculino:masculino,vd:vd,vcm:vcm,reinc:reinc,medidasProtetivas:mp,recentes:recentes,agendamentos:(state.db.agendamentos||[]).length,visitas:(state.db.visitas||[]).length,atendimentos:(state.db.atendimentos||[]).length};
+}
+
+function _buildIASystem(ctx){
+  return "Você é o assistente de inteligência da 77ª CIPM BCS — Base Comunitária de Segurança. Seu papel é analisar dados criminais, identificar padrões e apoiar decisões de policiamento comunitário.\n\n"+
+"DADOS ATUAIS DO SISTEMA:\n"+
+"- Total de ocorrências: "+ctx.total+"\n"+
+"- Mês atual ("+ctx.mesAtual.nome+"): "+ctx.mesAtual.total+" ocorrências\n"+
+"- Mês anterior ("+ctx.mesAnterior.nome+"): "+ctx.mesAnterior.total+" ocorrências\n"+
+"- Agendamentos ativos: "+ctx.agendamentos+" | Visitas: "+ctx.visitas+" | Atendimentos: "+ctx.atendimentos+"\n\n"+
+"TIPOS DE CRIME (top 10):\n"+ctx.porTipo.map(function(t){return "- "+t[0]+": "+t[1];}).join("\n")+"\n\n"+
+"BAIRROS (mais ocorrências):\n"+ctx.porBairro.map(function(b){return "- "+b[0]+": "+b[1];}).join("\n")+"\n\n"+
+"EVOLUÇÃO MENSAL:\n"+ctx.porMes.map(function(m){return "- "+m[0]+": "+m[1];}).join("\n")+"\n\n"+
+"PERFIL DAS VÍTIMAS:\n"+
+"- Feminino: "+ctx.feminino+" | Masculino: "+ctx.masculino+"\n"+
+"- Violência Doméstica (VD): "+ctx.vd+"\n"+
+"- Violência Contra a Mulher (VCM): "+ctx.vcm+"\n"+
+"- Reincidentes: "+ctx.reinc+" | Com Medida Protetiva: "+ctx.medidasProtetivas+"\n\n"+
+"ÚLTIMAS OCORRÊNCIAS:\n"+ctx.recentes.join("\n")+"\n\n"+
+"Responda sempre em português brasileiro. Seja objetivo, analítico e profissional. Use formatação com **negrito** para destaques e quebras de linha para clareza. Quando gerar relatórios, estruture em seções com títulos. Nunca invente dados além dos fornecidos.";
+}
+
+function _renderChatIA(){
+  var chatEl=document.getElementById("ia-chat-msgs");
+  if(!chatEl) return;
+  chatEl.innerHTML="";
+  if(!state.iaChat||state.iaChat.length===0){
+    chatEl.innerHTML="<div style='text-align:center;padding:50px 20px;color:#3a3820'><div style='font-size:52px;margin-bottom:14px'>🤖</div><p style='font-size:15px;font-weight:700;color:#5a5535'>Assistente de Inteligência IARA</p><p style='font-size:12px;margin-top:8px;line-height:1.6'>Faça uma pergunta ou escolha uma análise rápida abaixo.<br>Tenho acesso a todos os dados de ocorrências do sistema.</p></div>";
+    return;
+  }
+  (state.iaChat||[]).forEach(function(msg){
+    var isUser=msg.role==="user";
+    var div=document.createElement("div");
+    div.style.cssText="display:flex;gap:10px;margin-bottom:16px;align-items:flex-start"+(isUser?";flex-direction:row-reverse":"");
+    var avatar=isUser
+      ?"<div style='width:30px;height:30px;border-radius:50%;background:#c8a84b;display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0'>👮</div>"
+      :"<div style='width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#1a3a6a,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0'>🤖</div>";
+    var texto=esc(msg.content)
+      .replace(/\*\*(.*?)\*\*/g,"<strong style='color:#c8a84b'>$1</strong>")
+      .replace(/\*(.*?)\*/g,"<em>$1</em>")
+      .replace(/#{1,3} (.*?)(\n|$)/g,"<div style='font-size:13px;font-weight:800;color:#c8a84b;margin:10px 0 4px'>$1</div>")
+      .replace(/\n/g,"<br>");
+    var bubble="<div style='max-width:85%;background:"+(isUser?"#1a2a08":"#1a1808")+";border:1px solid "+(isUser?"#3a5a18":"#3a3820")+";border-radius:"+(isUser?"10px 0 10px 10px":"0 10px 10px 10px")+";padding:11px 15px;font-size:12.5px;line-height:1.75;color:#e8e0cc'>"+texto+"</div>";
+    div.innerHTML=avatar+bubble;
+    chatEl.appendChild(div);
+  });
+  chatEl.scrollTop=chatEl.scrollHeight;
+}
+
+async function enviarMensagemIA(pergunta){
+  if(!ANTHROPIC_KEY){showToast("Configure a chave de API Anthropic","error");return;}
+  if(!state.iaChat) state.iaChat=[];
+  state.iaChat.push({role:"user",content:pergunta});
+  _renderChatIA();
+  // Typing indicator
+  var chatEl=document.getElementById("ia-chat-msgs");
+  if(chatEl){
+    var tp=document.createElement("div");
+    tp.id="ia-typing";
+    tp.style.cssText="display:flex;gap:10px;margin-bottom:12px;align-items:flex-start";
+    tp.innerHTML="<div style='width:30px;height:30px;border-radius:50%;background:linear-gradient(135deg,#1a3a6a,#8b5cf6);display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0'>🤖</div><div style='background:#1a1808;border:1px solid #3a3820;border-radius:0 10px 10px 10px;padding:11px 15px;color:#5a5535;font-size:12px;animation:pulse 1.2s infinite'>Analisando dados das ocorrências...</div>";
+    chatEl.appendChild(tp);
+    chatEl.scrollTop=chatEl.scrollHeight;
+  }
+  try {
+    var ctx=_buildIAContext();
+    var sys=_buildIASystem(ctx);
+    var msgs=state.iaChat.slice(-12);
+    var res=await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-opus-4-5",max_tokens:2000,system:sys,messages:msgs})
+    });
+    var data=await res.json();
+    var resposta=(data.content&&data.content[0])?data.content[0].text:"Erro ao obter resposta da IA.";
+    state.iaChat.push({role:"assistant",content:resposta});
+  } catch(err){
+    state.iaChat.push({role:"assistant",content:"Erro ao conectar com a IA: "+err.message});
+  }
+  _renderChatIA();
+}
+
+function renderAssistenteIA(main){
+  if(!state.iaChat) state.iaChat=[];
+  var chips=[
+    {icon:"📊",q:"Faça um resumo completo das ocorrências do mês atual, comparando com o mês anterior."},
+    {icon:"🏘",q:"Quais são os bairros mais críticos? Analise os padrões por localidade."},
+    {icon:"👥",q:"Faça uma análise do perfil das vítimas — sexo, reincidência, violência doméstica."},
+    {icon:"📈",q:"Analise as tendências criminais dos últimos meses e aponte alertas."},
+    {icon:"🔄",q:"Analise os casos de reincidência e sugira ações de prevenção."},
+    {icon:"🌸",q:"Faça uma análise específica dos casos de VCM e violência doméstica."},
+    {icon:"⚠️",q:"Quais são os principais pontos de atenção e recomendações operacionais?"},
+    {icon:"📝",q:"Gere um relatório mensal completo estruturado para apresentação ao comando."}
+  ];
+  var h="<div style='max-width:920px;margin:0 auto;height:calc(100vh - 90px);display:flex;flex-direction:column;gap:10px'>";
+  // Header
+  h+="<div style='display:flex;align-items:center;justify-content:space-between;flex-shrink:0'>";
+  h+="<div><h2 style='font-size:20px;font-weight:800;color:#e8ddd0;margin:0'>🤖 Assistente IA</h2><p style='color:#4a4530;font-size:11px;margin:2px 0 0'>Análise inteligente · IARA — 77ª CIPM BCS · powered by Claude</p></div>";
+  h+="<button onclick=\"state.iaChat=[];_renderChatIA()\" style='background:#1a1808;border:1px solid #3a3820;color:#5a5535;padding:7px 14px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600'>🗑 Nova conversa</button>";
+  h+="</div>";
+  // Chips de perguntas rápidas
+  h+="<div style='display:flex;flex-wrap:wrap;gap:6px;flex-shrink:0'>";
+  chips.forEach(function(c){
+    h+="<button onclick=\"enviarMensagemIA("+JSON.stringify(c.q)+")\" style='background:#1a1808;border:1px solid #3a3820;color:#9a9070;padding:6px 13px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s' onmouseover=\"this.style.borderColor='#8b5cf6';this.style.color='#a78bfa'\" onmouseout=\"this.style.borderColor='#3a3820';this.style.color='#9a9070'\">"+c.icon+" "+c.icon.length>1?c.q.split(" ").slice(0,4).join(" ")+"…":c.q+"</button>";
+  });
+  h+="</div>";
+  // Área de chat
+  h+="<div id='ia-chat-msgs' style='flex:1;overflow-y:auto;background:#0e0c06;border:1px solid #2a2818;border-radius:12px 12px 0 0;padding:18px;min-height:0'></div>";
+  // Input
+  h+="<div style='background:#1a1808;border:1px solid #3a3820;border-top:none;border-radius:0 0 12px 12px;padding:12px 14px;display:flex;gap:8px;flex-shrink:0'>";
+  h+="<textarea id='ia-input' placeholder='Faça uma pergunta sobre as ocorrências, padrões criminais ou peça um relatório...' rows='2' style='flex:1;background:#0e0c06;border:1px solid #2a2818;color:#e8e0cc;padding:10px 12px;border-radius:8px;font-size:13px;resize:none;font-family:inherit;line-height:1.5' onkeydown=\"if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();var v=this.value.trim();if(v){this.value='';enviarMensagemIA(v);}}\"></textarea>";
+  h+="<button onclick=\"var v=document.getElementById('ia-input').value.trim();if(v){document.getElementById('ia-input').value='';enviarMensagemIA(v);}\" style='background:linear-gradient(135deg,#6d28d9,#8b5cf6);border:none;color:#fff;padding:10px 20px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;align-self:flex-end;white-space:nowrap'>↑ Enviar</button>";
+  h+="</div>";
+  h+="</div>";
+  main.innerHTML=h;
+  // Fix chip labels
+  main.querySelectorAll("button[onclick^='enviarMensagemIA']").forEach(function(btn,i){
+    var c=chips[i];
+    if(c) btn.textContent=c.icon+" "+["Resumo do mês","Bairros críticos","Perfil vítimas","Tendências","Reincidências","Análise VCM","Pontos de atenção","Relatório mensal"][i];
+  });
+  _renderChatIA();
+}
+
 function renderTela() {
   const main=document.getElementById("main");
   if(!main)return;
@@ -7263,6 +7414,16 @@ function renderTela() {
     return;
   }
 
+  // ASSISTENTE IA
+  if(tela==="assistente"){
+    renderAssistenteIA(main);
+    return;
+  }
+
+  // ══════════════════════════════════════════════════
+  // ASSISTENTE IA
+  // ══════════════════════════════════════════════════
+
   // DASHBOARD GESTOR
   // ── DASHBOARD GESTOR — Alertas + Calendário ──────
   (function renderDashGestor(){
@@ -7617,6 +7778,7 @@ function render(){
       <button class="nav-btn${state.tela==="calendario"?" active":""}" data-tela="calendario" onclick="setTela('calendario')">🗓 Calendário</button>
       <button class="nav-btn${state.tela==="dashvcm"?" active":""}" data-tela="dashvcm" onclick="setTela('dashvcm')" style="color:#ff69b4;border-color:${state.tela==="dashvcm"?"#ff1493":"transparent"}">🌸 Dashboard VCM</button>
       <button class="nav-btn${state.tela==="cadastrosvcm"?" active":""}" data-tela="cadastrosvcm" onclick="setTela('cadastrosvcm')" style="color:#ff69b4;border-color:${state.tela==="cadastrosvcm"?"#ff1493":"transparent"}">🌸 Cadastros VCM</button>
+      <button class="nav-btn${state.tela==="assistente"?" active":""}" data-tela="assistente" onclick="setTela('assistente')" style="color:${state.tela==="assistente"?"#a78bfa":"#a78bfa88"};border-color:${state.tela==="assistente"?"#a78bfa":"transparent"}">🤖 Assistente IA</button>
       <button class="nav-btn${state.tela==="escolas"?" active":""}" data-tela="escolas" onclick="setTela('escolas')" style="color:${state.tela==="escolas"?"#38bdf8":"#38bdf888"};border-color:${state.tela==="escolas"?"#38bdf8":"transparent"}">🏫 Módulo Escolar</button>
       <button class="nav-btn${state.tela==="projetossociais"?" active":""}" data-tela="projetossociais" onclick="setTela('projetossociais')" style="color:${state.tela==='projetossociais'?'#a78bfa':'#a78bfa88'};border-color:${state.tela==='projetossociais'?'#a78bfa':'transparent'}">🌱 Projetos Sociais</button>
           `}
