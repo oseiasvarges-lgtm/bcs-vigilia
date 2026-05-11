@@ -6085,12 +6085,10 @@ function _salvarIAKey(){
 async function enviarMensagemIA(pergunta){
   var chave=_getIAKey();
   if(!chave){
-    // Mostrar campo de configuração inline
     var sec=document.getElementById("ia-key-section");
     if(sec){sec.style.display="block";var inp=document.getElementById("ia-key-input");if(inp)inp.dataset.pending=pergunta;}
     return;
   }
-  var ANTHROPIC_KEY=chave;
   if(!state.iaChat) state.iaChat=[];
   state.iaChat.push({role:"user",content:pergunta});
   _renderChatIA();
@@ -6110,14 +6108,25 @@ async function enviarMensagemIA(pergunta){
     var msgs=state.iaChat.slice(-12);
     var res=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      headers:{"Content-Type":"application/json","x-api-key":chave,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
       body:JSON.stringify({model:"claude-opus-4-5",max_tokens:2000,system:sys,messages:msgs})
     });
     var data=await res.json();
-    var resposta=(data.content&&data.content[0])?data.content[0].text:"Erro ao obter resposta da IA.";
-    state.iaChat.push({role:"assistant",content:resposta});
+    console.log("[IA] resposta API:",JSON.stringify(data).substring(0,300));
+    if(data.error){
+      var emsg=data.error.message||JSON.stringify(data.error);
+      if(data.error.type==="authentication_error"){
+        emsg="Chave de API inválida. Verifique em console.anthropic.com → API Keys.";
+        localStorage.removeItem("bcs_anthropic_key");
+      }
+      state.iaChat.push({role:"assistant",content:"❌ Erro da API: "+emsg});
+    } else {
+      var resposta=(data.content&&data.content[0])?data.content[0].text:"Resposta vazia da IA.";
+      state.iaChat.push({role:"assistant",content:resposta});
+    }
   } catch(err){
-    state.iaChat.push({role:"assistant",content:"Erro ao conectar com a IA: "+err.message});
+    console.log("[IA] erro fetch:",err);
+    state.iaChat.push({role:"assistant",content:"❌ Erro de conexão: "+err.message});
   }
   _renderChatIA();
 }
