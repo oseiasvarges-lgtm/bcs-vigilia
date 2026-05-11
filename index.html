@@ -6071,8 +6071,26 @@ function _renderChatIA(){
   chatEl.scrollTop=chatEl.scrollHeight;
 }
 
+function _getIAKey(){ return localStorage.getItem("bcs_anthropic_key")||ANTHROPIC_KEY||""; }
+function _salvarIAKey(){
+  var v=(document.getElementById("ia-key-input")||{}).value||"";
+  if(!v){showToast("Informe a chave","error");return;}
+  localStorage.setItem("bcs_anthropic_key",v.trim());
+  showToast("✓ Chave salva! Enviando pergunta...");
+  var pending=document.getElementById("ia-key-input").dataset.pending;
+  document.getElementById("ia-key-section").style.display="none";
+  if(pending) enviarMensagemIA(pending);
+}
+
 async function enviarMensagemIA(pergunta){
-  if(!ANTHROPIC_KEY){showToast("Configure a chave de API Anthropic","error");return;}
+  var chave=_getIAKey();
+  if(!chave){
+    // Mostrar campo de configuração inline
+    var sec=document.getElementById("ia-key-section");
+    if(sec){sec.style.display="block";var inp=document.getElementById("ia-key-input");if(inp)inp.dataset.pending=pergunta;}
+    return;
+  }
+  var ANTHROPIC_KEY=chave;
   if(!state.iaChat) state.iaChat=[];
   state.iaChat.push({role:"user",content:pergunta});
   _renderChatIA();
@@ -6128,6 +6146,15 @@ function renderAssistenteIA(main){
     h+="<button onclick=\"enviarMensagemIA("+JSON.stringify(c.q)+")\" style='background:#1a1808;border:1px solid #3a3820;color:#9a9070;padding:6px 13px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s' onmouseover=\"this.style.borderColor='#8b5cf6';this.style.color='#a78bfa'\" onmouseout=\"this.style.borderColor='#3a3820';this.style.color='#9a9070'\">"+c.icon+" "+c.icon.length>1?c.q.split(" ").slice(0,4).join(" ")+"…":c.q+"</button>";
   });
   h+="</div>";
+  // Configuração de chave (oculto por padrão)
+  var temChave=!!_getIAKey();
+  h+="<div id='ia-key-section' style='display:"+(temChave?"none":"block")+";background:#1a0e00;border:1px solid #c8a84b44;border-radius:10px;padding:14px 16px;flex-shrink:0'>";
+  h+="<p style='color:#c8a84b;font-size:12px;font-weight:700;margin:0 0 8px'>🔑 Chave de API Anthropic necessária</p>";
+  h+="<p style='color:#7a7050;font-size:11px;margin:0 0 10px'>Obtenha em <a href='https://console.anthropic.com' target='_blank' style='color:#c8a84b'>console.anthropic.com</a> → API Keys</p>";
+  h+="<div style='display:flex;gap:8px'>";
+  h+="<input id='ia-key-input' type='password' placeholder='sk-ant-...' style='flex:1;background:#0e0c06;border:1px solid #3a3820;color:#e8e0cc;padding:9px 12px;border-radius:8px;font-size:12px;font-family:monospace' onkeydown=\"if(event.key==='Enter')_salvarIAKey()\">";
+  h+="<button onclick='_salvarIAKey()' style='background:#c8a84b;border:none;color:#0e0c06;padding:9px 18px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>Salvar</button>";
+  h+="</div></div>";
   // Área de chat
   h+="<div id='ia-chat-msgs' style='flex:1;overflow-y:auto;background:#0e0c06;border:1px solid #2a2818;border-radius:12px 12px 0 0;padding:18px;min-height:0'></div>";
   // Input
