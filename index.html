@@ -9903,9 +9903,12 @@ function renderOcorrenciasGestor(el, perfil_atual){
     buscaInput.oninput = function(){
       state.filtroOcBusca = this.value;
       clearTimeout(_buscaTimer);
+      var _pos = this.selectionStart;
       _buscaTimer = setTimeout(function(){
         renderOcorrenciasGestor(el, state._ocPerfil);
-      }, this.value ? 300 : 0);
+        var novo = el.querySelector("#oc-busca");
+        if(novo){ novo.focus(); try{ novo.setSelectionRange(_pos,_pos); }catch(e){} }
+      }, this.value ? 400 : 0);
     }.bind(buscaInput);
     buscaInput.onfocus = function(){ this.style.borderColor="#c8a84b"; };
     buscaInput.onblur  = function(){ this.style.borderColor="#2a3818"; };
