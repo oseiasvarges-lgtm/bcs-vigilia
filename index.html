@@ -7659,7 +7659,7 @@ function renderTela() {
 
     // ── Cabeçalho ────────────────────────────────
     g.push("<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:20px'>");
-    g.push("<div><h2 style='font-size:20px;font-weight:800;color:#e8ddd0;margin:0'>Painel de Situação</h2><p style='color:#4a4530;font-size:12px;margin:2px 0 0'>"+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+"</p></div>");
+    g.push("<div><h2 style='font-size:20px;font-weight:800;color:#e8ddd0;margin:0'>Painel</h2><p style='color:#4a4530;font-size:12px;margin:2px 0 0'>"+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+"</p></div>");
     g.push("<div style='display:flex;gap:7px;flex-wrap:wrap'>");
     g.push("<button class='btn btn-gold' onclick=\"setTela('lancar')\" style='font-size:12px;padding:8px 14px'>+ Lançar</button>");
     g.push("<button class='btn btn-ghost' onclick=\"abrirFormAgend();setTela('agendamentos')\" style='font-size:12px;padding:8px 14px;color:#b87333;border-color:#b87333'>📅 Agendar</button>");
@@ -7977,9 +7977,9 @@ function render(){
       </div>
     </div>
     ${state.perfil==="operador"?`
-      <button class="nav-btn${state.tela==="dashboard"?" active":""}" data-tela="dashboard" onclick="setTela('dashboard')">🛡 Painel Operacional</button>
+      <button class="nav-btn${state.tela==="dashboard"?" active":""}" data-tela="dashboard" onclick="setTela('dashboard')">🛡 Painel</button>
       <button class="nav-btn${state.tela==="lancar"?" active":""}" onclick="setTela('lancar')">📝 Lançar Ocorrência</button>
-      <button class="nav-btn${state.tela==="ocorrencias"?" active":""}" onclick="setTela('ocorrencias')">🛡 Painel de Situação</button>
+      <button class="nav-btn${state.tela==="ocorrencias"?" active":""}" onclick="setTela('ocorrencias')">📋 Ocorrências</button>
       <button class="nav-btn${state.tela==="alertas"?" active":""}" onclick="setTela('alertas')" style="${(function(){
         var ocs=state.db.ocorrencias||[];
         var h24=new Date(Date.now()-24*60*60*1000);
@@ -8010,7 +8010,7 @@ function render(){
       <button class="nav-btn${state.tela==="dashcomandante"?" active":""}" data-tela="dashcomandante" onclick="setTela('dashcomandante')" style="color:${state.tela==="dashcomandante"?"#c8a84b":"#c8a04b88"};border-color:${state.tela==="dashcomandante"?"#c8a84b":"transparent"}">${(function(){ var n=(state.alertasProjetos||[]).filter(function(a){return !a.lido;}).length; return n>0?"⚔️ Painel do Comando <span style='background:#ef4444;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700;animation:piscar-suave 2s infinite'>"+n+"</span>":"⚔️ Painel do Comando"; })()}</button>
       <button class="nav-btn${state.tela==="projetos"?" active":""}" data-tela="projetos" onclick="setTela('projetos')" style="color:${state.tela==="projetos"?"#22c55e":"#22c55e88"};border-color:${state.tela==="projetos"?"#22c55e":"transparent"}">${(function(){ var n=_projetosAlerta(); return n>0?"🟢 Projetos <span style='background:#f59e0b;color:#0e0c06;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700'>"+n+"</span>":"🟢 Projetos"; })()}</button>
       <button class="nav-btn${state.tela==="dashprojetos"?" active":""}" data-tela="dashprojetos" onclick="setTela('dashprojetos')" style="color:${state.tela==="dashprojetos"?"#0ea5e9":"#0ea5e988"};border-color:${state.tela==="dashprojetos"?"#0ea5e9":"transparent"}">📊 Dashboard</button>
-      <button class="nav-btn${state.tela==="lancar"?" active":""}" data-tela="lancar" onclick="setTela('lancar')">🛡 Painel de Situação</button>
+      <button class="nav-btn${state.tela==="lancar"?" active":""}" data-tela="lancar" onclick="setTela('lancar')">📝 Lançar Ocorrência</button>
       <button class="nav-btn${state.tela==="ocorrencias"?" active":""}" data-tela="ocorrencias" onclick="setTela('ocorrencias')">🔍 Analisar Ocorrências</button>
       <button class="nav-btn${state.tela==="calendario"?" active":""}" data-tela="calendario" onclick="setTela('calendario')">🗓 Calendário</button>
       <button class="nav-btn${state.tela==="dashvcm"?" active":""}" data-tela="dashvcm" onclick="setTela('dashvcm')" style="${(function(){var _ocs=state.db.ocorrencias||[];var _fridas=state.db.frida||[];var _n=_ocs.filter(function(o){if(!(o.violencia_domestica||/maria da penha|violên?cia dom[eé]stica/i.test(o.tipo||"")))return false;var _fs=_fridas.filter(function(f){return f.ocorrenciaId===o.id;});var _uf=_fs.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];if(!_uf)return true;if(_uf.nivel==="E")return true;if(_uf.nivel==="M"&&(Date.now()-new Date(_uf.data).getTime())>30*864e5)return true;if(o.medida_protetiva==="Sim"&&(Date.now()-new Date(_uf.data).getTime())>15*864e5)return true;return false;}).length;return _n>0&&state.tela!=="dashvcm"?"animation:piscar-rosa 1.4s infinite;color:#ff69b4;border-color:#ff1493;":"color:#ff69b4;border-color:"+(state.tela==="dashvcm"?"#ff1493":"transparent")+";";})()}">🌸 Dashboard VCM${(function(){var _ocs=state.db.ocorrencias||[];var _fridas=state.db.frida||[];var _n=_ocs.filter(function(o){if(!(o.violencia_domestica||/maria da penha|violên?cia dom[eé]stica/i.test(o.tipo||"")))return false;var _fs=_fridas.filter(function(f){return f.ocorrenciaId===o.id;});var _uf=_fs.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];if(!_uf)return true;if(_uf.nivel==="E")return true;if(_uf.nivel==="M"&&(Date.now()-new Date(_uf.data).getTime())>30*864e5)return true;if(o.medida_protetiva==="Sim"&&(Date.now()-new Date(_uf.data).getTime())>15*864e5)return true;return false;}).length;return _n>0?` <span style="background:#ff1493;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${_n}</span>`:"";})()}</button>
