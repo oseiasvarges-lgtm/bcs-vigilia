@@ -1789,7 +1789,7 @@ ${state.db.ocorrencias.slice(0,20).map(o=>`[${o.data} ${o.hora}] ${o.tipo}|${o.b
     const res = await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":iaKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-3-5-haiku-20241022",max_tokens:600,system,messages:msgs})
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:600,system,messages:msgs})
     });
     const rj = await res.json();
     const txt = rj.error ? ("❌ "+rj.error.message) : ((rj.content||[]).map(c=>c.text||"").join("")||"Resposta vazia.");
@@ -1829,7 +1829,7 @@ async function gerarRelatorio(tipo) {
   try {
     const iaKey=localStorage.getItem("bcs_anthropic_key")||"";
     if(!iaKey){div.innerHTML=`<p style="color:#ef4444">🔑 Configure a chave da Anthropic no assistente IA.</p>`;return;}
-    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":iaKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-3-5-haiku-20241022",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
+    const res=await fetch("https://api.anthropic.com/v1/messages",{method:"POST",headers:{"Content-Type":"application/json","x-api-key":iaKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,messages:[{role:"user",content:prompt}]})});
     const rj=await res.json();
     const texto=rj.error?("❌ "+rj.error.message):((rj.content||[]).map(c=>c.text||"").join("")||"Resposta vazia.");
     div.innerHTML=`<div style="white-space:pre-wrap;line-height:1.9;color:#a89860;font-size:15px">${texto}</div>`;
@@ -3332,7 +3332,7 @@ async function gerarRelatorioMensalIA(){
         "anthropic-dangerous-direct-browser-access":"true"
       },
       body:JSON.stringify({
-        model:"claude-opus-4-5",
+        model:"claude-sonnet-4-6",
         max_tokens:2500,
         messages:[{role:"user",content:prompt}]
       })
@@ -3467,7 +3467,7 @@ async function gerarRelatorioSemanalIA(){
     var res=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":ANTHROPIC_KEY,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-opus-4-5",max_tokens:3000,messages:[{role:"user",content:prompt}]})
+      body:JSON.stringify({model:"claude-sonnet-4-6",max_tokens:3000,messages:[{role:"user",content:prompt}]})
     });
     var rj=await res.json();
     if(rj.error) throw new Error(rj.error.message||"Erro na API");
@@ -6118,7 +6118,7 @@ async function enviarMensagemIA(pergunta){
     var res=await fetch("https://api.anthropic.com/v1/messages",{
       method:"POST",
       headers:{"Content-Type":"application/json","x-api-key":iaKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-3-5-haiku-20241022",max_tokens:2000,system:sys,messages:msgs})
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:2000,system:sys,messages:msgs})
     });
     var data=await res.json();
     if(data.error) state.iaChat.push({role:"assistant",content:"❌ "+data.error.message});
