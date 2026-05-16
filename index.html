@@ -5610,6 +5610,7 @@ function renderModuloEscolar(main){
       h.push("<div style='display:flex;gap:6px;margin-top:8px'>");
       h.push("<button data-oc='"+o.id+"' onclick=\"state.popEditarOc='"+o.id+"';var _m=document.getElementById('main')||document.getElementById('main-content');renderOcorrenciasGestor(_m,'gestor')\" style='background:#070e1c;border:1px solid #1a3a5a;color:#4a7a9a;padding:5px 12px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>&#9999; Editar</button>");
       h.push("<button data-oc='"+o.id+"' onclick='abrirRegistroEsc(this.dataset.oc)' style='flex:1;background:#0a1e2a;border:1px solid #38bdf8;color:#38bdf8;padding:5px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>&#128203; Registrar Complemento</button>");
+      h.push("<button data-oc='"+o.id+"' onclick=\"state._pdfOcId=this.dataset.oc;exportarPDFOcorrencia()\" style='background:#0a1a0a;border:1px solid #22c55e;color:#22c55e;padding:5px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;white-space:nowrap'>&#128424; PDF</button>");
       h.push("</div>");
       h.push("</div>");
     });
