@@ -7667,29 +7667,25 @@ function renderTela() {
     g.push("<button onclick=\"carregarDoSheets();carregarDadosAppDoSheets()\" style='background:#1e2a14;border:1px solid #3a4a28;color:#6b8c42;padding:8px 14px;border-radius:8px;font-size:11px;cursor:pointer;font-weight:600'>↻ Sync</button>");
     g.push("</div></div>");
 
-    // ── BLOCO 1: Alertas criminais graves ─────────
-    if(temAlertaGrave){
-      g.push("<div style='margin-bottom:16px;border:2px solid #ef4444;border-radius:12px;overflow:hidden;animation:piscar 1.2s infinite'>");
-      g.push("<div style='background:#2a0808;padding:10px 16px;display:flex;align-items:center;justify-content:space-between'>");
-      g.push("<span style='color:#ff4444;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px'>🚨 "+ocsGraves24.length+" ALERTA(S) CRIMINAL(IS) — ÚLTIMAS 24H</span>");
-      g.push("<span style='color:#ff6666;font-size:10px'>Clique para detalhar</span>");
-      g.push("</div>");
-      ocsGraves24.slice(0,4).forEach(function(o){
-        var t=(o.tipo||"").toLowerCase();
-        var cor=t.includes("homic")&&!t.includes("tentativa")?"#ff4444":t.includes("tentativa")?"#ff6b6b":t.includes("feminic")?"#ff4444":t.includes("estupro")||t.includes("sequestr")?"#f97316":"#ff1493";
-        g.push("<div onclick=\"verDetalheAlerta('"+o.id+"')\" style='padding:10px 16px;border-bottom:1px solid #3a1818;cursor:pointer;background:#1a0808;display:flex;align-items:center;gap:10px' onmouseover=\"this.style.background='#240a0a'\" onmouseout=\"this.style.background='#1a0808'\">");
-        g.push("<span style='background:"+cor+"22;color:"+cor+";padding:2px 9px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap'>"+(o.tipo||"—")+"</span>");
-        g.push("<div style='flex:1;min-width:0'><p style='color:#e8ddd0;font-size:12px;font-weight:600;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+(o.vitima_nome||"Vítima não identificada")+(o.bairro?" · "+o.bairro:"")+"</p><p style='color:#7a5050;font-size:10px;margin:2px 0 0'>"+(o.hora||"")+(o.numero?" · BO: "+o.numero:"")+"</p></div>");
-        if(o.reincidente) g.push("<span style='background:#f9731622;color:#f97316;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700'>⚠ REINC</span>");
-        g.push("</div>");
-      });
-      if(ocsGraves24.length>4) g.push("<div style='padding:8px 16px;background:#1a0808;text-align:center;color:#5a3030;font-size:11px'>+ "+(ocsGraves24.length-4)+" mais — acesse Super Filtro para ver todos</div>");
-      g.push("</div>");
-    } else {
-      g.push("<div style='margin-bottom:16px;border:1px solid #1e3a1e;border-radius:12px;padding:12px 16px;background:#0a1a0a;display:flex;align-items:center;gap:10px'>");
-      g.push("<span style='font-size:18px'>✅</span><p style='color:#3a7a3a;font-size:12px;font-weight:600;margin:0'>Nenhuma ocorrência grave registrada nas últimas 24h</p>");
+    // ── Botão Prioridades (substitui blocos de alerta e pendências) ──
+    var _nVisitaPend=(state.db.ocorrencias||[]).filter(function(o){return o.requer_visita&&!(state.db.visitas||[]).find(function(v){return v.ocorrenciaId===o.id;});}).length;
+    var _nVcmPend=(function(){var _ocs=state.db.ocorrencias||[];var _fridas=state.db.frida||[];return _ocs.filter(function(o){if(!(o.violencia_domestica||/maria da penha|violên?cia dom[eé]stica/i.test(o.tipo||"")))return false;var _fs=_fridas.filter(function(f){return f.ocorrenciaId===o.id;});var _uf=_fs.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];if(!_uf)return true;if(_uf.nivel==="E")return true;if(_uf.nivel==="M"&&(Date.now()-new Date(_uf.data).getTime())>30*864e5)return true;return false;}).length;})();
+    var _nPrior = ocsGraves24.length + pends.length + _nVisitaPend + _nVcmPend;
+    var _temAlerta = ocsGraves24.length > 0;
+    g.push("<button onclick='abrirPrioridades()' style='width:100%;margin-bottom:16px;background:"+((_temAlerta)?"#1a0808":"#0e0c06")+";border:2px solid "+(_temAlerta?"#ef4444":_nPrior>0?"#f97316":"#2a2818")+";border-radius:12px;padding:12px 18px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;"+(_nPrior>0?"animation:"+(_temAlerta?"piscar 1.2s":"piscar-lento 3s")+" infinite;":"")+"'>");
+    g.push("<div style='display:flex;align-items:center;gap:10px'>");
+    g.push("<span style='font-size:18px'>🎯</span>");
+    g.push("<div style='text-align:left'><p style='color:"+(_temAlerta?"#ff4444":_nPrior>0?"#f97316":"#5a5535")+";font-size:13px;font-weight:800;margin:0;text-transform:uppercase;letter-spacing:.5px'>Prioridades</p><p style='color:#4a4530;font-size:10px;margin:2px 0 0'>"+(_nPrior===0?"Nenhuma pendência no momento":_nPrior+" item(s) requer(em) atenção")+"</p></div>");
+    g.push("</div>");
+    if(_nPrior>0){
+      g.push("<div style='display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end'>");
+      if(ocsGraves24.length) g.push("<span style='background:#ef444422;color:#ef4444;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700'>🚨 "+ocsGraves24.length+" Alerta</span>");
+      if(pends.length) g.push("<span style='background:#f9731622;color:#f97316;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700'>⏳ "+pends.length+" Pendência</span>");
+      if(_nVisitaPend) g.push("<span style='background:#10b98122;color:#10b981;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700'>🤝 "+_nVisitaPend+" Visita</span>");
+      if(_nVcmPend) g.push("<span style='background:#ff149322;color:#ff1493;padding:2px 8px;border-radius:8px;font-size:11px;font-weight:700'>💜 "+_nVcmPend+" VCM</span>");
       g.push("</div>");
     }
+    g.push("</button>");
 
     // ── BLOCO 2: Hoje no Calendário ───────────────
     g.push("<div style='margin-bottom:16px;border:1px solid "+(temHoje?"#c8a84b":"#2a2818")+";border-radius:12px;overflow:hidden"+(temHoje?";animation:piscar-suave 2s infinite":"")+"'>");
@@ -7762,23 +7758,6 @@ function renderTela() {
       g.push("</div>");
     }
 
-    // ── BLOCO 4: Pendências ───────────────────────
-    if(temPend){
-      g.push("<div style='margin-bottom:16px;border:1px solid #5a3a10;border-radius:12px;overflow:hidden;animation:piscar-lento 3s infinite'>");
-      g.push("<div style='background:#1a0e00;padding:10px 16px;display:flex;align-items:center;justify-content:space-between'>");
-      g.push("<span style='color:#f97316;font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:1px'>⏳ "+pends.length+" PENDÊNCIA(S) EM ABERTO</span>");
-      g.push("<button onclick=\"setTela('pendencias')\" style='background:none;border:none;color:#f97316;font-size:10px;cursor:pointer;font-weight:600'>Ver todas →</button>");
-      g.push("</div>");
-      pends.slice(0,3).forEach(function(p){
-        var oc=ocs.find(function(o){return o.id===p.ocorrenciaId;});
-        var dias=Math.floor((new Date()-new Date(p.criadoEm))/(1000*60*60*24));
-        g.push("<div style='padding:9px 16px;border-bottom:1px solid #2a1a08;background:#140a00;display:flex;align-items:center;gap:10px'>");
-        g.push("<div style='flex:1;min-width:0'><p style='color:#e8ddd0;font-size:12px;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis'>"+(oc?esc(oc.vitima_nome||"—"):"—")+"</p><p style='color:#7a5030;font-size:10px;margin:2px 0 0'>"+p.motivo.slice(0,60)+(p.motivo.length>60?"…":"")+"</p></div>");
-        g.push("<span style='background:#f9731622;color:#f97316;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+dias+"d</span>");
-        g.push("</div>");
-      });
-      g.push("</div>");
-    }
 
     // ── Rodapé: Sync sheets ───────────────────────
     g.push("<div style='background:#0e0c06;border:1px solid #2a2818;border-radius:10px;padding:10px 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap'>");
@@ -7818,6 +7797,65 @@ function renderTela() {
 // FORM HELPERS
 // ══════════════════════════════════════════════════
 function abrirFormAtend(){ document.getElementById("form-atend")?.classList.remove("hidden"); }
+function abrirPrioridades(){
+  var ocs=state.db.ocorrencias||[];
+  var pends=(state.ocorrenciasPendentes||[]).filter(function(p){return p.status!=="Resolvido";});
+  var ocsGraves=(ocs).filter(function(o){var t=(o.tipo||"").toLowerCase();var dt=_pdLocal(o.data);var h24=new Date(Date.now()-24*60*60*1000);return dt&&dt>=h24&&(t.includes("homic")||t.includes("feminicí")||t.includes("latrocí")||t.includes("estupro")||t.includes("sequestr")||t.includes("tentativa de homicí"));});
+  var ocsVisita=ocs.filter(function(o){return o.requer_visita&&!(state.db.visitas||[]).find(function(v){return v.ocorrenciaId===o.id;});});
+  var _fridas=state.db.frida||[];
+  var ocsVCM=ocs.filter(function(o){if(!(o.violencia_domestica||/maria da penha|violên?cia dom[eé]stica/i.test(o.tipo||"")))return false;var _fs=_fridas.filter(function(f){return f.ocorrenciaId===o.id;});var _uf=_fs.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];if(!_uf)return true;if(_uf.nivel==="E")return true;if(_uf.nivel==="M"&&(Date.now()-new Date(_uf.data).getTime())>30*864e5)return true;return false;});
+
+  var m=document.createElement("div");
+  m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:600;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto";
+  m.onclick=function(e){if(e.target===this)this.remove();};
+  var h=[];
+  h.push("<div style='background:#141208;border:1px solid #3a3820;border-radius:16px;max-width:620px;width:100%;margin:auto'>");
+  h.push("<div style='padding:16px 20px;border-bottom:1px solid #2a2818;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#141208;z-index:1;border-radius:16px 16px 0 0'>");
+  h.push("<div><p style='color:#c8a84b;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:0 0 2px'>Painel</p><h3 style='color:#e8ddd0;font-size:16px;font-weight:700;margin:0'>🎯 Prioridades</h3></div>");
+  h.push("<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#1a1808;border:1px solid #2a2818;color:#5a5535;width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer'>✕</button>");
+  h.push("</div><div style='padding:20px;display:flex;flex-direction:column;gap:14px'>");
+
+  // Alertas criminais graves
+  if(ocsGraves.length){
+    h.push("<div style='border:1px solid #ef444444;border-radius:10px;overflow:hidden'>");
+    h.push("<div style='background:#1a0808;padding:9px 14px;display:flex;align-items:center;justify-content:space-between'><span style='color:#ef4444;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px'>🚨 Alertas Criminais — Últimas 24h ("+ocsGraves.length+")</span><button onclick=\"this.closest('div[style*=fixed]').remove();setTela('alertas')\" style='background:none;border:none;color:#ef4444;font-size:10px;cursor:pointer;font-weight:600'>Ver alertas →</button></div>");
+    ocsGraves.slice(0,5).forEach(function(o){var t=(o.tipo||"").toLowerCase();var cor=t.includes("homic")?"#ff4444":t.includes("feminic")?"#ff4444":"#f97316";h.push("<div onclick=\"this.closest('div[style*=fixed]').remove();verDetalheAlerta('"+o.id+"')\" style='padding:9px 14px;border-top:1px solid #2a1818;cursor:pointer;display:flex;align-items:center;gap:8px' onmouseover=\"this.style.background='#1a0808'\" onmouseout=\"this.style.background=''\"><span style='background:"+cor+"22;color:"+cor+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap'>"+(o.tipo||"—")+"</span><div style='flex:1;min-width:0'><p style='color:#e8ddd0;font-size:12px;font-weight:600;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+(o.vitima_nome||"Não identificado")+(o.bairro?" · "+o.bairro:"")+"</p></div>"+(o.reincidente?"<span style='color:#f97316;font-size:10px;font-weight:700'>⚠REINC</span>":"")+"</div>");});
+    h.push("</div>");
+  }
+
+  // Pendências
+  if(pends.length){
+    h.push("<div style='border:1px solid #f9731644;border-radius:10px;overflow:hidden'>");
+    h.push("<div style='background:#1a0e00;padding:9px 14px;display:flex;align-items:center;justify-content:space-between'><span style='color:#f97316;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px'>⏳ Pendências em Aberto ("+pends.length+")</span><button onclick=\"this.closest('div[style*=fixed]').remove();setTela('pendencias')\" style='background:none;border:none;color:#f97316;font-size:10px;cursor:pointer;font-weight:600'>Ver todas →</button></div>");
+    pends.slice(0,5).forEach(function(p){var oc=ocs.find(function(o){return o.id===p.ocorrenciaId;});var dias=Math.floor((Date.now()-new Date(p.criadoEm).getTime())/864e5);h.push("<div style='padding:9px 14px;border-top:1px solid #2a1808;display:flex;align-items:center;gap:8px'><div style='flex:1;min-width:0'><p style='color:#e8ddd0;font-size:12px;font-weight:600;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+(oc?esc(oc.vitima_nome||"—"):"—")+"</p><p style='color:#7a5030;font-size:10px;margin:2px 0 0'>"+esc(p.motivo.slice(0,70))+"</p></div><span style='background:#f9731622;color:#f97316;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;white-space:nowrap'>"+dias+"d</span></div>");});
+    h.push("</div>");
+  }
+
+  // Visitas solidárias pendentes
+  if(ocsVisita.length){
+    h.push("<div style='border:1px solid #10b98144;border-radius:10px;overflow:hidden'>");
+    h.push("<div style='background:#0a1a10;padding:9px 14px;display:flex;align-items:center;justify-content:space-between'><span style='color:#10b981;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px'>🤝 Visitas Solidárias Pendentes ("+ocsVisita.length+")</span><button onclick=\"this.closest('div[style*=fixed]').remove();setTela('ocorrencias')\" style='background:none;border:none;color:#10b981;font-size:10px;cursor:pointer;font-weight:600'>Ver ocorrências →</button></div>");
+    ocsVisita.slice(0,5).forEach(function(o){h.push("<div style='padding:9px 14px;border-top:1px solid #1a2a1a;display:flex;align-items:center;gap:8px'><div style='flex:1;min-width:0'><p style='color:#e8ddd0;font-size:12px;font-weight:600;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+esc(o.vitima_nome||"—")+"</p><p style='color:#4a7a5a;font-size:10px;margin:2px 0 0'>"+esc(o.tipo||"")+(o.bairro?" · "+o.bairro:"")+" · "+fmtData(o.data)+"</p></div>"+(o.violencia_domestica?"<span style='color:#ff1493;font-size:10px;font-weight:700'>VD</span>":"")+"</div>");});
+    h.push("</div>");
+  }
+
+  // VCM sem monitoramento
+  if(ocsVCM.length){
+    h.push("<div style='border:1px solid #ff149344;border-radius:10px;overflow:hidden'>");
+    h.push("<div style='background:#1a0810;padding:9px 14px;display:flex;align-items:center;justify-content:space-between'><span style='color:#ff69b4;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px'>💜 VCM Sem Monitoramento Adequado ("+ocsVCM.length+")</span><button onclick=\"this.closest('div[style*=fixed]').remove();setTela('dashvcm')\" style='background:none;border:none;color:#ff69b4;font-size:10px;cursor:pointer;font-weight:600'>Dashboard VCM →</button></div>");
+    ocsVCM.slice(0,5).forEach(function(o){var _fs=_fridas.filter(function(f){return f.ocorrenciaId===o.id;});var _uf=_fs.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];var _status=!_uf?"Sem avaliação FRIDA":_uf.nivel==="E"?"FRIDA Elevado":"FRIDA Médio +30d";h.push("<div style='padding:9px 14px;border-top:1px solid #2a1020;display:flex;align-items:center;gap:8px'><div style='flex:1;min-width:0'><p style='color:#e8ddd0;font-size:12px;font-weight:600;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+esc(o.vitima_nome||"—")+"</p><p style='color:#7a3a60;font-size:10px;margin:2px 0 0'>"+esc(o.tipo||"")+" · "+fmtData(o.data)+"</p></div><span style='background:#ff149322;color:#ff69b4;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;white-space:nowrap'>"+_status+"</span></div>");});
+    h.push("</div>");
+  }
+
+  if(!ocsGraves.length&&!pends.length&&!ocsVisita.length&&!ocsVCM.length){
+    h.push("<div style='text-align:center;padding:30px;color:#3a3820'><div style='font-size:32px;margin-bottom:10px'>✅</div><p style='font-size:14px;font-weight:600;color:#5a5535;margin:0'>Nenhuma prioridade no momento</p></div>");
+  }
+
+  h.push("</div></div>");
+  m.innerHTML=h.join("");
+  document.body.appendChild(m);
+}
+
 function abrirFormAgend(){ document.getElementById("form-agend")?.classList.remove("hidden"); setTimeout(renderConceito,50); }
 function abrirFormVisita(){ document.getElementById("form-visita")?.classList.remove("hidden"); }
 
