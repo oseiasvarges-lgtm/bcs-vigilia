@@ -1,0 +1,441 @@
+// ══════════════════════════════════════════════════════════════════
+//  IARA — Backend Google Apps Script  v2.0
+//
+//  COMO USAR (só 4 passos):
+//  1. Acesse script.google.com → clique em "Novo projeto"
+//  2. Apague tudo, cole este código, salve (Ctrl+S)
+//  3. No menu de funções, selecione "setup" e clique ▶ Executar
+//     (autorize quando pedir permissão — cria a planilha automaticamente)
+//  4. Implante: Implantar → Nova implantação → App da Web
+//       • Execute como: Você
+//       • Quem tem acesso: Qualquer pessoa
+//     Copie a URL e cole em SHEETS_URL no index.html
+// ══════════════════════════════════════════════════════════════════
+
+var TOKEN_FIXO = "bcs-token-secreto-2025";
+
+function props()  { return PropertiesService.getScriptProperties(); }
+function tok()    { return TOKEN_FIXO; }
+
+function getSS() {
+  var id = props().getProperty("SHEET_ID");
+  if (!id) throw new Error("Planilha não configurada — execute a função setup() primeiro.");
+  return SpreadsheetApp.openById(id);
+}
+
+var NOME = {
+  oc: "Ocorrências",
+  at: "Atendimentos",
+  ag: "Agendamentos",
+  vi: "Visitas Realizadas",
+  av: "Avisos",
+  fr: "FRIDA"
+};
+
+var HDRS = {
+  oc: [
+    "ID","Data Lançamento","Nº BO","Data","Hora","Tipo",
+    "Bairro","Município",
+    "Vítima Nome","Vítima Idade","Vítima Sexo",
+    "Vítima Telefone","Vítima Endereço","Vítima CPF",
+    "Suspeito Nome","Suspeito Apelido","Suspeito Características",
+    "Veículo","Medida Protetiva","Violência Doméstica",
+    "Requer Visita","Reincidente",
+    "Descrição",          // col 23
+    "Dinâmica dos fatos", // col 24 — relato completo
+    "Medidas adotadas"    // col 25
+  ],
+  at: ["ID","Data Lançamento","Data","Hora","Nome","Telefone","Tipo","Descrição","Encaminhamento"],
+  ag: ["ID","Data Lançamento","Data","Hora","Tipo Visita","Nome/Local","Endereço","Responsável","Objetivo","Status"],
+  vi: ["ID","Data Lançamento","Data","Tipo Visita","Nome/Local","Endereço","Resultado","Próxima Ação"],
+  av: ["ID","Criado Em","Texto","Expira","Leituras","Anexo Nome","Anexo Tipo","Anexo B64"],
+  fr: ["ID","Ocorrência ID","Data","Vítima Nome","Nível","Sim","NaoSabe","Respostas","Relatório","Responsável","Anexo Nome","Anexo Tipo","Anexo B64"]
+};
+
+var TIPO_KEY = {
+  ocorrencias:"oc", atendimentos:"at", agendamentos:"ag",
+  visitas:"vi", avisos:"av", frida:"fr",
+  oc:"oc", at:"at", ag:"ag", vi:"vi", av:"av", fr:"fr"
+};
+
+// ── Abas ───────────────────────────────────────────────────────────
+function getAba(ss, key)   { return ss.getSheetByName(NOME[key]); }
+
+function criarAba(ss, key) {
+  var aba = ss.insertSheet(NOME[key]);
+  var h   = HDRS[key];
+  aba.getRange(1,1,1,h.length)
+     .setValues([h])
+     .setFontWeight("bold")
+     .setFontFamily("Arial")
+     .setFontSize(11)
+     .setBackground("#1a1a2e")
+     .setFontColor("#ffffff");
+  aba.setFrozenRows(1);
+  aba.setColumnWidth(1, 160);
+  if (key === "oc") {
+    aba.setColumnWidth(23, 220);
+    aba.setColumnWidth(24, 450);
+    aba.setColumnWidth(25, 260);
+  }
+  return aba;
+}
+
+function garantirAba(ss, key) { return getAba(ss,key) || criarAba(ss,key); }
+
+// ══════════════════════════════════════════════════════════════════
+//  SETUP — executa UMA VEZ, cria a planilha e todas as abas
+// ══════════════════════════════════════════════════════════════════
+function setup() {
+  // Cria nova planilha Google
+  var ss = SpreadsheetApp.create("IARA — BCS");
+  props().setProperty("SHEET_ID", ss.getId());
+
+  // Remove aba padrão "Plan1" / "Sheet1"
+  var planPadrao = ss.getSheets()[0];
+
+  // Cria todas as abas de dados
+  Object.keys(NOME).forEach(function(key) { criarAba(ss, key); });
+
+  // Cria aba de Log
+  var log = ss.insertSheet("Log");
+  log.getRange(1,1,1,4)
+     .setValues([["Data/Hora","Ação","Entidade","Detalhe"]])
+     .setFontWeight("bold")
+     .setBackground("#1a1a2e")
+     .setFontColor("#ffffff");
+  log.setFrozenRows(1);
+
+  // Remove aba padrão (agora que há outras)
+  try { ss.deleteSheet(planPadrao); } catch(e) {}
+
+  Logger.log("✓ Planilha criada com sucesso!");
+  Logger.log("🔗 URL: " + ss.getUrl());
+  Logger.log("Abas criadas: " + Object.values(NOME).join(", ") + ", Log");
+}
+
+// ── Utilitários ────────────────────────────────────────────────────
+function saida(obj, cb) {
+  var json = JSON.stringify(obj);
+  var out  = cb ? cb+"("+json+");" : json;
+  return ContentService.createTextOutput(out)
+    .setMimeType(cb ? ContentService.MimeType.JAVASCRIPT : ContentService.MimeType.JSON);
+}
+
+function registrarLog(ss, acao, entidade, detalhe) {
+  try {
+    var aba = ss.getSheetByName("Log");
+    if (!aba) return;
+    aba.appendRow([
+      Utilities.formatDate(new Date(),"America/Bahia","dd/MM/yyyy HH:mm:ss"),
+      acao, entidade||"", detalhe||""
+    ]);
+  } catch(e) {}
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SALVAR
+// ══════════════════════════════════════════════════════════════════
+function salvar(ss, tipo, reg) {
+  var key = TIPO_KEY[tipo];
+  if (!key)        return {ok:false, erro:"Tipo desconhecido: "+tipo};
+  if (!reg||!reg.id) return {ok:false, erro:"Campo id obrigatório"};
+
+  var aba   = garantirAba(ss, key);
+  var agora = Utilities.formatDate(new Date(),"America/Bahia","dd/MM/yyyy HH:mm:ss");
+
+  // Avisos
+  if (key==="av") {
+    aba.appendRow([reg.id||"", reg.criadoEm||new Date().toISOString(),
+      reg.texto||"", reg.expira||"", JSON.stringify(reg.leituras||[]),
+      reg.anexo?reg.anexo.nome:"", reg.anexo?reg.anexo.tipo:"", reg.anexo?reg.anexo.b64:""]);
+    return {ok:true};
+  }
+
+  // Ocorrências — 25 colunas fixas
+  if (key==="oc") {
+    var narrativa = String(reg.descricao_dinamica||reg.texto_original||reg.descricao||"");
+    var medidas   = String(reg.medidas||"");
+
+    var linha = [
+      reg.id||"",                              // 1
+      agora,                                   // 2
+      reg.numero||"",                          // 3
+      reg.data||"",                            // 4
+      reg.hora||"",                            // 5
+      reg.tipo||"",                            // 6
+      reg.bairro||"",                          // 7
+      reg.municipio||"",                       // 8
+      reg.vitima_nome||"",                     // 9
+      reg.vitima_idade||"",                    // 10
+      reg.vitima_sexo||"",                     // 11
+      reg.vitima_telefone||"",                 // 12
+      reg.vitima_endereco||"",                 // 13
+      reg.vitima_cpf||"",                      // 14
+      reg.suspeito_nome||"",                   // 15
+      reg.suspeito_apelido||"",               // 16
+      reg.suspeito_caracteristicas||"",        // 17
+      reg.veiculo||"",                         // 18
+      reg.medida_protetiva||"Não",             // 19
+      reg.violencia_domestica?"Sim":"Não",     // 20
+      reg.requer_visita?"Sim":"Não",           // 21
+      reg.reincidente?"Sim":"Não",             // 22
+      reg.descricao||"",                       // 23 Descrição (resumo)
+      narrativa,                               // 24 Dinâmica dos fatos
+      medidas                                  // 25 Medidas adotadas
+    ];
+
+    // Atualiza se ID já existe
+    if (aba.getLastRow()>=2) {
+      var ids = aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
+      for (var i=0;i<ids.length;i++) {
+        if (String(ids[i][0]).trim()===String(reg.id).trim()) {
+          var n=i+2;
+          aba.getRange(n,1,1,23).setValues([linha.slice(0,23)]);
+          aba.getRange(n,24).setValue(narrativa);
+          aba.getRange(n,25).setValue(medidas);
+          if (reg.reincidente) aba.getRange(n,1,1,25).setBackground("#3d1a00").setFontColor("#ffaa44");
+          return {ok:true, id:reg.id, acao:"atualizado"};
+        }
+      }
+    }
+
+    // Insere nova linha
+    aba.appendRow(linha);
+    var nL = aba.getLastRow();
+    aba.getRange(nL,24).setValue(narrativa);
+    aba.getRange(nL,25).setValue(medidas);
+    if (reg.reincidente) aba.getRange(nL,1,1,25).setBackground("#3d1a00").setFontColor("#ffaa44");
+    return {ok:true, id:reg.id, acao:"inserido"};
+  }
+
+  // Demais tipos
+  var l;
+  if (key==="at") l=[reg.id||"",agora,reg.data||"",reg.hora||"",reg.nome||"",reg.telefone||"",reg.tipo||"",reg.descricao||"",reg.encaminhamento||""];
+  if (key==="ag") l=[reg.id||"",agora,reg.data||"",reg.hora||"",reg.tipo||"",reg.vitima_nome||"",reg.endereco||"",reg.responsavel||"",reg.objetivo||"",reg.status||""];
+  if (key==="vi") l=[reg.id||"",agora,reg.data||"",reg.tipo||"",reg.vitima_nome||"",reg.endereco||"",reg.resultado||"",reg.proxima_acao||""];
+  if (key==="fr") l=[reg.id||"",reg.ocorrenciaId||"",reg.data||"",reg.vitima_nome||"",reg.nivel||"",reg.sim||0,reg.naoSabe||0,reg.respostas||"[]",reg.relatorio||"",reg.responsavel||"",reg.anexo_nome||"",reg.anexo_tipo||"",reg.anexo_b64||""];
+  if (!l) return {ok:false, erro:"Tipo não mapeado: "+key};
+  aba.appendRow(l);
+  return {ok:true, id:reg.id, acao:"inserido"};
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  LER
+// ══════════════════════════════════════════════════════════════════
+function fmtDataBR(v){
+  if(!v) return "";
+  if(v instanceof Date) return Utilities.formatDate(v,"America/Bahia","dd/MM/yyyy");
+  var s=String(v).trim();
+  // já está em DD/MM/YYYY
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+  // YYYY-MM-DD
+  var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[3]+"/"+m[2]+"/"+m[1];
+  return s;
+}
+
+function lerOcs(ss, pag, tam) {
+  var aba = getAba(ss,"oc");
+  if (!aba||aba.getLastRow()<2) return {total:0,dados:[],temMais:false};
+  var nCols = Math.max(25,aba.getLastColumn());
+  var total = aba.getLastRow()-1;
+  var ini   = 2+pag*tam;
+  if (ini>aba.getLastRow()) return {total:total,dados:[],temMais:false};
+  var qtd   = Math.min(tam,aba.getLastRow()-ini+1);
+  var rows  = aba.getRange(ini,1,qtd,nCols).getValues();
+  var dados = [];
+  for (var i=0;i<rows.length;i++) {
+    var r=rows[i]; if(!r[0]) continue;
+    dados.push({
+      id:r[0]+"", criadoEm:r[1]+"", numero:r[2]+"",
+      data:fmtDataBR(r[3]), hora:r[4]+"", tipo:r[5]+"",
+      bairro:r[6]+"", municipio:r[7]+"",
+      vitima_nome:r[8]+"", vitima_idade:r[9]+"", vitima_sexo:r[10]||"F",
+      vitima_telefone:r[11]+"", vitima_endereco:r[12]+"", vitima_cpf:r[13]+"",
+      suspeito_nome:r[14]+"", suspeito_apelido:r[15]+"", suspeito_caracteristicas:r[16]+"",
+      veiculo:r[17]+"", medida_protetiva:r[18]||"Não",
+      violencia_domestica:r[19]==="Sim", requer_visita:r[20]==="Sim", reincidente:r[21]==="Sim",
+      descricao:r[22]+"",
+      descricao_dinamica:String(r[23]||""),
+      medidas:String(r[24]||""),
+      texto_original:String(r[23]||r[22]||"")
+    });
+  }
+  return {total:total, dados:dados, temMais:(ini+qtd-1)<total};
+}
+
+function lerAba(ss, key) {
+  var aba=getAba(ss,key); if(!aba||aba.getLastRow()<2) return [];
+  var cols=HDRS[key].length;
+  var rows=aba.getRange(2,1,aba.getLastRow()-1,cols).getValues();
+  var out=[];
+  for (var i=0;i<rows.length;i++) {
+    var r=rows[i]; if(!r[0]) continue;
+    if(key==="at") out.push({id:r[0]+"",criadoEm:r[1]+"",data:fmtDataBR(r[2]),hora:r[3]+"",nome:r[4]+"",telefone:r[5]+"",tipo:r[6]+"",descricao:r[7]+"",encaminhamento:r[8]+""});
+    if(key==="ag") out.push({id:r[0]+"",criadoEm:r[1]+"",data:fmtDataBR(r[2]),hora:r[3]+"",tipo:r[4]+"",vitima_nome:r[5]+"",endereco:r[6]+"",responsavel:r[7]+"",objetivo:r[8]+"",status:r[9]+""});
+    if(key==="vi") out.push({id:r[0]+"",criadoEm:r[1]+"",data:fmtDataBR(r[2]),tipo:r[3]+"",vitima_nome:r[4]+"",endereco:r[5]+"",resultado:r[6]+"",proxima_acao:r[7]+""});
+    if(key==="fr") out.push({id:r[0]+"",ocorrenciaId:r[1]+"",data:r[2]+"",vitima_nome:r[3]+"",nivel:r[4]+"",sim:r[5]+"",naoSabe:r[6]+"",respostas:r[7]+"",relatorio:r[8]+"",responsavel:r[9]+"",anexo_nome:r[10]+"",anexo_tipo:r[11]+"",anexo_b64:r[12]+""});
+  }
+  return out;
+}
+
+function lerAvisos(ss) {
+  var aba=getAba(ss,"av"); if(!aba||aba.getLastRow()<2) return [];
+  var rows=aba.getRange(2,1,aba.getLastRow()-1,8).getValues();
+  var agora=new Date(), out=[];
+  for (var i=0;i<rows.length;i++) {
+    var r=rows[i]; if(!r[0]) continue;
+    var expira=r[3]?new Date(r[3]):null; if(expira&&expira<agora) continue;
+    var leituras=[]; try{leituras=r[4]?JSON.parse(r[4]):[];}catch(ex){}
+    out.push({id:r[0]+"",criadoEm:r[1]+"",texto:r[2]+"",expira:expira?expira.toISOString():null,leituras:leituras,anexo:r[5]?{nome:r[5]+"",tipo:r[6]+"",b64:r[7]+""}:null});
+  }
+  return out;
+}
+
+function editarOc(ss, id, campos) {
+  var aba=getAba(ss,"oc"); if(!aba||aba.getLastRow()<2) return {ok:false,erro:"Aba não encontrada"};
+  var mapa={numero:3,data:4,hora:5,tipo:6,bairro:7,municipio:8,vitima_nome:9,vitima_idade:10,vitima_sexo:11,vitima_telefone:12,vitima_endereco:13,vitima_cpf:14,suspeito_nome:15,suspeito_apelido:16,suspeito_caracteristicas:17,veiculo:18,medida_protetiva:19,violencia_domestica:20,requer_visita:21,reincidente:22,descricao:23,descricao_dinamica:24,medidas:25};
+  var ids=aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
+  for (var i=0;i<ids.length;i++) {
+    if (String(ids[i][0])===String(id)) {
+      var linha=i+2;
+      Object.keys(campos).forEach(function(campo){
+        var col=mapa[campo]; if(!col) return;
+        var val=campos[campo]; if(typeof val==="boolean") val=val?"Sim":"Não";
+        aba.getRange(linha,col).setValue(val);
+      });
+      registrarLog(ss,"editar","oc","ID:"+id+" | "+Object.keys(campos).join(", "));
+      return {ok:true,id:id};
+    }
+  }
+  return {ok:false,erro:"ID não encontrado: "+id};
+}
+
+function deletarRegistro(ss, tipo, id) {
+  var key=TIPO_KEY[tipo]; if(!key) return {ok:false,erro:"Tipo desconhecido"};
+  var aba=getAba(ss,key); if(!aba||aba.getLastRow()<2) return {ok:true};
+  var ids=aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
+  for(var i=ids.length-1;i>=0;i--){if(String(ids[i][0])===String(id)){aba.deleteRow(i+2);return {ok:true};}}
+  return {ok:true};
+}
+
+function atualizarLeituraAviso(ss,id,leituras){var aba=getAba(ss,"av");if(!aba||aba.getLastRow()<2)return;var ids=aba.getRange(2,1,aba.getLastRow()-1,1).getValues();for(var i=0;i<ids.length;i++){if(String(ids[i][0])===String(id)){aba.getRange(i+2,5).setValue(JSON.stringify(leituras));return;}}}
+function excluirAviso(ss,id){var aba=getAba(ss,"av");if(!aba||aba.getLastRow()<2)return;var ids=aba.getRange(2,1,aba.getLastRow()-1,1).getValues();for(var i=ids.length-1;i>=0;i--){if(String(ids[i][0])===String(id)){aba.deleteRow(i+2);return;}}}
+
+function dedup(ss){
+  var total=0;
+  Object.keys(NOME).forEach(function(key){
+    var aba=getAba(ss,key);if(!aba||aba.getLastRow()<2)return;
+    var dados=aba.getRange(2,1,aba.getLastRow()-1,aba.getLastColumn()).getValues(),vistas={},remover=[];
+    for(var i=0;i<dados.length;i++){var chave;if(key==="oc"){var t=String(dados[i][5]||"").toLowerCase().trim(),v=String(dados[i][8]||"").toLowerCase().trim(),b=String(dados[i][6]||"").toLowerCase().trim(),d=String(dados[i][3]||"").trim(),h=String(dados[i][4]||"").trim();chave=t+"|"+v+"|"+b+"|"+d+"|"+h;if(chave.replace(/\|/g,"").length<3)chave=String(dados[i][0]||i);}else{chave=String(dados[i][0]||"").trim();if(!chave)continue;}if(vistas[chave])remover.push(i+2);else vistas[chave]=true;}
+    remover.reverse().forEach(function(row){aba.deleteRow(row);});total+=remover.length;
+  });
+  return total;
+}
+
+function validarPin(hash,perfil){var g="4cad08c00f2b858677e00573ff398bd3c971d2a8f9ce006bba54a063786fa50b";var o="46c1776477b5d00910ae5df30970156c98b942253b2abcf792e286c36dd1fe45";if(perfil==="gestor"&&hash===g)return{ok:true,perfil:"gestor"};if(perfil==="operador"&&hash===o)return{ok:true,perfil:"operador"};return{ok:false};}
+
+// ══════════════════════════════════════════════════════════════════
+//  doGet
+// ══════════════════════════════════════════════════════════════════
+function doGet(e) {
+  try {
+    var t=tok(), cb=(e.parameter&&e.parameter.callback)||"", acao=(e.parameter&&e.parameter.acao)||"";
+    if (acao==="login") return saida(validarPin(e.parameter.hash||"",e.parameter.perfil||""),cb);
+    if ((e.parameter&&e.parameter.token)!==t) return saida({ok:false,erro:"Não autorizado"},cb);
+    var ss=getSS(), pag=parseInt((e.parameter&&e.parameter.pagina)||"0")||0;
+    if(acao==="ping"){var a=getAba(ss,"oc");return saida({ok:true,total:a?a.getLastRow()-1:0},cb);}
+    if(acao==="info"){return saida({ok:true,url:getSS().getUrl(),id:getSS().getId()},cb);}
+    if(acao==="salvarDadoApp"){var ch=e.parameter.chave,vl=e.parameter.valor;if(!ch)return saida({ok:false,erro:"chave obrigatória"},cb);props().setProperty("app__"+ch,vl||"");return saida({ok:true},cb);}
+    if(acao==="lerDadoApp"){var ch2=e.parameter.chave;if(!ch2)return saida({ok:false,erro:"chave obrigatória"},cb);var vl2=props().getProperty("app__"+ch2);return saida({ok:true,valor:vl2},cb);}
+    if(acao==="editar"){var campos={};try{campos=JSON.parse(e.parameter.campos||"{}");}catch(ex){}return saida(editarOc(ss,e.parameter.id,campos),cb);}
+    if(acao==="deletar") return saida(deletarRegistro(ss,e.parameter.tipo,e.parameter.id),cb);
+    if(acao==="deduplicar") return saida({ok:true,removidos:dedup(ss)},cb);
+    if(acao==="lerAvisos") return saida({ok:true,avisos:lerAvisos(ss)},cb);
+    if(acao==="excluirAviso"){if(e.parameter.id)excluirAviso(ss,e.parameter.id);return saida({ok:true},cb);}
+    if(acao==="lerAviso"){var lts=[];try{lts=JSON.parse(e.parameter.leituras||"[]");}catch(ex){}if(e.parameter.id)atualizarLeituraAviso(ss,e.parameter.id,lts);return saida({ok:true},cb);}
+    if(acao==="ler"){var res=lerOcs(ss,pag,1500),dados={ocorrencias:res.dados};if(pag===0){dados.atendimentos=lerAba(ss,"at");dados.agendamentos=lerAba(ss,"ag");dados.visitas=lerAba(ss,"vi");dados.avisos=lerAvisos(ss);dados.frida=lerAba(ss,"fr");}else{dados.atendimentos=[];dados.agendamentos=[];dados.visitas=[];dados.avisos=[];dados.frida=[];}return saida({ok:true,total:res.total,pagina:pag,temMais:res.temMais,dados:dados},cb);}
+    if(e.parameter&&e.parameter.dados){var d=JSON.parse(e.parameter.dados);return saida(salvar(ss,d.tipo,d.registro),cb);}
+    return saida({ok:true,msg:"IARA backend ativo"},cb);
+  } catch(err){ return saida({ok:false,erro:err.toString()},(e&&e.parameter&&e.parameter.callback)||""); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  doPost
+// ══════════════════════════════════════════════════════════════════
+function doPost(e) {
+  try {
+    var t=tok(), ss=getSS(), cb=(e.parameter&&e.parameter.callback)||"";
+    if (e.postData&&e.postData.contents) {
+      var d=JSON.parse(e.postData.contents);
+      if (d.token!==t) return saida({ok:false,erro:"Token inválido"},cb);
+      if (d.acao==="deletar"&&d.tipo&&d.id) return saida(deletarRegistro(ss,d.tipo,d.id),cb);
+      if (d.acao==="editar"&&d.id&&d.campos) return saida(editarOc(ss,d.id,d.campos),cb);
+      if (d.acao==="ia"&&d.messages&&d.system) return saida(chamarIA(d.system,d.messages),cb);
+      if (d.tipo&&d.registro) return saida(salvar(ss,d.tipo,d.registro),cb);
+      return saida({ok:false,erro:"Payload sem tipo/registro"},cb);
+    }
+    if (e.parameter&&e.parameter.token===t&&e.parameter.dados) {
+      var d=JSON.parse(e.parameter.dados);
+      if (d.tipo&&d.registro) return saida(salvar(ss,d.tipo,d.registro),cb);
+      return saida({ok:false,erro:"Payload inválido"},cb);
+    }
+    return saida({ok:false,erro:"Nenhum dado recebido"},cb);
+  } catch(err){ return saida({ok:false,erro:"Erro doPost: "+err.toString()}); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PROXY IA — Claude via Apps Script (chave fica nas Properties)
+// ══════════════════════════════════════════════════════════════════
+function chamarIA(system, messages) {
+  var chave = props().getProperty("ANTHROPIC_KEY");
+  if(!chave) return {ok:false, erro:"Chave IA não configurada. Execute definirChaveIA() no editor."};
+  try {
+    var payload = JSON.stringify({
+      model: "claude-3-5-haiku-20241022",
+      max_tokens: 2000,
+      system: system,
+      messages: messages
+    });
+    var options = {
+      method: "post",
+      contentType: "application/json",
+      headers: {"x-api-key": chave, "anthropic-version": "2023-06-01"},
+      payload: payload,
+      muteHttpExceptions: true
+    };
+    var res = UrlFetchApp.fetch("https://api.anthropic.com/v1/messages", options);
+    var data = JSON.parse(res.getContentText());
+    if(data.error) return {ok:false, erro:data.error.message};
+    var resposta = data.content && data.content[0] ? data.content[0].text : "";
+    return {ok:true, resposta:resposta};
+  } catch(err) {
+    return {ok:false, erro:"Erro ao chamar IA: "+err.toString()};
+  }
+}
+
+// ── Como configurar a chave IA ─────────────────────────────────────
+// 1. Substitua SUA_CHAVE_AQUI pela sua chave da Anthropic (começa com sk-ant-...)
+// 2. Salve o script (Ctrl+S)
+// 3. Selecione a função "definirChaveIA" no menu e clique ▶ Executar
+// 4. Após executar UMA VEZ, pode apagar a chave desta função (ela fica salva nas Properties)
+function definirChaveIA() {
+  var chave = "SUA_CHAVE_AQUI"; // ← substitua aqui (sk-ant-api03-...)
+  if (!chave || chave === "SUA_CHAVE_AQUI") {
+    Logger.log("❌ ERRO: substitua SUA_CHAVE_AQUI pela sua chave real antes de executar.");
+    return;
+  }
+  props().setProperty("ANTHROPIC_KEY", chave);
+  Logger.log("✓ Chave IA salva com sucesso nas Script Properties!");
+}
+
+// Para verificar se a chave está salva:
+function verificarChaveIA() {
+  var chave = props().getProperty("ANTHROPIC_KEY");
+  if (chave) {
+    Logger.log("✓ Chave configurada: " + chave.substring(0, 20) + "...");
+  } else {
+    Logger.log("❌ Chave NÃO configurada. Execute definirChaveIA() primeiro.");
+  }
+}
