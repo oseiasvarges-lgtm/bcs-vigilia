@@ -675,9 +675,9 @@ async function carregarDoSheets() {
     if((rj0.dados.frida||[]).length) state.db.frida = rj0.dados.frida;
     if((rj0.dados.visitas||[]).length) state.db.visitas = rj0.dados.visitas;
     if((rj0.dados.agendamentos||[]).length) {
-      // Filtrar agendamentos válidos (com data e hora)
       state.db.agendamentos = (rj0.dados.agendamentos||[]).filter(function(ag){
-        return ag && ag.data && String(ag.data).trim() !== "";
+        return ag && ag.data && String(ag.data).trim() !== "" &&
+               (!state.agExcluidos || !state.agExcluidos.has(String(ag.id)));
       });
       console.log("[BCS] Agendamentos do Sheets: "+(rj0.dados.agendamentos||[]).length+" → filtrados: "+state.db.agendamentos.length);
     }
