@@ -1222,7 +1222,9 @@ function renderImportarZap(main) {
         return;
       }
 
-      // Filtra duplicatas já existentes
+      // Deduplica dentro do próprio arquivo, depois filtra contra estado atual
+      var _seenFile = new Set();
+      registros = registros.filter(function(r){ if(!r.id||_seenFile.has(r.id)) return false; _seenFile.add(r.id); return true; });
       var idsExistentes = {};
       (state.db.ocorrencias||[]).forEach(function(o){ if(o.id) idsExistentes[o.id]=true; });
       var novos = registros.filter(function(r){ return !idsExistentes[r.id]; });
@@ -1298,7 +1300,11 @@ function renderImportarZap(main) {
         var vd = !!(reg.violencia_domestica === true || String(reg.violencia_domestica).toLowerCase()==='true' ||
                     /maria da penha|viol[êe]ncia dom[eé]stica/i.test(String(reg.tipo||'')+' '+String(reg.descricao||'')));
         return {
-          id:                     reg.id || ('sig_'+Date.now()+'_'+Math.random().toString(36).slice(2)),
+          id:                     reg.id || (function(r){
+                              // ID estável baseado no conteúdo — evita duplicatas ao reimportar
+                              var s = (r.numero||'')+(r.data||'')+(r.hora||'')+(r.tipo||'').slice(0,20)+(r.bairro||'');
+                              var h = 0; for(var i=0;i<s.length;i++){h=((h<<5)-h+s.charCodeAt(i))|0;} return 'sig_'+Math.abs(h).toString(36);
+                            })(reg),
           numero:                 reg.numero||'',
           data:                   data,
           hora:                   reg.hora||'',
@@ -1328,6 +1334,9 @@ function renderImportarZap(main) {
         };
       });
 
+      // Deduplica dentro do próprio arquivo, depois filtra contra estado atual
+      var _seenJson = new Set();
+      registros = registros.filter(function(r){ if(!r.id||_seenJson.has(r.id)) return false; _seenJson.add(r.id); return true; });
       var idsExistentes = {};
       (state.db.ocorrencias||[]).forEach(function(o){ if(o.id) idsExistentes[o.id]=true; });
       var novos = registros.filter(function(r){ return !idsExistentes[r.id]; });
@@ -1384,9 +1393,10 @@ function renderImportarZap(main) {
     function _prox() {
       if (idx>=total) {
         showToast('Importação concluída: '+(total-erros)+'/'+total+' registros', erros?'error':'success');
+        var _idsAtual = new Set((state.db.ocorrencias||[]).map(function(o){return String(o.id);}));
         registros.forEach(function(r){
           if(!state.db.ocorrencias) state.db.ocorrencias=[];
-          state.db.ocorrencias.push(r);
+          if(!_idsAtual.has(String(r.id))){ state.db.ocorrencias.push(r); _idsAtual.add(String(r.id)); }
         });
         salvarLocal();
         if(btn){btn.disabled=false;btn.textContent='Concluído ✓';btn.style.background='#2d7a5a';}
@@ -1414,10 +1424,11 @@ function renderImportarZap(main) {
         var msg = 'Importação concluída: ' + (total - erros) + ' de ' + total + ' ocorrências importadas.';
         if (erros) msg += ' (' + erros + ' erros)';
         showToast(msg, erros ? 'error' : 'success');
-        // Salva localmente também
+        // Salva localmente (sem duplicar)
+        var _idsAtualZap = new Set((state.db.ocorrencias||[]).map(function(o){return String(o.id);}));
         registros.forEach(function(r) {
           if (!state.db.ocorrencias) state.db.ocorrencias = [];
-          state.db.ocorrencias.unshift(r);
+          if(!_idsAtualZap.has(String(r.id))){ state.db.ocorrencias.unshift(r); _idsAtualZap.add(String(r.id)); }
         });
         salvarLocal();
         if (btn) { btn.disabled = false; btn.textContent = 'Concluído ✓'; btn.style.background = '#2d7a5a'; }
