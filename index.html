@@ -1760,6 +1760,7 @@ function salvarOcorrencia(nova, reinc) {
 }
 
 function processarOcorrencia() {
+  if(state._iaAnalisando){showToast("Aguarde, analisando...","error");return;}
   const txt = document.getElementById("paste-area")?.value||"";
   if(!txt.trim()){showToast("Cole o texto primeiro","error");return;}
   const nova = extrairLocal(txt);
@@ -1792,10 +1793,10 @@ function confirmarSugestoesIA() {
 }
 
 async function analisarOcorrenciaIA(txtOriginal, nova) {
+  state._iaAnalisando = true;
   const iaKey = localStorage.getItem("bcs_anthropic_key")||"";
-  // Mostra loading no botão
   const btn = document.querySelector("button[onclick='processarOcorrencia()']");
-  if(btn){ btn.disabled=true; btn.textContent="🤖 Analisando..."; }
+  if(btn){ btn.disabled=true; btn.innerHTML="🤖 Analisando..."; }
 
   const prompt = `Analise esta ocorrência policial extraída de um texto e sugira ajustes nos campos. Responda SOMENTE em JSON válido, sem texto fora do JSON.
 
@@ -1838,7 +1839,8 @@ Campos possíveis: tipo, bairro, vitima_nome, vitima_idade, vitima_sexo, vitima_
   const alertas = verificarReincidencia(nova);
   if(alertas.length){state.alertas={nova,lista:alertas};render();}
   else salvarOcorrencia(nova,false);
-  if(btn){ btn.disabled=false; btn.textContent="Processar"; }
+  state._iaAnalisando = false;
+  if(btn){ btn.disabled=false; btn.innerHTML="⚡ Processar e Salvar Ocorrência"; }
 }
 
 // ══════════════════════════════════════════════════
