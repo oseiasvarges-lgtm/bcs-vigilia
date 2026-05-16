@@ -6057,7 +6057,10 @@ function _buildIASystem(ctx){
 "BAIRROS:\n"+ctx.bairrosOrd.map(function(b){return b[0]+": "+b[1];}).join(" | ")+"\n\n"+
 "EVOLUÇÃO MENSAL:\n"+ctx.mesesOrd.map(function(m){return m[0]+":"+m[1];}).join(" | ")+"\n\n"+
 "TODAS AS OCORRÊNCIAS (data|hora|tipo|bairro|vítima|idade/sexo/tel|suspeito|flags):\n"+ctx.listaOcs.join("\n")+"\n\n"+
-"Responda em português. Use dados reais acima — nunca invente. Seja direto e objetivo.";
+"Responda em português. Use dados reais acima — nunca invente. Seja direto e objetivo.\n\n"+
+"RECLASSIFICAÇÃO: Quando solicitado, analise as ocorrências e sugira reclassificações no formato:\n"+
+"📋 ID: [id] | Atual: [tipo atual] | Sugerido: [novo tipo] | Motivo: [explicação breve]\n"+
+"O usuário fará as alterações manualmente no sistema após avaliar suas sugestões.";
 }
 
 function _renderChatIA(){
@@ -6151,7 +6154,8 @@ function renderAssistenteIA(main){
     {icon:"🔄",q:"Analise os casos de reincidência e sugira ações de prevenção."},
     {icon:"🌸",q:"Faça uma análise específica dos casos de VCM e violência doméstica."},
     {icon:"⚠️",q:"Quais são os principais pontos de atenção e recomendações operacionais?"},
-    {icon:"📝",q:"Gere um relatório mensal completo estruturado para apresentação ao comando."}
+    {icon:"📝",q:"Gere um relatório mensal completo estruturado para apresentação ao comando."},
+    {icon:"🔁",q:"Analise todas as ocorrências e identifique quais podem estar classificadas incorretamente. Para cada uma, informe: ID, classificação atual, classificação sugerida e motivo."}
   ];
   var h="<div style='max-width:920px;margin:0 auto;height:calc(100vh - 90px);display:flex;flex-direction:column;gap:10px'>";
   // Header
