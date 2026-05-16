@@ -6027,10 +6027,12 @@ function _buildIAContext(){
     if(o.reincidente) flags.push("REINC");
     if(o.medida_protetiva==="Sim") flags.push("MP");
     if(o.requer_visita) flags.push("VISITA");
-    return [o.data,o.hora,o.tipo,o.bairro,
+    var desc=(o.descricao_dinamica||o.descricao||"").replace(/\n/g," ").substring(0,300);
+    return [o.id||"—",o.data,o.hora,o.tipo,o.bairro,
       o.vitima_nome||"—","("+( o.vitima_idade||"?")+"/"+( o.vitima_sexo||"?")+") tel:"+( o.vitima_telefone||"—"),
       "susp:"+(o.suspeito_nome||"—")+(o.suspeito_apelido?" ap."+o.suspeito_apelido:""),
-      flags.join(",")].join("|");
+      flags.join(",")||"—",
+      desc?"desc:"+desc:""].join("|");
   });
   return {
     total:ocs.length, mesStr:mesStr, mesPas:mesPas,
