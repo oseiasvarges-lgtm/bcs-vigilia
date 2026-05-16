@@ -6085,7 +6085,7 @@ function _salvarIAKey(){
 }
 
 async function enviarMensagemIA(pergunta){
-  var chave=_getIAKey();
+  if(!SHEETS_URL){showToast("SHEETS_URL não configurada","error");return;}
   if(!state.iaChat) state.iaChat=[];
   state.iaChat.push({role:"user",content:pergunta});
   _renderChatIA();
@@ -6110,25 +6110,19 @@ async function enviarMensagemIA(pergunta){
       if(sec) sec.style.display="block";
       return;
     }
-    var res=await fetch("https://api.anthropic.com/v1/messages",{
+    // Chama Claude via Apps Script (proxy seguro — chave nas Script Properties)
+    var res=await fetch(SHEETS_URL,{
       method:"POST",
-      headers:{"Content-Type":"application/json","x-api-key":chave,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-      body:JSON.stringify({model:"claude-3-5-haiku-20241022",max_tokens:2000,system:sys,messages:msgs})
+      mode:"cors",
+      headers:{"Content-Type":"text/plain"},
+      body:JSON.stringify({token:BCS_TOKEN, acao:"ia", system:sys, messages:msgs})
     });
     var data=await res.json();
-    console.log("[IA] Claude:",JSON.stringify(data).substring(0,300));
-    if(data.error){
-      var emsg=data.error.message||JSON.stringify(data.error);
-      if(data.error.type==="authentication_error"){
-        localStorage.removeItem("bcs_anthropic_key");
-        var sec2=document.getElementById("ia-key-section");
-        if(sec2) sec2.style.display="block";
-        emsg="Chave inválida. Cole a chave completa do console.anthropic.com → API Keys.";
-      }
-      state.iaChat.push({role:"assistant",content:"❌ "+emsg});
+    console.log("[IA] proxy:",JSON.stringify(data).substring(0,300));
+    if(!data.ok){
+      state.iaChat.push({role:"assistant",content:"❌ "+( data.erro||"Erro desconhecido")});
     } else {
-      var resposta=(data.content&&data.content[0])?data.content[0].text:"Resposta vazia.";
-      state.iaChat.push({role:"assistant",content:resposta});
+      state.iaChat.push({role:"assistant",content:data.resposta||"Resposta vazia."});
     }
   } catch(err){
     console.log("[IA] erro fetch:",err);
@@ -6162,8 +6156,7 @@ function renderAssistenteIA(main){
   });
   h+="</div>";
   // Campo de chave
-  var temChave2=!!_getIAKey();
-  h+="<div id='ia-key-section' style='display:"+(temChave2?"none":"block")+";background:#1a0e00;border:1px solid #c8a84b44;border-radius:10px;padding:14px 16px;flex-shrink:0'>";
+  h+="<div id='ia-key-section' style='display:none;background:#1a0e00;border:1px solid #c8a84b44;border-radius:10px;padding:14px 16px;flex-shrink:0'>";
   h+="<p style='color:#c8a84b;font-size:12px;font-weight:700;margin:0 0 4px'>🔑 Chave API Claude (Anthropic)</p>";
   h+="<p style='color:#5a5535;font-size:11px;margin:0 0 10px'>Obtenha em <a href='https://console.anthropic.com' target='_blank' style='color:#c8a84b'>console.anthropic.com</a> → API Keys (requer crédito)</p>";
   h+="<div style='display:flex;gap:8px'>";
