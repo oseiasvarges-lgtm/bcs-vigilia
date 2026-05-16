@@ -6153,7 +6153,8 @@ function renderAssistenteIA(main){
     h+="<button onclick=\"enviarMensagemIA("+JSON.stringify(c.q)+")\" style='background:#1a1808;border:1px solid #3a3820;color:#9a9070;padding:6px 13px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.15s' onmouseover=\"this.style.borderColor='#8b5cf6';this.style.color='#a78bfa'\" onmouseout=\"this.style.borderColor='#3a3820';this.style.color='#9a9070'\">"+c.icon+" "+c.icon.length>1?c.q.split(" ").slice(0,4).join(" ")+"…":c.q+"</button>";
   });
   h+="</div>";
-  // Campo de chave
+  // Botão trocar chave + campo de chave
+  h+="<div style='display:flex;justify-content:flex-end;flex-shrink:0'><button onclick=\"var s=document.getElementById('ia-key-section');s.style.display=s.style.display==='none'?'block':'none'\" style='background:transparent;border:1px solid #3a3820;color:#5a5535;padding:4px 12px;border-radius:6px;font-size:11px;cursor:pointer'>🔑 Trocar chave</button></div>";
   h+="<div id='ia-key-section' style='display:none;background:#1a0e00;border:1px solid #c8a84b44;border-radius:10px;padding:14px 16px;flex-shrink:0'>";
   h+="<p style='color:#c8a84b;font-size:12px;font-weight:700;margin:0 0 4px'>🔑 Chave API Claude (Anthropic)</p>";
   h+="<p style='color:#5a5535;font-size:11px;margin:0 0 10px'>Obtenha em <a href='https://console.anthropic.com' target='_blank' style='color:#c8a84b'>console.anthropic.com</a> → API Keys (requer crédito)</p>";
