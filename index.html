@@ -1798,25 +1798,34 @@ async function analisarOcorrenciaIA(txtOriginal, nova) {
   const btn = document.querySelector("button[onclick='processarOcorrencia()']");
   if(btn){ btn.disabled=true; btn.innerHTML="🤖 Analisando..."; }
 
-  const prompt = `Analise esta ocorrência policial extraída de um texto e sugira ajustes nos campos. Responda SOMENTE em JSON válido, sem texto fora do JSON.
+  const prompt = `Você é um assistente policial. Analise o texto original de uma ocorrência e verifique se os dados extraídos automaticamente estão corretos. Responda SOMENTE em JSON válido, sem nenhum texto fora do JSON.
 
-TEXTO ORIGINAL:
-${txtOriginal.substring(0,2000)}
+TEXTO ORIGINAL DA OCORRÊNCIA:
+${txtOriginal.substring(0,2500)}
 
-DADOS EXTRAÍDOS AUTOMATICAMENTE:
-${JSON.stringify(nova, null, 2)}
+DADOS EXTRAÍDOS (verifique se batem com o texto):
+- tipo: "${nova.tipo||''}"
+- data: "${nova.data||''}" | hora: "${nova.hora||''}"
+- bairro: "${nova.bairro||''}" | municipio: "${nova.municipio||''}"
+- vitima_nome: "${nova.vitima_nome||''}" | vitima_idade: "${nova.vitima_idade||''}" | vitima_sexo: "${nova.vitima_sexo||''}"
+- vitima_telefone: "${nova.vitima_telefone||''}" | vitima_endereco: "${nova.vitima_endereco||''}"
+- suspeito_nome: "${nova.suspeito_nome||''}" | suspeito_apelido: "${nova.suspeito_apelido||''}"
+- suspeito_caracteristicas: "${nova.suspeito_caracteristicas||''}"
+- veiculo: "${nova.veiculo||''}"
+- violencia_domestica: ${nova.violencia_domestica||false} | medida_protetiva: "${nova.medida_protetiva||''}"
 
-Retorne um JSON com este formato exato:
-{
-  "sugestoes": [
-    {"campo": "tipo", "atual": "valor atual", "sugerido": "novo valor", "motivo": "razão breve"},
-    {"campo": "vitima_nome", "atual": "valor atual", "sugerido": "novo valor", "motivo": "razão breve"}
-  ],
-  "ok": true
-}
+INSTRUÇÕES:
+1. Compare cada campo com o texto original
+2. Se um campo está vazio mas o texto tem a informação → sugira o valor correto
+3. Se um campo tem valor errado (texto de outro campo, dado confundido) → sugira a correção
+4. Se o tipo de crime parece errado dado o contexto → sugira o tipo correto
+5. Seja conservador: só sugira se tiver certeza pelo texto
 
-Sugira apenas campos com problema real. Se tudo estiver correto, retorne {"sugestoes":[], "ok":true}.
-Campos possíveis: tipo, bairro, vitima_nome, vitima_idade, vitima_sexo, vitima_telefone, vitima_endereco, suspeito_nome, suspeito_apelido, suspeito_caracteristicas, veiculo, violencia_domestica (true/false), medida_protetiva (Sim/Não).`;
+Retorne JSON exato:
+{"sugestoes":[{"campo":"nome_do_campo","atual":"valor atual","sugerido":"valor correto","motivo":"razão"}],"ok":true}
+
+Se tudo estiver correto: {"sugestoes":[],"ok":true}
+Campos válidos: tipo, bairro, vitima_nome, vitima_idade, vitima_sexo, vitima_telefone, vitima_endereco, suspeito_nome, suspeito_apelido, suspeito_caracteristicas, veiculo, violencia_domestica, medida_protetiva`;
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages",{
