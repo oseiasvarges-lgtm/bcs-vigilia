@@ -6004,48 +6004,60 @@ function _salvarTipoEscolar(ocId){
 
 function _buildIAContext(){
   var ocs=state.db.ocorrencias||[];
+  var ats=state.db.atendimentos||[];
+  var ags=state.db.agendamentos||[];
+  var vis=state.db.visitas||[];
   var hojeD=new Date();
   var mes=hojeD.getMonth(), ano=hojeD.getFullYear();
   var mesStr=String(ano)+"-"+String(mes+1).padStart(2,"0");
   var mesPas=mes===0?String(ano-1)+"-12":String(ano)+"-"+String(mes).padStart(2,"0");
-  var ocMes=ocs.filter(function(o){return (o.data||"").startsWith(mesStr);});
-  var ocMesAnt=ocs.filter(function(o){return (o.data||"").startsWith(mesPas);});
   var porTipo={};
   ocs.forEach(function(o){var t=o.tipo||"Não informado";porTipo[t]=(porTipo[t]||0)+1;});
-  var tiposOrd=Object.entries(porTipo).sort(function(a,b){return b[1]-a[1];}).slice(0,10);
+  var tiposOrd=Object.entries(porTipo).sort(function(a,b){return b[1]-a[1];});
   var porBairro={};
   ocs.forEach(function(o){var b=o.bairro||"Não informado";porBairro[b]=(porBairro[b]||0)+1;});
-  var bairrosOrd=Object.entries(porBairro).sort(function(a,b){return b[1]-a[1];}).slice(0,8);
+  var bairrosOrd=Object.entries(porBairro).sort(function(a,b){return b[1]-a[1];});
   var porMes={};
   ocs.forEach(function(o){var m=(o.data||"").substring(0,7);if(m)porMes[m]=(porMes[m]||0)+1;});
-  var mesesOrd=Object.entries(porMes).sort(function(a,b){return b[0]<a[0]?1:-1;}).slice(-6);
-  var feminino=ocs.filter(function(o){return o.vitima_sexo==="F"||o.vitima_sexo==="Feminino";}).length;
-  var masculino=ocs.filter(function(o){return o.vitima_sexo==="M"||o.vitima_sexo==="Masculino";}).length;
-  var vd=ocs.filter(function(o){return o.violencia_domestica||((o.tipo||"").toLowerCase().includes("maria da penha"));}).length;
-  var vcm=ocs.filter(function(o){var t=(o.tipo||"").toLowerCase();return t.includes("violência contra a mulher")||t.includes("vcm")||t.includes("violencia contra");}).length;
-  var reinc=ocs.filter(function(o){return o.reincidente;}).length;
-  var mp=ocs.filter(function(o){return o.medida_protetiva==="Sim";}).length;
-  var recentes=ocs.slice(0,8).map(function(o){return (o.data||"—")+" · "+(o.tipo||"—")+" · "+(o.vitima_nome||"—")+" · Bairro: "+(o.bairro||"—");});
-  return {total:ocs.length,mesAtual:{nome:mesStr,total:ocMes.length},mesAnterior:{nome:mesPas,total:ocMesAnt.length},porTipo:tiposOrd,porBairro:bairrosOrd,porMes:mesesOrd,feminino:feminino,masculino:masculino,vd:vd,vcm:vcm,reinc:reinc,medidasProtetivas:mp,recentes:recentes,agendamentos:(state.db.agendamentos||[]).length,visitas:(state.db.visitas||[]).length,atendimentos:(state.db.atendimentos||[]).length};
+  var mesesOrd=Object.entries(porMes).sort(function(a,b){return a[0]<b[0]?-1:1;});
+  // Lista completa de ocorrências em formato compacto
+  var listaOcs=ocs.map(function(o){
+    var flags=[];
+    if(o.violencia_domestica) flags.push("VD");
+    if(o.reincidente) flags.push("REINC");
+    if(o.medida_protetiva==="Sim") flags.push("MP");
+    if(o.requer_visita) flags.push("VISITA");
+    return [o.data,o.hora,o.tipo,o.bairro,
+      o.vitima_nome||"—","("+( o.vitima_idade||"?")+"/"+( o.vitima_sexo||"?")+") tel:"+( o.vitima_telefone||"—"),
+      "susp:"+(o.suspeito_nome||"—")+(o.suspeito_apelido?" ap."+o.suspeito_apelido:""),
+      flags.join(",")].join("|");
+  });
+  return {
+    total:ocs.length, mesStr:mesStr, mesPas:mesPas,
+    ocMes:ocs.filter(function(o){return (o.data||"").startsWith(mesStr);}).length,
+    ocMesAnt:ocs.filter(function(o){return (o.data||"").startsWith(mesPas);}).length,
+    tiposOrd:tiposOrd, bairrosOrd:bairrosOrd, mesesOrd:mesesOrd,
+    feminino:ocs.filter(function(o){return o.vitima_sexo==="F"||o.vitima_sexo==="Feminino";}).length,
+    masculino:ocs.filter(function(o){return o.vitima_sexo==="M"||o.vitima_sexo==="Masculino";}).length,
+    vd:ocs.filter(function(o){return o.violencia_domestica;}).length,
+    reinc:ocs.filter(function(o){return o.reincidente;}).length,
+    mp:ocs.filter(function(o){return o.medida_protetiva==="Sim";}).length,
+    listaOcs:listaOcs,
+    atendimentos:ats.length, agendamentos:ags.length, visitas:vis.length
+  };
 }
 
 function _buildIASystem(ctx){
-  return "Você é o assistente de inteligência da 77ª CIPM BCS — Base Comunitária de Segurança. Seu papel é analisar dados criminais, identificar padrões e apoiar decisões de policiamento comunitário.\n\n"+
-"DADOS ATUAIS DO SISTEMA:\n"+
-"- Total de ocorrências: "+ctx.total+"\n"+
-"- Mês atual ("+ctx.mesAtual.nome+"): "+ctx.mesAtual.total+" ocorrências\n"+
-"- Mês anterior ("+ctx.mesAnterior.nome+"): "+ctx.mesAnterior.total+" ocorrências\n"+
-"- Agendamentos ativos: "+ctx.agendamentos+" | Visitas: "+ctx.visitas+" | Atendimentos: "+ctx.atendimentos+"\n\n"+
-"TIPOS DE CRIME (top 10):\n"+ctx.porTipo.map(function(t){return "- "+t[0]+": "+t[1];}).join("\n")+"\n\n"+
-"BAIRROS (mais ocorrências):\n"+ctx.porBairro.map(function(b){return "- "+b[0]+": "+b[1];}).join("\n")+"\n\n"+
-"EVOLUÇÃO MENSAL:\n"+ctx.porMes.map(function(m){return "- "+m[0]+": "+m[1];}).join("\n")+"\n\n"+
-"PERFIL DAS VÍTIMAS:\n"+
-"- Feminino: "+ctx.feminino+" | Masculino: "+ctx.masculino+"\n"+
-"- Violência Doméstica (VD): "+ctx.vd+"\n"+
-"- Violência Contra a Mulher (VCM): "+ctx.vcm+"\n"+
-"- Reincidentes: "+ctx.reinc+" | Com Medida Protetiva: "+ctx.medidasProtetivas+"\n\n"+
-"ÚLTIMAS OCORRÊNCIAS:\n"+ctx.recentes.join("\n")+"\n\n"+
-"Responda sempre em português brasileiro. Seja objetivo, analítico e profissional. Use formatação com **negrito** para destaques e quebras de linha para clareza. Quando gerar relatórios, estruture em seções com títulos. Nunca invente dados além dos fornecidos.";
+  return "Você é o assistente de inteligência da 77ª CIPM BCS (Base Comunitária de Segurança). Analise os dados e responda com precisão qualquer pergunta sobre ocorrências, vítimas, suspeitos, bairros ou estatísticas.\n\n"+
+"RESUMO ("+new Date().toLocaleDateString("pt-BR")+"):\n"+
+"Total: "+ctx.total+" ocorrências | Mês atual ("+ctx.mesStr+"): "+ctx.ocMes+" | Mês anterior: "+ctx.ocMesAnt+"\n"+
+"Feminino: "+ctx.feminino+" | Masculino: "+ctx.masculino+" | VD: "+ctx.vd+" | Reincidentes: "+ctx.reinc+" | Med.Protetiva: "+ctx.mp+"\n"+
+"Atendimentos: "+ctx.atendimentos+" | Agendamentos: "+ctx.agendamentos+" | Visitas: "+ctx.visitas+"\n\n"+
+"TIPOS DE CRIME:\n"+ctx.tiposOrd.map(function(t){return t[0]+": "+t[1];}).join(" | ")+"\n\n"+
+"BAIRROS:\n"+ctx.bairrosOrd.map(function(b){return b[0]+": "+b[1];}).join(" | ")+"\n\n"+
+"EVOLUÇÃO MENSAL:\n"+ctx.mesesOrd.map(function(m){return m[0]+":"+m[1];}).join(" | ")+"\n\n"+
+"TODAS AS OCORRÊNCIAS (data|hora|tipo|bairro|vítima|idade/sexo/tel|suspeito|flags):\n"+ctx.listaOcs.join("\n")+"\n\n"+
+"Responda em português. Use dados reais acima — nunca invente. Seja direto e objetivo.";
 }
 
 function _renderChatIA(){
