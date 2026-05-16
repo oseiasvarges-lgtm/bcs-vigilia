@@ -1763,9 +1763,82 @@ function processarOcorrencia() {
   const txt = document.getElementById("paste-area")?.value||"";
   if(!txt.trim()){showToast("Cole o texto primeiro","error");return;}
   const nova = extrairLocal(txt);
+  const iaKey = localStorage.getItem("bcs_anthropic_key")||"";
+  if(iaKey){
+    analisarOcorrenciaIA(txt, nova);
+  } else {
+    const alertas = verificarReincidencia(nova);
+    if(alertas.length){state.alertas={nova,lista:alertas};render();}
+    else salvarOcorrencia(nova,false);
+  }
+}
+
+function aplicarSugestaoIA(campo, valor) {
+  if(!state._iaSugestoes) return;
+  state._iaSugestoes.nova[campo] = valor;
+  if(!state._iaSugestoesAplicadas) state._iaSugestoesAplicadas = {};
+  state._iaSugestoesAplicadas[campo] = true;
+  render();
+}
+
+function confirmarSugestoesIA() {
+  if(!state._iaSugestoes) return;
+  const nova = state._iaSugestoes.nova;
+  state._iaSugestoes = null;
+  state._iaSugestoesAplicadas = {};
   const alertas = verificarReincidencia(nova);
   if(alertas.length){state.alertas={nova,lista:alertas};render();}
   else salvarOcorrencia(nova,false);
+}
+
+async function analisarOcorrenciaIA(txtOriginal, nova) {
+  const iaKey = localStorage.getItem("bcs_anthropic_key")||"";
+  // Mostra loading no botão
+  const btn = document.querySelector("button[onclick='processarOcorrencia()']");
+  if(btn){ btn.disabled=true; btn.textContent="🤖 Analisando..."; }
+
+  const prompt = `Analise esta ocorrência policial extraída de um texto e sugira ajustes nos campos. Responda SOMENTE em JSON válido, sem texto fora do JSON.
+
+TEXTO ORIGINAL:
+${txtOriginal.substring(0,2000)}
+
+DADOS EXTRAÍDOS AUTOMATICAMENTE:
+${JSON.stringify(nova, null, 2)}
+
+Retorne um JSON com este formato exato:
+{
+  "sugestoes": [
+    {"campo": "tipo", "atual": "valor atual", "sugerido": "novo valor", "motivo": "razão breve"},
+    {"campo": "vitima_nome", "atual": "valor atual", "sugerido": "novo valor", "motivo": "razão breve"}
+  ],
+  "ok": true
+}
+
+Sugira apenas campos com problema real. Se tudo estiver correto, retorne {"sugestoes":[], "ok":true}.
+Campos possíveis: tipo, bairro, vitima_nome, vitima_idade, vitima_sexo, vitima_telefone, vitima_endereco, suspeito_nome, suspeito_apelido, suspeito_caracteristicas, veiculo, violencia_domestica (true/false), medida_protetiva (Sim/Não).`;
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":iaKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+      body:JSON.stringify({model:"claude-haiku-4-5-20251001",max_tokens:1000,messages:[{role:"user",content:prompt}]})
+    });
+    const rj = await res.json();
+    const txt = rj.content&&rj.content[0]?rj.content[0].text:"";
+    let parsed = null;
+    try { parsed = JSON.parse(txt.match(/\{[\s\S]*\}/)?.[0]||"{}"); } catch(e){}
+    if(parsed && parsed.sugestoes && parsed.sugestoes.length>0){
+      state._iaSugestoes = {nova, sugestoes: parsed.sugestoes};
+      render();
+      return;
+    }
+  } catch(e){ console.warn("[IA] Análise falhou:",e.message); }
+
+  // Sem sugestões ou erro — segue fluxo normal
+  const alertas = verificarReincidencia(nova);
+  if(alertas.length){state.alertas={nova,lista:alertas};render();}
+  else salvarOcorrencia(nova,false);
+  if(btn){ btn.disabled=false; btn.textContent="Processar"; }
 }
 
 // ══════════════════════════════════════════════════
@@ -6218,6 +6291,44 @@ function renderTela() {
   const totalReinc=ocs.filter(o=>o.reincidente).length;
 
   // ALERTAS
+  if(state._iaSugestoes){
+    const {nova, sugestoes} = state._iaSugestoes;
+    if(!state._iaSugestoesAplicadas) state._iaSugestoesAplicadas = {};
+    let html=`<div style="background:#0e1a0e;border:2px solid #2d7a5a;border-radius:16px;padding:24px;margin-bottom:20px">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px">
+        <span style="font-size:32px">🤖</span>
+        <div><h2 style="color:#4ade80;font-size:20px;font-weight:700">Sugestões da IA</h2>
+        <p style="color:#6a9a70;font-size:13px;margin-top:2px">${sugestoes.length} ajuste(s) identificado(s). Revise e confirme.</p></div>
+      </div>`;
+    sugestoes.forEach(function(s,i){
+      const aplicado = state._iaSugestoesAplicadas[s.campo];
+      html+=`<div style="background:#141a14;border:1px solid ${aplicado?'#2d7a5a':'#3a4a3a'};border-radius:10px;padding:14px 16px;margin-bottom:10px;opacity:${aplicado?'0.6':'1'}">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px">
+          <div style="flex:1">
+            <p style="color:#9a9070;font-size:10px;text-transform:uppercase;letter-spacing:1px;margin-bottom:4px">${s.campo}</p>
+            <p style="color:#a89860;font-size:13px;margin-bottom:4px">
+              <span style="color:#7a5535">${s.atual||'(vazio)'}</span>
+              <span style="color:#5a5535"> → </span>
+              <span style="color:#e8ddd0;font-weight:700">${s.sugerido}</span>
+            </p>
+            <p style="color:#5a7050;font-size:11px">${s.motivo}</p>
+          </div>
+          ${aplicado
+            ? `<span style="color:#4ade80;font-size:12px;font-weight:700;flex-shrink:0">✓ Aplicado</span>`
+            : `<button onclick="aplicarSugestaoIA('${s.campo}',${JSON.stringify(s.sugerido)})" style="background:#2d7a5a;border:none;color:#fff;padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0">Aplicar</button>`
+          }
+        </div>
+      </div>`;
+    });
+    html+=`</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <button class="btn btn-ghost btn-full" onclick="state._iaSugestoes=null;state._iaSugestoesAplicadas={};render()">← Cancelar</button>
+      <button class="btn btn-green btn-full" onclick="confirmarSugestoesIA()">✓ Salvar ocorrência</button>
+    </div>`;
+    main.innerHTML=html;
+    return;
+  }
+
   if(state.alertas){
     const al=state.alertas;
     let html=`<div class="alert-box">
