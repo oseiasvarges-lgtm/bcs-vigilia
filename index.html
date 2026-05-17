@@ -1675,16 +1675,22 @@ function extrairLocal(texto) {
     /veículo[^,\n]*?([A-ZÀ-Ú][a-z]+\s+[A-Za-z]+[^,\n]*)/i
   ]);
 
-  // ══ DESCRIÇÃO ════════════════════════════════════════════════════════════════
+  // ══ DESCRIÇÃO — seções separadas ════════════════════════════════════════════
+  // Tenta isolar Dinâmica / Medidas / Descrição como sub-seções independentes
+  var _dinStr = gp([
+    /^Din[âa]mica\s*(?:dos\s*fatos)?\s*:\s*([\s\S]+?)(?=\n\s*Medidas|\n\s*Policiais|\n\s*Pessoas|\n\s*Efetivo|$)/im
+  ]);
+  var _medStr = gp([
+    /^Medidas\s*[Aa]dot[^:]*:\s*([\s\S]+?)(?=\n\s*Policiais|\n\s*Pessoas\s+Envolvidas|\n\s*Efetivo|\n\s*Tipo\s*:\s*VÍT|$)/im
+  ]);
+
   var descricao = (function(){
     // SIGESPOL web: DESCRIÇÃO:\t[tudo inline incluindo Dinâmica e Medidas]
     var m = texto.match(/DESCRIÇÃO\s*:\s*([\s\S]+?)(?=\s*Pessoas\s+Envolvidas|\s*$)/i);
     if(m && m[1] && m[1].trim().length > 10) return m[1].trim();
     // SIGESPOL PDF: seções separadas por cabeçalho
     var desc = gp([/^Descri[çc][ãa]o\s*:\s*([\s\S]+?)(?=Din[âa]mica|Medidas|Policiais|Pessoas|\s*$)/im]);
-    var din  = gp([/^Din[âa]mica dos fatos\s*:\s*([\s\S]+?)(?=Medidas|Policiais|Pessoas|\s*$)/im]);
-    var med  = gp([/^Medidas adotadas[^:]*:\s*([\s\S]+?)(?=Policiais|Pessoas|\s*$)/im]);
-    if(desc||din) return [desc, din&&("Dinâmica dos fatos:\n"+din), med&&("Medidas adotadas:\n"+med)].filter(Boolean).join("\n\n");
+    if(desc||_dinStr) return [desc, _dinStr&&("Dinâmica dos fatos:\n"+_dinStr), _medStr&&("Medidas adotadas:\n"+_medStr)].filter(Boolean).join("\n\n");
     // WPP
     var wppPats = [/\*DESCRIÇÃO:\*\s*([\s\S]+?)(?=\n\s*\*[A-ZÁÉÍÓÚÀÂÊÔÃÕÇ]|\s*$)/i];
     for(var i=0;i<wppPats.length;i++){var wm=texto.match(wppPats[i]);if(wm&&wm[1]&&wm[1].trim().length>10)return wm[1].trim();}
@@ -1702,13 +1708,17 @@ function extrairLocal(texto) {
   return {
     id:id("OC"), criadoEm:new Date().toISOString(),
     numero:numero||"", data:dataISO, hora:hora||"", tipo:tipo||"Não identificado",
-    bairro:bairro||"", municipio:municipio,
+    local:localStr||"", bairro:bairro||"", municipio:municipio,
     vitima_nome:vitimaNome||"", vitima_idade:vitimaIdade||"",
     vitima_sexo:vitimaSexo, vitima_telefone:vitimaTel||"",
     vitima_endereco:vitimaEnd||"", vitima_cpf:vitimaCPF||"",
     suspeito_nome:suspNome, suspeito_apelido:"",
-    suspeito_caracteristicas:"", veiculo:veiculo||objetos||"",
+    suspeito_caracteristicas:"", veiculo:veiculo||"",
+    objetos:objetos||"",
     medida_protetiva:mp, descricao:descricao||"",
+    descricao_dinamica:_dinStr||descricao||"",
+    medidas:_medStr||"",
+    policiais:efetivo||"",
     responsavel:responsavel||"", violencia_domestica:vd, requer_visita:vd,
     reincidente:false, texto_original:texto,
   };
@@ -1755,13 +1765,32 @@ function reextrairOcorrencias() {
       var nova = extrairLocal(o.texto_original);
       // Campos que SÃO reescritos (dados extraíveis do texto)
       var camposAtualizar = [
-        "tipo","data","hora","bairro","municipio","numero",
+        "tipo","data","hora","local","bairro","municipio","numero",
         "vitima_nome","vitima_idade","vitima_sexo","vitima_telefone",
         "vitima_endereco","vitima_cpf",
-        "suspeito_nome","suspeito_apelido","veiculo",
-        "medida_protetiva","descricao","responsavel","violencia_domestica"
+        "suspeito_nome","suspeito_apelido","veiculo","objetos",
+        "medida_protetiva","descricao","descricao_dinamica","responsavel","violencia_domestica"
       ];
-      camposAtualizar.forEach(function(c){ if(nova[c]!==undefined) o[c]=nova[c]; });
+      camposAtualizar.forEach(function(c){ if(nova[c]!==undefined && nova[c]!=="") o[c]=nova[c]; });
+      // Policiais: só atualiza se nova extração encontrou algo
+      if(nova.policiais) o.policiais = nova.policiais;
+      // Medidas: só sobrescreve se o novo texto for mais limpo (sem "Tipo: VÍTIMA")
+      if(nova.medidas && !/Tipo\s*:\s*VÍT/i.test(nova.medidas)) o.medidas = nova.medidas;
+
+      // Fallback: se vitima_nome ainda vazio, tentar extrair do campo medidas (importação antiga)
+      if(!o.vitima_nome && o.medidas && /Tipo\s*:\s*VÍT[ÍI]MA/i.test(o.medidas)){
+        var _fb = extrairLocal(o.medidas);
+        if(_fb.vitima_nome){ o.vitima_nome=_fb.vitima_nome; o.vitima_sexo=_fb.vitima_sexo; o.vitima_idade=_fb.vitima_idade; o.vitima_telefone=_fb.vitima_telefone||o.vitima_telefone; o.vitima_endereco=_fb.vitima_endereco||o.vitima_endereco; }
+        if(!o.policiais && _fb.policiais) o.policiais = _fb.policiais;
+        if(!o.objetos && _fb.objetos) o.objetos = _fb.objetos;
+        // Limpar medidas: remover seções estruturadas do SIGESPOL
+        o.medidas = o.medidas
+          .replace(/\n?\s*Tipo\s*:\s*VÍT[ÍI]MA[\s\S]*?(?=\n\s*(?:Tipo\s*:|Efetivo|Objetos)|$)/gi,"")
+          .replace(/\n?\s*Tipo\s*:\s*AUTOR[\s\S]*?(?=\n\s*(?:Tipo\s*:|Efetivo|Objetos)|$)/gi,"")
+          .replace(/\n?\s*Objetos?\s+[Rr]elacionados?[^\n]*/gi,"")
+          .replace(/\n?\s*Efetivo\s+[Ee]mpregado[\s\S]*/i,"")
+          .trim();
+      }
       // Mantém campos que NÃO devem ser sobrescritos
       // (id, criadoEm, reincidente, _frida*, requer_visita permanecem intactos)
       corrigidas++;
