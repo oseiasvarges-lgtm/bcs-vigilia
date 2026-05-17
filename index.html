@@ -1765,7 +1765,8 @@ function reextrairOcorrencias() {
       var nova = extrairLocal(o.texto_original);
       // Campos que SÃO reescritos (dados extraíveis do texto)
       var camposAtualizar = [
-        "tipo","data","hora","local","bairro","municipio","numero",
+        // data/hora/numero NÃO entram aqui — preservar original
+        "tipo","local","bairro","municipio",
         "vitima_nome","vitima_idade","vitima_sexo","vitima_telefone",
         "vitima_endereco","vitima_cpf",
         "suspeito_nome","suspeito_apelido","veiculo","objetos",
