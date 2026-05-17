@@ -1810,6 +1810,143 @@ function reextrairOcorrencias() {
 }
 
 // ══════════════════════════════════════════════════
+// REVISÃO EM LOTE POR IA
+// ══════════════════════════════════════════════════
+var _iaLote = { ativo:false, total:0, atual:0, corrigidas:0, erros:0, cancelar:false, log:[] };
+
+function iniciarRevisaoIALote() {
+  var iaKey = localStorage.getItem("bcs_anthropic_key")||"";
+  if(!iaKey){ showToast("Configure a chave da IA nas configurações antes de usar este recurso","error"); return; }
+
+  var mesAtual = hoje().slice(0,7);
+  var ocs = (state.db.ocorrencias||[]).filter(function(o){
+    if((o.data||"").slice(0,7) !== mesAtual) return false;
+    if(o._revisadoIA) return false;
+    return (o.texto_original||o.descricao_dinamica||o.descricao||"").length > 40;
+  });
+
+  if(!ocs.length){ showToast("Nenhuma ocorrência deste mês para revisar (ou já foram revisadas)","error"); return; }
+
+  if(!confirm("🤖 Revisão por IA\n\n"+ocs.length+" ocorrências de "+mesAtual+" serão analisadas.\n\nA IA vai preencher campos vazios e corrigir dados incorretos.\nProcessamento leva aprox. "+(Math.ceil(ocs.length*0.5))+" segundos.\n\nContinuar?")) return;
+
+  _iaLote = { ativo:true, total:ocs.length, atual:0, corrigidas:0, erros:0, cancelar:false, log:[] };
+  _mostrarProgressoIA();
+  _processarLoteIA(ocs, iaKey);
+}
+
+function _mostrarProgressoIA() {
+  var el = document.getElementById("ia-lote-progress");
+  if(el) el.remove();
+  var d = document.createElement("div");
+  d.id = "ia-lote-progress";
+  d.style.cssText = "position:fixed;bottom:24px;right:24px;background:#1a1000;border:2px solid #d4a87a;border-radius:14px;padding:16px 20px;z-index:9998;min-width:280px;box-shadow:0 8px 32px rgba(0,0,0,0.6)";
+  _atualizarProgressoIA(d);
+  document.body.appendChild(d);
+}
+
+function _atualizarProgressoIA(el) {
+  if(!el) el = document.getElementById("ia-lote-progress");
+  if(!el) return;
+  var pct = _iaLote.total ? Math.round((_iaLote.atual/_iaLote.total)*100) : 0;
+  el.innerHTML =
+    "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:10px'>" +
+      "<span style='color:#d4a87a;font-size:12px;font-weight:700'>🤖 Revisão por IA</span>" +
+      (_iaLote.ativo ? "<button onclick=\"_iaLote.cancelar=true;this.textContent='Cancelando...'\" style='background:#3a0808;border:1px solid #ef4444;color:#ef4444;padding:3px 10px;border-radius:5px;font-size:10px;cursor:pointer'>✕ Cancelar</button>" : "") +
+    "</div>" +
+    "<div style='background:#2a1c10;border-radius:6px;height:8px;margin-bottom:8px;overflow:hidden'>" +
+      "<div style='background:linear-gradient(90deg,#d4a87a,#a07c58);height:100%;width:"+pct+"%;transition:width .3s'></div>" +
+    "</div>" +
+    "<div style='display:flex;justify-content:space-between;font-size:11px;color:#a07c58;margin-bottom:6px'>" +
+      "<span>"+_iaLote.atual+"/"+_iaLote.total+"</span>" +
+      "<span style='color:#6a9a50'>✓ "+_iaLote.corrigidas+" melhoradas</span>" +
+      (_iaLote.erros ? "<span style='color:#ef4444'>✗ "+_iaLote.erros+"</span>" : "") +
+    "</div>" +
+    (_iaLote.log.length ? "<div style='font-size:9px;color:#8a6a4a;max-height:60px;overflow:hidden'>" + _iaLote.log.slice(-3).map(function(l){ return "· "+l; }).join("<br>") + "</div>" : "") +
+    (!_iaLote.ativo ? "<button onclick=\"document.getElementById('ia-lote-progress').remove();renderOcorrenciasGestor(document.getElementById('main')||document.getElementById('main-content'),state._ocPerfil)\" style='margin-top:8px;width:100%;background:#2a1c10;border:1px solid #d4a87a;color:#d4a87a;padding:6px;border-radius:6px;font-size:11px;cursor:pointer'>Fechar</button>" : "");
+}
+
+async function _processarLoteIA(ocs, iaKey) {
+  for(var i = 0; i < ocs.length; i++) {
+    if(_iaLote.cancelar) break;
+    _iaLote.atual = i + 1;
+    _atualizarProgressoIA();
+    try {
+      await _revisarUmaOcorrenciaIA(ocs[i], iaKey);
+    } catch(e) {
+      _iaLote.erros++;
+      console.warn("[IA Lote] Erro em "+ocs[i].id, e);
+    }
+    // Delay entre requisições para respeitar rate limit
+    await new Promise(function(r){ setTimeout(r, 450); });
+  }
+  // Finalizar
+  _iaLote.ativo = false;
+  salvarLocal();
+  // Sincronizar corrigidas ao Sheets
+  var corrigidas = (state.db.ocorrencias||[]).filter(function(o){ return o._revisadoIA; });
+  corrigidas.slice(0,50).forEach(function(o,i){ setTimeout(function(){ enviarSheets("ocorrencias",o); }, i*300); });
+  _atualizarProgressoIA();
+  showToast("🤖 Revisão IA concluída — "+_iaLote.corrigidas+" de "+_iaLote.total+" melhoradas");
+}
+
+async function _revisarUmaOcorrenciaIA(oc, iaKey) {
+  var texto = (oc.texto_original||oc.descricao_dinamica||oc.medidas||oc.descricao||"").slice(0,2500);
+
+  var prompt = "Você é um assistente policial da 77ª CIPM BCS, Vitória da Conquista-BA. Analise a ocorrência abaixo e corrija/preencha os campos que estão vazios ou incorretos. Responda SOMENTE em JSON válido.\n\n" +
+    "TEXTO ORIGINAL:\n" + texto + "\n\n" +
+    "CAMPOS ATUAIS (verifique cada um):\n" +
+    '- tipo: "' + (oc.tipo||"") + '"\n' +
+    '- bairro: "' + (oc.bairro||"") + '"\n' +
+    '- local: "' + (oc.local||"") + '"\n' +
+    '- vitima_nome: "' + (oc.vitima_nome||"") + '"\n' +
+    '- vitima_idade: "' + (oc.vitima_idade||"") + '" | vitima_sexo: "' + (oc.vitima_sexo||"") + '"\n' +
+    '- vitima_telefone: "' + (oc.vitima_telefone||"") + '"\n' +
+    '- vitima_endereco: "' + (oc.vitima_endereco||"") + '"\n' +
+    '- suspeito_nome: "' + (oc.suspeito_nome||"") + '"\n' +
+    '- policiais: "' + (oc.policiais||"") + '"\n' +
+    '- objetos: "' + (oc.objetos||"") + '"\n' +
+    '- violencia_domestica: ' + (oc.violencia_domestica||false) + '\n' +
+    '- medida_protetiva: "' + (oc.medida_protetiva||"") + '"\n\n' +
+    "INSTRUÇÕES:\n" +
+    "1. Se campo vazio mas info existe no texto → preencha\n" +
+    "2. Se campo tem valor incorreto/confundido → corrija\n" +
+    "3. Tipo: normalize para nomes padrão (ex: Roubo, Furto, Violência Doméstica, Homicídio, etc.)\n" +
+    "4. Só sugira se tiver certeza pelo texto. Seja conservador.\n" +
+    "5. vitima_sexo: use apenas 'M' ou 'F'\n\n" +
+    'Retorne: {"sugestoes":[{"campo":"nome","atual":"valor","sugerido":"novo","motivo":"razão curta"}]}\n' +
+    'Se tudo OK: {"sugestoes":[]}';
+
+  var res = await fetch("https://api.anthropic.com/v1/messages", {
+    method:"POST",
+    headers:{"Content-Type":"application/json","x-api-key":iaKey,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+    body:JSON.stringify({model:"claude-haiku-4-5-20251001", max_tokens:600, messages:[{role:"user",content:prompt}]})
+  });
+  var rj = await res.json();
+  if(rj.error){ _iaLote.erros++; return; }
+
+  var txtResp = rj.content&&rj.content[0] ? rj.content[0].text : "";
+  var parsed = null;
+  try { parsed = JSON.parse((txtResp.match(/\{[\s\S]*\}/)||["{}"])[0]); } catch(e){}
+
+  if(parsed && parsed.sugestoes && parsed.sugestoes.length > 0) {
+    var camposProtegidos = {id:1, criadoEm:1, data:1, hora:1, numero:1, reincidente:1, texto_original:1, fonte:1};
+    var aplicadas = 0;
+    parsed.sugestoes.forEach(function(s) {
+      if(!s.campo || camposProtegidos[s.campo]) return;
+      if(!s.sugerido || s.sugerido === s.atual) return;
+      oc[s.campo] = s.sugerido;
+      aplicadas++;
+    });
+    if(aplicadas > 0) {
+      oc._revisadoIA = true;
+      _iaLote.corrigidas++;
+      var resumo = parsed.sugestoes.slice(0,2).map(function(s){ return s.campo+"→"+s.sugerido.slice(0,20); }).join(", ");
+      _iaLote.log.push((oc.tipo||"?")+" "+((oc.numero||oc.id)||"").slice(0,10)+": "+resumo);
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════
 // SALVAR
 // ══════════════════════════════════════════════════
 function salvarOcorrencia(nova, reinc) {
@@ -10358,6 +10495,10 @@ function renderOcorrenciasGestor(el, perfil_atual){
     var comTexto = state.db.ocorrencias.filter(function(o){return o.texto_original&&o.texto_original.length>20;}).length;
     h.push("<button id='btn-reextrai' style='background:#0e1808;border:1px solid #3a5a28;color:#6a9a50;padding:6px 14px;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px'>🔧 Corrigir Dados Antigos <span style='background:#1a3818;padding:2px 6px;border-radius:4px'>"+comTexto+"</span></button>");
     h.push("<button onclick='restaurarDatasOriginais()' style='background:#1a0808;border:1px solid #c05050;color:#e08070;padding:6px 14px;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer'>🗓 Restaurar Datas</button>");
+    if(localStorage.getItem("bcs_anthropic_key")){
+      var _naoRevisadas = (state.db.ocorrencias||[]).filter(function(o){ return (o.data||"").slice(0,7)===hoje().slice(0,7) && !o._revisadoIA; }).length;
+      if(_naoRevisadas > 0) h.push("<button onclick='iniciarRevisaoIALote()' style='background:#0a0a1a;border:1px solid #6a5af5;color:#a09af8;padding:6px 14px;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer'>🤖 Revisar com IA <span style='background:#1a1a3a;padding:2px 6px;border-radius:4px'>"+_naoRevisadas+"</span></button>");
+    }
   }
   h.push("</div>");
 
