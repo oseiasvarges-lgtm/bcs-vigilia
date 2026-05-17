@@ -2023,12 +2023,28 @@ function renderCalendar() {
     } catch(e){}
     return s;
   }
+  // Pre-indexar eventos por data para O(1) lookup no loop (performance mobile)
+  var _cancelados = new Set((state.agendamentosCancelados||[]).map(function(x){return x.id;}));
+  var _agByDate = {}, _visByDate = {}, _evAvByDate = {};
+  (state.db.agendamentos||[]).forEach(function(a){
+    if(_cancelados.has(a.id)) return;
+    var d=normData(a.data); if(!d) return;
+    if(!_agByDate[d]) _agByDate[d]=[];
+    _agByDate[d].push(a);
+  });
+  (state.db.visitas||[]).forEach(function(v){
+    var d=normData(v.data); if(!d) return;
+    if(!_visByDate[d]) _visByDate[d]=[];
+    _visByDate[d].push(v);
+  });
+  (state.eventosAvulsos||[]).forEach(function(e){
+    if(!e.data) return;
+    if(!_evAvByDate[e.data]) _evAvByDate[e.data]=[];
+    _evAvByDate[e.data].push(e);
+  });
   const getEvs=d=>{
-    var cancelados = (state.agendamentosCancelados||[]).map(x=>x.id);
-    return {
-      ags:(state.db.agendamentos||[]).filter(a=>normData(a.data)===dStr(d)&&!cancelados.includes(a.id)),
-      vis:(state.db.visitas||[]).filter(v=>normData(v.data)===dStr(d))
-    };
+    var ds=dStr(d);
+    return { ags:_agByDate[ds]||[], vis:_visByDate[ds]||[] };
   };
   const sem=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
@@ -2047,7 +2063,7 @@ function renderCalendar() {
   for(let i=0;i<primeiro;i++) html+=`<div class="cal-day"></div>`;
   for(let d=1;d<=total;d++){
     const ds=dStr(d), ev=getEvs(d), isHoje=ds===hojeStr, isSel=state.calDia===d;
-    const _evAvDia=(state.eventosAvulsos||[]).filter(e=>e.data===ds);
+    const _evAvDia=_evAvByDate[ds]||[];
     const totalEvDia=ev.ags.length+ev.vis.length+_evAvDia.length;
     const alertaCls=totalEvDia>=3?" alerta-3":totalEvDia===2?" alerta-2":"";
     const bg=isSel?"background:#3e2c22":isHoje?"background:#42301e":(totalEvDia>=3?"background:#1f0808":"background:#36221a");
@@ -2063,7 +2079,7 @@ function renderCalendar() {
   if(state.calDia){
     const ev=getEvs(state.calDia);
     const diaSel=dStr(state.calDia);
-    const evAvulsos=(state.eventosAvulsos||[]).filter(e=>e.data===diaSel);
+    const evAvulsos=_evAvByDate[diaSel]||[];
     const totalEvs=ev.ags.length+ev.vis.length+evAvulsos.length;
     html+=`<div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
