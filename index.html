@@ -2706,72 +2706,74 @@ function renderCadastrosVCM(main){
 // ══════════════════════════════════════════════════
 function renderDashComandante(main){
   var ocs = state.db.ocorrencias || [];
-  var hoje = new Date();
+  var hojeDate = new Date();
 
-  // ── Definições de crimes ──────────────────────────
+  // ── Helpers de tipo de crime ──────────────────────
   function isHomic(o){ var t=(o.tipo||"").toLowerCase(); return (t.includes("homic")||t.includes("homicídio")||t.includes("homicidio"))&&!t.includes("tentativa"); }
   function isTent(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("tentativa"); }
+  function isFurto(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("furto"); }
+  function isVD(o){ var t=(o.tipo||"").toLowerCase(); return !!(o.violencia_domestica||t.includes("violência doméstica")||t.includes("violencia domestica")); }
+  function isMP(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("maria da penha"); }
+  function isPerturb(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("perturbação")||t.includes("perturbacao")||t.includes("sossego"); }
+  function isVCM(o){ var t=(o.tipo||"").toLowerCase(); return !!(o.violencia_domestica||t.includes("maria da penha")||t.includes("violência doméstica")||t.includes("violencia domestica")||t.includes("vcm")); }
 
-  var CRIMES = [
-    { key:"todos",   label:"Homic. + Tent.",   cor:"#f5ede0", fn:function(o){ return isHomic(o)||isTent(o); } },
-    { key:"homic",   label:"Homicídio",         cor:"#ef4444", fn:isHomic },
-    { key:"tent",    label:"Tent. Homicídio",   cor:"#ff6b6b", fn:isTent },
-    { key:"roubo",   label:"Roubo",             cor:"#f97316", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("roubo"); } },
-    { key:"furto",   label:"Furto",             cor:"#d4a87a", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("furto"); } },
-    { key:"femin",   label:"Feminicídio",       cor:"#ec4899", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("feminic"); } },
-    { key:"vd",      label:"Viol. Dom. / MP",   cor:"#ff1493", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return o.violencia_domestica||t.includes("maria da penha")||t.includes("violência doméstica")||t.includes("violencia domestica"); } },
-    { key:"vcm",     label:"Viol. c/ Mulher",   cor:"#f43f5e", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("violência contra a mulher")||t.includes("violencia contra a mulher")||t.includes("vcm")||t.includes("lesão corporal")||t.includes("lesao corporal"); } },
-    { key:"trafico", label:"Tráfico",           cor:"#eab308", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("tráfico")||t.includes("trafico"); } },
-    { key:"estupro", label:"Crime Sexual",      cor:"#a855f7", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("estupro")||t.includes("abuso sexual"); } },
-    { key:"ameaca",  label:"Ameaça",            cor:"#6366f1", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("ameaça")||t.includes("ameaca"); } },
+  // ── Estado dos filtros ────────────────────────────
+  var periodoKey = state._cmdPeriodo || 'mes';
+  var periodoDias = {semana:7,mes:30,trimestre:90,semestre:180,ano:365}[periodoKey] || 30;
+  var corte = new Date(Date.now() - periodoDias*24*60*60*1000);
+  function dentroP(o){ var dt=_pdLocal(o.data); return !!(dt&&dt>=corte); }
+
+  var bairroFiltro = state._cmdBairro || '';
+  var crimesFiltro = state._cmdCrimes || []; // array de keys, vazio = todos
+
+  var CRIMES_DEF = [
+    { key:'furto',    label:'Furto',               cor:'#d4a87a', fn:isFurto },
+    { key:'homic',    label:'Homicídio',            cor:'#ef4444', fn:isHomic },
+    { key:'tent',     label:'Tent. Homicídio',      cor:'#ff6b6b', fn:isTent },
+    { key:'vd',       label:'Viol. Doméstica',      cor:'#ff1493', fn:isVD },
+    { key:'mp',       label:'Maria da Penha',       cor:'#ec4899', fn:isMP },
+    { key:'perturb',  label:'Perturbação Sossego',  cor:'#6366f1', fn:isPerturb }
   ];
 
-  // Crime selecionado
-  var crimeKey = state._cmdCrime || "todos";
-  var crimeFiltro = CRIMES.find(function(c){ return c.key===crimeKey; }) || CRIMES[0];
+  function matchCrimes(o){
+    if(!crimesFiltro.length) return true;
+    return crimesFiltro.some(function(k){ var c=CRIMES_DEF.find(function(d){return d.key===k;}); return c&&c.fn(o); });
+  }
+  function matchBairro(o){ return !bairroFiltro||o.bairro===bairroFiltro; }
 
-  // ── Período de análise ────────────────────────────
-  var periodo = state._cmdPeriodo || 30;
-  var corte = periodo === "all" ? null : new Date(Date.now() - periodo*24*60*60*1000);
-  function dentroP(o){ if(!corte) return true; var dt=_pdLocal(o.data); return dt&&dt>=corte; }
+  // Dataset principal filtrado
+  var todosP = ocs.filter(function(o){ return dentroP(o)&&matchBairro(o)&&matchCrimes(o); });
 
-  // Dataset filtrado por crime + período
-  var todosP = ocs.filter(function(o){ return dentroP(o)&&crimeFiltro.fn(o); });
-
-  // ── Mês atual vs anterior ─────────────────────────
-  var mesA=hoje.getMonth(), anoA=hoje.getFullYear();
+  // ── Helpers de mês ────────────────────────────────
+  var mesA=hojeDate.getMonth(), anoA=hojeDate.getFullYear();
   var mesAnt=mesA===0?11:mesA-1, anoAnt=mesA===0?anoA-1:anoA;
   function cntMesFn(fn,m,y){ return ocs.filter(function(o){ var dt=_pdLocal(o.data); return dt&&dt.getMonth()===m&&dt.getFullYear()===y&&fn(o); }).length; }
-  var nMes    = cntMesFn(crimeFiltro.fn, mesA, anoA);
-  var nMesAnt = cntMesFn(crimeFiltro.fn, mesAnt, anoAnt);
   function seta(a,b){ return a>b?"<span style='color:#ef4444'>▲ "+a+"</span>":a<b?"<span style='color:#22c55e'>▼ "+a+"</span>":"<span style='color:#d4a87a'>= "+a+"</span>"; }
 
-  // ── Suspeito ──────────────────────────────────────
+  // ── Análise dos dados (aba Criminalidade) ─────────
   var comSusp = todosP.filter(function(o){ return o.suspeito_nome&&o.suspeito_nome.trim()&&o.suspeito_nome.toLowerCase()!=="não identificado"; });
   var semSusp = todosP.filter(function(o){ return !o.suspeito_nome||!o.suspeito_nome.trim()||o.suspeito_nome.toLowerCase()==="não identificado"; });
   var pctEsc = todosP.length ? Math.round(comSusp.length/todosP.length*100) : 0;
-  var reinc   = todosP.filter(function(o){ return o.reincidente; });
+  var reinc = todosP.filter(function(o){ return o.reincidente; });
 
-  // ── Últimos 6 meses (linha do crime selecionado) ──
-  var labelsMeses=[], dataCrime=[], dataHom=[], dataTent=[];
+  var nMes    = cntMesFn(matchCrimes, mesA, anoA);
+  var nMesAnt = cntMesFn(matchCrimes, mesAnt, anoAnt);
+
+  // Gráfico mensal últimos 6 meses
+  var labelsMeses=[], dataCrime=[];
   for(var i=5;i>=0;i--){
-    var dm=new Date(hoje.getFullYear(),hoje.getMonth()-i,1);
+    var dm=new Date(hojeDate.getFullYear(),hojeDate.getMonth()-i,1);
     labelsMeses.push(dm.toLocaleDateString("pt-BR",{month:"short"}).replace(".","")+"/"+(dm.getFullYear()+"").slice(2));
-    dataCrime.push(cntMesFn(crimeFiltro.fn, dm.getMonth(), dm.getFullYear()));
-    // Para "todos": manter homic + tent separados no gráfico
-    if(crimeKey==="todos"){
-      dataHom.push(cntMesFn(isHomic, dm.getMonth(), dm.getFullYear()));
-      dataTent.push(cntMesFn(isTent, dm.getMonth(), dm.getFullYear()));
-    }
+    dataCrime.push(cntMesFn(matchCrimes, dm.getMonth(), dm.getFullYear()));
   }
 
-  // ── Dia da semana ─────────────────────────────────
+  // Dia da semana
   var nomeDia=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
   var cntDow=new Array(7).fill(0);
   todosP.forEach(function(o){ var dt=_pdLocal(o.data); if(dt) cntDow[dt.getDay()]++; });
   var maxDow=Math.max.apply(null,cntDow)||1;
 
-  // ── Turno ─────────────────────────────────────────
+  // Turno
   var turnos={madrugada:0,manha:0,tarde:0,noite:0};
   todosP.forEach(function(o){
     var hh=parseInt((o.hora||"00:00").split(":")[0]||"0");
@@ -2781,547 +2783,594 @@ function renderDashComandante(main){
     else turnos.noite++;
   });
 
-  // ── Bairros ───────────────────────────────────────
+  // Top bairros
   var bC={};
   todosP.forEach(function(o){ var b=o.bairro||"Não informado"; bC[b]=(bC[b]||0)+1; });
   var topBairros=Object.keys(bC).map(function(k){return{b:k,n:bC[k]};}).sort(function(a,b){return b.n-a.n;}).slice(0,8);
   var maxB=topBairros.length?topBairros[0].n:1;
 
-  // ── Suspeitos reincidentes ────────────────────────
+  // Suspeitos reincidentes
   var suspCount={};
   todosP.forEach(function(o){ if(o.suspeito_nome&&o.suspeito_nome.trim()&&o.suspeito_nome.toLowerCase()!=="não identificado"){ var s=o.suspeito_nome.trim(); suspCount[s]=(suspCount[s]||0)+1; } });
   var suspReinc=Object.keys(suspCount).filter(function(k){return suspCount[k]>1;}).map(function(k){return{nome:k,n:suspCount[k]};}).sort(function(a,b){return b.n-a.n;});
 
-  // ── Vítimas ───────────────────────────────────────
+  // Vítimas múltiplos registros
   var vitCount={};
   todosP.forEach(function(o){ if(o.vitima_nome&&o.vitima_nome.trim()){ var v=o.vitima_nome.trim(); vitCount[v]=(vitCount[v]||0)+1; } });
   var vitReinc=Object.keys(vitCount).filter(function(k){return vitCount[k]>1;}).map(function(k){return{nome:k,n:vitCount[k]};}).sort(function(a,b){return b.n-a.n;});
 
-  // ── Períodos (seletor) ────────────────────────────
-  var periodos=[{v:30,l:"30 dias"},{v:90,l:"90 dias"},{v:365,l:"1 ano"},{v:"all",l:"Tudo"}];
+  // Comparativo criminal
+  var catTab = state._cmdCompTab || "trimestre";
+  var cats = [
+    { key:"roubo",  label:"Roubo",           cor:"#f97316", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("roubo"); } },
+    { key:"furto",  label:"Furto",            cor:"#d4a87a", fn:isFurto },
+    { key:"homic",  label:"Homicídio",        cor:"#ef4444", fn:isHomic },
+    { key:"tent",   label:"Tent. Homicídio",  cor:"#ff6b6b", fn:isTent },
+    { key:"femin",  label:"Feminicídio",      cor:"#ec4899", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("feminic"); } },
+    { key:"vcm",    label:"Viol. c/ Mulher",  cor:"#f43f5e", fn:isVCM }
+  ];
+  function cntCat(cat,de,ate){ return ocs.filter(function(o){ var dt=_pdLocal(o.data); return dt&&dt>=de&&dt<ate&&cat.fn(o); }).length; }
+  function gerarPeriodos(){
+    var ps=[];
+    if(catTab==="trimestre"){
+      var anoRef=hojeDate.getFullYear(), mesRef=hojeDate.getMonth(), trimRef=Math.floor(mesRef/3);
+      for(var ii=4;ii>=0;ii--){ var t2=trimRef-ii; var anoT=anoRef+Math.floor(t2/4); var tN=((t2%4)+4)%4; ps.push({label:"T"+(tN+1)+"/"+String(anoT).slice(2),de:new Date(anoT,tN*3,1),ate:new Date(anoT,tN*3+3,1),atual:ii===0}); }
+    } else if(catTab==="semestre"){
+      var anoR2=hojeDate.getFullYear(), mesR2=hojeDate.getMonth(), semR=mesR2<6?0:1;
+      for(var jj=3;jj>=0;jj--){ var s=semR-jj; var anoS=anoR2+Math.floor(s/2); var sN=((s%2)+2)%2; ps.push({label:(sN===0?"1ºS":"2ºS")+"/"+String(anoS).slice(2),de:new Date(anoS,sN*6,1),ate:new Date(anoS,sN*6+6,1),atual:jj===0}); }
+    } else {
+      var anoBase=hojeDate.getFullYear();
+      for(var kk=3;kk>=0;kk--){ var an=anoBase-kk; ps.push({label:String(an),de:new Date(an,0,1),ate:new Date(an+1,0,1),atual:kk===0}); }
+    }
+    return ps;
+  }
+  var periodosCmp=gerarPeriodos();
+  var dadosCmp=cats.map(function(cat){ return periodosCmp.map(function(p){ return cntCat(cat,p.de,p.ate); }); });
 
-  // ── HTML ──────────────────────────────────────────
+  // ── Bairros únicos para dropdown ─────────────────
+  var bairrosUniq = ocs.map(function(o){return o.bairro||"";}).filter(function(b,i,a){return b&&a.indexOf(b)===i;}).sort();
+
+  // ── Tab ativa ────────────────────────────────────
+  var tabAtiva = state._cmdTab || 'crime';
+
+  // ══════════════════════════════════════════════════
+  // HTML
+  // ══════════════════════════════════════════════════
   var h=[];
   h.push("<div style='max-width:1100px;margin:0 auto'>");
 
-  // ── Header ────────────────────────────────────────
-  h.push("<div style='margin-bottom:16px'>");
-  h.push("<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:12px'>");
+  // ── Header ───────────────────────────────────────
+  h.push("<div style='margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px'>");
   h.push("<div style='display:flex;align-items:center;gap:10px'>");
   h.push("<span style='font-size:22px'>⚔️</span>");
   h.push("<div><h2 style='font-size:20px;font-weight:800;color:#f5ede0;margin:0'>PAINEL DO COMANDO</h2><p style='color:#8a6a4a;font-size:11px;margin:0;letter-spacing:2px'>77ª CIPM — BCS · "+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})+"</p></div>");
   h.push("</div>");
-  // Seletor de período
-  h.push("<div style='display:flex;gap:5px;align-items:center;flex-wrap:wrap'>");
-  periodos.forEach(function(p){
-    var ativ=state._cmdPeriodo===p.v||(p.v===30&&!state._cmdPeriodo);
-    h.push("<button onclick=\"state._cmdPeriodo="+JSON.stringify(p.v)+";renderDashComandante(document.getElementById('main'))\" style='padding:5px 11px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid "+(ativ?"#d4a87a":"#5e4636")+";background:"+(ativ?"#d4a87a22":"#3c2818")+";color:"+(ativ?"#d4a87a":"#8a6a4a")+"'>"+p.l+"</button>");
-  });
-  h.push("<span style='width:1px;height:18px;background:#4a3224;display:inline-block;margin:0 4px'></span>");
-  h.push("<button onclick='exportarDadosBCS()' title='Exportar todos os dados para backup / outro navegador' style='background:#0a1a2a;border:1px solid #1a3a4a;color:#3a8ab0;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>⬇ Backup</button>");
-  h.push("<label title='Importar backup de outro navegador' style='background:#0a1a0a;border:1px solid #1a4a1a;color:#3a8a5a;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block'>⬆ Importar<input type='file' accept='.json' onchange='importarDadosBCS(this)' style='display:none'/></label>");
+  h.push("<div style='display:flex;gap:6px'>");
+  h.push("<button onclick='exportarDadosBCS()' style='background:#0a1a2a;border:1px solid #1a3a4a;color:#3a8ab0;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>⬇ Backup</button>");
+  h.push("<label style='background:#0a1a0a;border:1px solid #1a4a1a;color:#3a8a5a;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;display:inline-block'>⬆ Importar<input type='file' accept='.json' onchange='importarDadosBCS(this)' style='display:none'/></label>");
   h.push("</div></div>");
 
-  // ── Filtro por Crime ──────────────────────────────
-  h.push("<div style='display:flex;flex-wrap:wrap;gap:6px;padding:12px 14px;background:#2a1c10;border:1px solid #4a3224;border-radius:10px'>");
-  h.push("<span style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;align-self:center;margin-right:4px'>Filtrar por crime:</span>");
-  CRIMES.forEach(function(c){
-    var ativ=crimeKey===c.key;
-    var total=ocs.filter(function(o){ return dentroP(o)&&c.fn(o); }).length;
-    h.push("<button onclick=\"state._cmdCrime='"+c.key+"';renderDashComandante(document.getElementById('main'))\" style='display:flex;align-items:center;gap:5px;padding:5px 11px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid "+(ativ?c.cor:"#4a3224")+";background:"+(ativ?c.cor+"22":"#36221a")+";color:"+(ativ?c.cor:"#8a6a4a")+";transition:all 0.15s'>");
+  // ── Painel de Filtros Master ──────────────────────
+  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:14px 16px;margin-bottom:16px'>");
+
+  // Linha 1: Período
+  h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap'>");
+  h.push("<span style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;width:56px;flex-shrink:0'>Período</span>");
+  [['semana','Semana'],['mes','Mês'],['trimestre','Trimestre'],['semestre','Semestre'],['ano','Ano']].forEach(function(p){
+    var ativ=periodoKey===p[0];
+    h.push("<button onclick=\"state._cmdPeriodo='"+p[0]+"';renderDashComandante(document.getElementById('main'))\" style='padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid "+(ativ?"#d4a87a":"#5e4636")+";background:"+(ativ?"#d4a87a22":"#3c2818")+";color:"+(ativ?"#d4a87a":"#8a6a4a")+"'>"+p[1]+"</button>");
+  });
+  h.push("</div>");
+
+  // Linha 2: Bairro
+  h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap'>");
+  h.push("<span style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;width:56px;flex-shrink:0'>Bairro</span>");
+  h.push("<select onchange=\"state._cmdBairro=this.value;renderDashComandante(document.getElementById('main'))\" style='background:#3c2818;border:1px solid #5e4636;color:#ddd2c0;padding:5px 10px;border-radius:6px;font-size:11px;min-width:160px'>");
+  h.push("<option value=''"+(!bairroFiltro?" selected":"")+">Todos os bairros</option>");
+  bairrosUniq.forEach(function(b){ h.push("<option value='"+esc(b)+"'"+(bairroFiltro===b?" selected":"")+">"+esc(b)+"</option>"); });
+  h.push("</select>");
+  if(bairroFiltro) h.push("<button onclick=\"state._cmdBairro='';renderDashComandante(document.getElementById('main'))\" style='background:#3c1818;border:1px solid #6a2a2a;color:#f97316;padding:4px 9px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>✕ Limpar</button>");
+  h.push("</div>");
+
+  // Linha 3: Crimes
+  h.push("<div style='display:flex;align-items:center;gap:6px;flex-wrap:wrap'>");
+  h.push("<span style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;width:56px;flex-shrink:0'>Crimes</span>");
+  CRIMES_DEF.forEach(function(c){
+    var ativ=crimesFiltro.indexOf(c.key)>=0;
+    var total=ocs.filter(function(o){ return dentroP(o)&&matchBairro(o)&&c.fn(o); }).length;
+    var toggleFn="(function(){var arr=state._cmdCrimes||[];var idx=arr.indexOf('"+c.key+"');if(idx>=0)arr.splice(idx,1);else arr.push('"+c.key+"');state._cmdCrimes=arr;renderDashComandante(document.getElementById('main'));})()";
+    h.push("<button onclick=\""+toggleFn+"\" style='display:flex;align-items:center;gap:5px;padding:5px 10px;border-radius:20px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid "+(ativ?c.cor:"#4a3224")+";background:"+(ativ?c.cor+"22":"#36221a")+";color:"+(ativ?c.cor:"#8a6a4a")+";transition:all 0.15s'>");
     h.push("<span style='width:7px;height:7px;border-radius:50%;background:"+c.cor+";display:inline-block;flex-shrink:0'></span>");
     h.push(c.label);
-    if(total>0) h.push(" <span style='background:"+(ativ?c.cor+"33":"#4a3224")+";color:"+(ativ?c.cor:"#8a6a4a")+";padding:1px 5px;border-radius:8px;font-size:10px'>"+total+"</span>");
+    h.push(" <span style='background:"+(ativ?c.cor+"33":"#4a3224")+";color:"+(ativ?c.cor:"#8a6a4a")+";padding:1px 5px;border-radius:8px;font-size:10px'>"+total+"</span>");
     h.push("</button>");
   });
-  h.push("</div>");
-  h.push("</div>"); // fim header block
-
-  // ── Alertas de Projetos ───────────────────────────
-  var alertasPrj=(state.alertasProjetos||[]);
-  var alertasNaoLidos=alertasPrj.filter(function(a){return !a.lido;});
-  if(alertasPrj.length>0){
-    h.push("<div style='margin-bottom:18px'>");
-    h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:10px'>");
-    h.push("<div style='display:flex;align-items:center;gap:8px'>");
-    h.push("<span style='font-size:16px'>🔔</span>");
-    h.push("<span style='color:#f5ede0;font-size:13px;font-weight:800;text-transform:uppercase;letter-spacing:1px'>Alertas de Projetos</span>");
-    if(alertasNaoLidos.length>0) h.push("<span style='background:#ef4444;color:#fff;border-radius:10px;padding:2px 8px;font-size:11px;font-weight:700;animation:piscar-suave 2s infinite'>"+alertasNaoLidos.length+" novo"+(alertasNaoLidos.length>1?"s":"")+"</span>");
-    h.push("</div>");
-    if(alertasNaoLidos.length>0) h.push("<button onclick='marcarTodosAlertasLidos()' style='background:#3c2818;border:1px solid #4a3224;color:#8a6a4a;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>✓ Marcar todos como lidos</button>");
-    h.push("</div>");
-    var alertasExib=alertasPrj.slice(0,8);
-    alertasExib.forEach(function(a){
-      var dataFmt=new Date(a.criadoEm).toLocaleString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric",hour:"2-digit",minute:"2-digit"});
-      var aPct=a.pctAvanco!==undefined?a.pctAvanco:null;
-      var aPctCor=aPct===100?"#22c55e":aPct>=50?"#0ea5e9":"#f59e0b";
-      h.push("<div style='background:"+(a.lido?"#2a1c10":"#0a1a0a")+";border:1px solid "+(a.lido?"#3c2818":"#1a3a1a")+";border-left:3px solid "+(a.lido?"#4a3224":"#22c55e")+";border-radius:8px;padding:10px 14px;margin-bottom:6px;position:relative"+(a.lido?"":";animation:piscar-suave 4s infinite")+"'>");
-      // Linha 1: projeto › tarefa + badges
-      h.push("<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:5px'>");
-      h.push("<span style='color:"+(a.lido?"#5e4636":"#22c55e")+";font-size:10px;font-weight:700'>📁 "+esc(a.projNome)+"</span>");
-      h.push("<span style='color:#4a3224;font-size:10px'>›</span>");
-      h.push("<span style='color:"+(a.lido?"#5e4636":"#6a9a3a")+";font-size:10px;font-weight:600'>"+esc(a.tarefaTitulo)+"</span>");
-      if(!a.lido) h.push("<span style='background:#22c55e;color:#2a1c10;border-radius:8px;padding:1px 6px;font-size:9px;font-weight:700'>NOVO</span>");
-      if(aPct!==null) h.push("<span style='background:"+aPctCor+"22;color:"+aPctCor+";padding:1px 7px;border-radius:8px;font-size:10px;font-weight:800;margin-left:auto'>"+aPct+"% avanço</span>");
-      h.push("</div>");
-      // Barra de progresso
-      if(aPct!==null) h.push("<div style='background:#2a1c10;border-radius:4px;height:5px;margin-bottom:7px'><div style='height:100%;width:"+aPct+"%;background:"+aPctCor+";border-radius:4px'></div></div>");
-      // Texto + status + rodapé
-      h.push("<div style='display:flex;align-items:start;gap:10px'>");
-      h.push("<div style='flex:1'>");
-      if(a.novoStatus) h.push("<span style='background:#1a1a2a;color:#8a8ab0;padding:1px 7px;border-radius:5px;font-size:10px;font-weight:700;display:inline-block;margin-bottom:4px'>→ "+a.novoStatus+"</span>");
-      h.push("<p style='color:"+(a.lido?"#5e4636":"#c0d8c0")+";font-size:11px;margin:0 0 4px;line-height:1.5'>"+esc(a.texto.substring(0,150))+(a.texto.length>150?"...":"")+"</p>");
-      h.push("<p style='color:#2a4a2a;font-size:10px;margin:0'>"+(a.autor?"👤 "+esc(a.autor)+" · ":"")+"🕐 "+dataFmt+"</p>");
-      h.push("</div>");
-      if(!a.lido) h.push("<button onclick=\"marcarAlertaProjetoLido('"+a.id+"')\" style='background:#0a2a0a;border:1px solid #1a4a1a;color:#22c55e;padding:5px 10px;border-radius:6px;font-size:10px;cursor:pointer;white-space:nowrap;flex-shrink:0'>✓ Lido</button>");
-      h.push("</div>");
-      h.push("</div>");
-    });
-    if(alertasPrj.length>8) h.push("<p style='color:#4a3224;font-size:10px;text-align:center;margin:4px 0'>+ "+(alertasPrj.length-8)+" alertas mais antigos</p>");
-    h.push("</div>");
-  }
-
-  // ── KPIs Executivos ──────────────────────────────
-  h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px'>");
-  // Total mês
-  h.push("<div style='background:#2a1c10;border:2px solid "+crimeFiltro.cor+"44;border-radius:12px;padding:14px 16px'>");
-  h.push("<p style='color:"+crimeFiltro.cor+"88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>"+crimeFiltro.label+" · Mês</p>");
-  h.push("<p style='font-size:30px;font-weight:800;color:"+crimeFiltro.cor+";margin:0;line-height:1'>"+seta(nMes,nMesAnt)+"</p>");
-  h.push("<p style='color:"+crimeFiltro.cor+"66;font-size:10px;margin:4px 0 0'>mês ant.: "+nMesAnt+"</p>");
-  h.push("</div>");
-  // Total no período
-  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:14px 16px'>");
-  h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Total no Período</p>");
-  h.push("<p style='font-size:30px;font-weight:800;color:#f5ede0;margin:0;line-height:1'>"+todosP.length+"</p>");
-  h.push("<p style='color:#8a6a4a;font-size:10px;margin:4px 0 0'>"+periodo+(periodo==="all"?" (todo período)":" dias")+"</p>");
-  h.push("</div>");
-  // Esclarecimento
-  h.push("<div style='background:#0a1a0a;border:1px solid "+(pctEsc>=60?"#22c55e":pctEsc>=30?"#f59e0b":"#ef4444")+"40;border-radius:12px;padding:14px 16px'>");
-  h.push("<p style='color:#2a5a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Esclarecimento</p>");
-  h.push("<p style='font-size:30px;font-weight:800;color:"+(pctEsc>=60?"#22c55e":pctEsc>=30?"#f59e0b":"#ef4444")+";margin:0;line-height:1'>"+pctEsc+"%</p>");
-  h.push("<p style='color:#2a5a2a;font-size:10px;margin:4px 0 0'>"+comSusp.length+" c/ suspeito</p>");
-  h.push("</div>");
-  // Sem suspeito
-  h.push("<div style='background:#1a0a0a;border:1px solid #3a1a1a;border-radius:12px;padding:14px 16px'>");
-  h.push("<p style='color:#5a2a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Sem Suspeito</p>");
-  h.push("<p style='font-size:30px;font-weight:800;color:#f97316;margin:0;line-height:1'>"+semSusp.length+"</p>");
-  h.push("<p style='color:#5a2a2a;font-size:10px;margin:4px 0 0'>casos em aberto</p>");
-  h.push("</div>");
-  // Reincidentes
-  h.push("<div style='background:#2a1c10;border:1px solid #3a2810;border-radius:12px;padding:14px 16px'>");
-  h.push("<p style='color:#5a3a10;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Reincidentes</p>");
-  h.push("<p style='font-size:30px;font-weight:800;color:#f59e0b;margin:0;line-height:1'>"+reinc.length+"</p>");
-  h.push("<p style='color:#5a3a10;font-size:10px;margin:4px 0 0'>vítimas repetidas</p>");
-  h.push("</div>");
-  // Bairro crítico
-  var bcrit=topBairros[0]?topBairros[0].b:"—";
-  h.push("<div style='background:#2a1c10;border:1px solid #3a2a10;border-radius:12px;padding:14px 16px'>");
-  h.push("<p style='color:#5a3a10;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Bairro Crítico</p>");
-  h.push("<p style='font-size:15px;font-weight:800;color:#f97316;margin:0;line-height:1.3;word-break:break-word'>"+bcrit+"</p>");
-  h.push("<p style='color:#5a3a10;font-size:10px;margin:4px 0 0'>"+(topBairros[0]?topBairros[0].n+" ocorr.":"")+"</p>");
-  h.push("</div>");
-  h.push("</div>"); // fim KPIs
-
-  // ── Gráfico de Evolução + Dia da Semana ──────────
-  h.push("<div style='display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:18px'>");
-  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
-  h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>📈 Evolução Mensal — "+crimeFiltro.label+" — Últimos 6 Meses</p>");
-  h.push("<canvas id='chart-cmd-mensal' height='180'></canvas>");
-  h.push("</div>");
-  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
-  h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>📅 Dia da Semana</p>");
-  if(!todosP.length){
-    h.push("<p style='color:#5e4636;text-align:center;padding:30px 0;font-size:12px'>Sem dados no período</p>");
-  } else {
-    cntDow.forEach(function(n,i){
-      var pct=Math.round(n/maxDow*100);
-      var destaque=n===maxDow&&n>0;
-      h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:7px'>");
-      h.push("<span style='color:#8a6a4a;font-size:10px;font-weight:700;width:28px;text-align:right'>"+nomeDia[i]+"</span>");
-      h.push("<div style='flex:1;background:#3c2818;border-radius:3px;height:14px;overflow:hidden'><div style='height:100%;width:"+pct+"%;background:"+(destaque?crimeFiltro.cor:"#5a4020")+";border-radius:3px'></div></div>");
-      h.push("<span style='color:"+(destaque?crimeFiltro.cor:"#8a6a4a")+";font-size:10px;font-weight:700;width:18px'>"+n+"</span>");
-      h.push("</div>");
-    });
-  }
-  h.push("</div>");
+  if(crimesFiltro.length) h.push("<button onclick=\"state._cmdCrimes=[];renderDashComandante(document.getElementById('main'))\" style='background:#3c1818;border:1px solid #6a2a2a;color:#f97316;padding:4px 9px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>✕ Todos</button>");
   h.push("</div>");
 
-  // ── Turno + Top Bairros ───────────────────────────
-  h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px'>");
-  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
-  h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>🌙 Distribuição por Turno</p>");
-  var turnosDef=[{k:"madrugada",l:"Madrugada (0h–6h)",cor:"#6366f1"},{k:"manha",l:"Manhã (6h–12h)",cor:"#f59e0b"},{k:"tarde",l:"Tarde (12h–18h)",cor:"#22c55e"},{k:"noite",l:"Noite (18h–24h)",cor:"#ef4444"}];
-  var maxT=Math.max(turnos.madrugada,turnos.manha,turnos.tarde,turnos.noite)||1;
-  turnosDef.forEach(function(td){
-    var n=turnos[td.k]; var pct=Math.round(n/maxT*100);
-    h.push("<div style='margin-bottom:10px'>");
-    h.push("<div style='display:flex;justify-content:space-between;margin-bottom:3px'><span style='color:#a07c58;font-size:10px'>"+td.l+"</span><span style='color:"+td.cor+";font-size:11px;font-weight:700'>"+n+"</span></div>");
-    h.push("<div style='background:#3c2818;border-radius:4px;height:10px'><div style='height:100%;width:"+pct+"%;background:"+td.cor+";border-radius:4px'></div></div>");
-    h.push("</div>");
+  h.push("</div>"); // fim filtros
+
+  // ── Tabs principais ───────────────────────────────
+  h.push("<div style='display:flex;gap:4px;margin-bottom:18px;flex-wrap:wrap'>");
+  [['crime','📊 Criminalidade'],['visitas','🤝 Visitas Solidárias'],['escolar','🏫 Ronda Escolar'],['vcm','🌸 Monitor VCM']].forEach(function(tb){
+    var ativ=tabAtiva===tb[0];
+    h.push("<button onclick=\"state._cmdTab='"+tb[0]+"';renderDashComandante(document.getElementById('main'))\" style='padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:1px solid "+(ativ?"#d4a87a":"#5e4636")+";background:"+(ativ?"#d4a87a22":"#2a1c10")+";color:"+(ativ?"#d4a87a":"#8a6a4a")+"'>"+tb[1]+"</button>");
   });
   h.push("</div>");
-  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
-  h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>📍 Bairros Mais Atingidos</p>");
-  if(!topBairros.length){
-    h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:12px'>Sem dados</p>");
-  } else {
-    topBairros.forEach(function(tb,i){
-      var pct=Math.round(tb.n/maxB*100);
-      var cor=i===0?crimeFiltro.cor:i===1?"#f97316":i===2?"#f59e0b":"#7a5a2a";
-      h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:7px'>");
-      h.push("<span style='color:"+cor+";font-size:10px;font-weight:800;width:16px'>"+(i+1)+"</span>");
-      h.push("<div style='flex:1;min-width:0'>");
-      h.push("<div style='display:flex;justify-content:space-between;margin-bottom:2px'><span style='color:#ddd2c0;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px'>"+esc(tb.b)+"</span><span style='color:"+cor+";font-size:10px;font-weight:700'>"+tb.n+"</span></div>");
-      h.push("<div style='background:#3c2818;border-radius:3px;height:8px'><div style='height:100%;width:"+pct+"%;background:"+cor+";border-radius:3px'></div></div>");
-      h.push("</div></div>");
-    });
-  }
-  h.push("</div></div>");
 
-  // ── Suspeitos + Vítimas ───────────────────────────
-  if(suspReinc.length||vitReinc.length){
-    h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px'>");
-    h.push("<div style='background:#2a1c10;border:1px solid #5a1a1a;border-radius:12px;padding:16px'>");
-    h.push("<p style='color:#7a3030;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>🔴 Suspeitos com Múltiplos Casos</p>");
-    if(!suspReinc.length){
-      h.push("<p style='color:#5e4636;font-size:12px;padding:10px 0'>Nenhum</p>");
-    } else {
-      suspReinc.slice(0,6).forEach(function(s){
-        h.push("<div style='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#301c16;border-radius:6px;margin-bottom:5px'>");
-        h.push("<span style='color:#f5ede0;font-size:12px'>"+esc(s.nome)+"</span>");
-        h.push("<span style='background:#ef444433;color:#ef4444;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700'>"+s.n+"x</span>");
-        h.push("</div>");
-      });
-    }
+  // ══════════════════════════════════════════════════
+  // ABA: CRIMINALIDADE
+  // ══════════════════════════════════════════════════
+  if(tabAtiva==="crime"){
+
+    // KPIs
+    h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px'>");
+    h.push("<div style='background:#2a1c10;border:2px solid #d4a87a44;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#d4a87a88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Total · Mês Atual</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#d4a87a;margin:0;line-height:1'>"+seta(nMes,nMesAnt)+"</p>");
+    h.push("<p style='color:#d4a87a66;font-size:10px;margin:4px 0 0'>mês ant.: "+nMesAnt+"</p>");
     h.push("</div>");
-    h.push("<div style='background:#2a1c10;border:1px solid #3a2a1a;border-radius:12px;padding:16px'>");
-    h.push("<p style='color:#7a5a3a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>⚠️ Vítimas com Múltiplos Registros</p>");
-    if(!vitReinc.length){
-      h.push("<p style='color:#5e4636;font-size:12px;padding:10px 0'>Nenhuma</p>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Total no Período</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f5ede0;margin:0;line-height:1'>"+todosP.length+"</p>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;margin:4px 0 0'>"+periodoDias+" dias</p>");
+    h.push("</div>");
+    h.push("<div style='background:#0a1a0a;border:1px solid "+(pctEsc>=60?"#22c55e":pctEsc>=30?"#f59e0b":"#ef4444")+"40;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#2a5a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Esclarecimento</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:"+(pctEsc>=60?"#22c55e":pctEsc>=30?"#f59e0b":"#ef4444")+";margin:0;line-height:1'>"+pctEsc+"%</p>");
+    h.push("<p style='color:#2a5a2a;font-size:10px;margin:4px 0 0'>"+comSusp.length+" c/ suspeito</p>");
+    h.push("</div>");
+    h.push("<div style='background:#1a0a0a;border:1px solid #3a1a1a;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#5a2a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Sem Suspeito</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f97316;margin:0;line-height:1'>"+semSusp.length+"</p>");
+    h.push("<p style='color:#5a2a2a;font-size:10px;margin:4px 0 0'>casos em aberto</p>");
+    h.push("</div>");
+    h.push("<div style='background:#2a1c10;border:1px solid #3a2810;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#5a3a10;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Reincidentes</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f59e0b;margin:0;line-height:1'>"+reinc.length+"</p>");
+    h.push("<p style='color:#5a3a10;font-size:10px;margin:4px 0 0'>flagrados</p>");
+    h.push("</div>");
+    var bcrit=topBairros[0]?topBairros[0].b:"—";
+    h.push("<div style='background:#2a1c10;border:1px solid #3a2a10;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#5a3a10;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Bairro Crítico</p>");
+    h.push("<p style='font-size:15px;font-weight:800;color:#f97316;margin:0;line-height:1.3;word-break:break-word'>"+esc(bcrit)+"</p>");
+    h.push("<p style='color:#5a3a10;font-size:10px;margin:4px 0 0'>"+(topBairros[0]?topBairros[0].n+" ocorr.":"")+"</p>");
+    h.push("</div>");
+    h.push("</div>"); // fim KPIs
+
+    // Gráfico evolução + Dia da semana
+    h.push("<div style='display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:18px'>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>📈 Evolução Mensal — Últimos 6 Meses</p>");
+    h.push("<canvas id='chart-cmd-mensal' height='180'></canvas>");
+    h.push("</div>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>📅 Dia da Semana</p>");
+    if(!todosP.length){
+      h.push("<p style='color:#5e4636;text-align:center;padding:30px 0;font-size:12px'>Sem dados no período</p>");
     } else {
-      vitReinc.slice(0,6).forEach(function(v){
-        h.push("<div style='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#1a1008;border-radius:6px;margin-bottom:5px'>");
-        h.push("<span style='color:#f5ede0;font-size:12px'>"+esc(v.nome)+"</span>");
-        h.push("<span style='background:#f9731633;color:#f97316;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700'>"+v.n+"x</span>");
+      cntDow.forEach(function(n,ii){
+        var pct=Math.round(n/maxDow*100);
+        var destaque=n===maxDow&&n>0;
+        h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:7px'>");
+        h.push("<span style='color:#8a6a4a;font-size:10px;font-weight:700;width:28px;text-align:right'>"+nomeDia[ii]+"</span>");
+        h.push("<div style='flex:1;background:#3c2818;border-radius:3px;height:14px;overflow:hidden'><div style='height:100%;width:"+pct+"%;background:"+(destaque?"#d4a87a":"#5a4020")+";border-radius:3px'></div></div>");
+        h.push("<span style='color:"+(destaque?"#d4a87a":"#8a6a4a")+";font-size:10px;font-weight:700;width:18px'>"+n+"</span>");
         h.push("</div>");
       });
     }
     h.push("</div></div>");
-  }
 
-  // ══════════════════════════════════════════════════
-  // COMPARATIVOS CRIMINAIS
-  // ══════════════════════════════════════════════════
-  var catTab = state._cmdCompTab || "trimestre";
-
-  // Categorias comparadas
-  var cats = [
-    { key:"roubo",  label:"Roubo",           cor:"#f97316", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("roubo"); } },
-    { key:"furto",  label:"Furto",            cor:"#d4a87a", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("furto"); } },
-    { key:"homic",  label:"Homicídio",        cor:"#ef4444", fn:isHomic },
-    { key:"tent",   label:"Tent. Homicídio",  cor:"#ff6b6b", fn:isTent },
-    { key:"femin",  label:"Feminicídio",      cor:"#ec4899", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return t.includes("feminic"); } },
-    { key:"vcm",    label:"Viol. c/ Mulher",  cor:"#f43f5e", fn:function(o){ var t=(o.tipo||"").toLowerCase(); return o.violencia_domestica||t.includes("maria da penha")||t.includes("violência doméstica")||t.includes("violencia domestica")||t.includes("violência contra a mulher")||t.includes("violencia contra a mulher")||t.includes("vcm")||t.includes("feminic")||t.includes("lesão corporal")||t.includes("lesao corporal"); } }
-  ];
-
-  // Função: conta categoria num intervalo de datas
-  function cntCat(cat,de,ate){
-    return ocs.filter(function(o){
-      var dt=_pdLocal(o.data);
-      return dt&&dt>=de&&dt<ate&&cat.fn(o);
-    }).length;
-  }
-
-  // ── Gera períodos ─────────────────────────────────
-  function gerarPeriodos(){
-    var periodos=[];
-    if(catTab==="trimestre"){
-      // Último 5 trimestres (trim atual + 4 anteriores)
-      var anoRef=hoje.getFullYear(), mesRef=hoje.getMonth();
-      var trimRef=Math.floor(mesRef/3);
-      for(var i=4;i>=0;i--){
-        var t2=trimRef-i;
-        var anoT=anoRef+Math.floor(t2/4);
-        var tN=((t2%4)+4)%4;
-        var de=new Date(anoT,tN*3,1);
-        var ate=new Date(anoT,tN*3+3,1);
-        var atual=(i===0);
-        periodos.push({label:"T"+(tN+1)+"/"+String(anoT).slice(2),de:de,ate:ate,atual:atual});
-      }
-    } else if(catTab==="semestre"){
-      // Últimos 4 semestres
-      var anoR2=hoje.getFullYear(), mesR2=hoje.getMonth();
-      var semR=mesR2<6?0:1;
-      for(var j=3;j>=0;j--){
-        var s=semR-j;
-        var anoS=anoR2+Math.floor(s/2);
-        var sN=((s%2)+2)%2;
-        var deS=new Date(anoS,sN*6,1);
-        var ateS=new Date(anoS,sN*6+6,1);
-        var atualS=(j===0);
-        periodos.push({label:(sN===0?"1ºS":"2ºS")+"/"+String(anoS).slice(2),de:deS,ate:ateS,atual:atualS});
-      }
+    // Turno + Top Bairros
+    h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px'>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>🌙 Distribuição por Turno</p>");
+    var turnosDef=[{k:"madrugada",l:"Madrugada (0h–6h)",cor:"#6366f1"},{k:"manha",l:"Manhã (6h–12h)",cor:"#f59e0b"},{k:"tarde",l:"Tarde (12h–18h)",cor:"#22c55e"},{k:"noite",l:"Noite (18h–24h)",cor:"#ef4444"}];
+    var maxT=Math.max(turnos.madrugada,turnos.manha,turnos.tarde,turnos.noite)||1;
+    turnosDef.forEach(function(td){
+      var n=turnos[td.k]; var pct=Math.round(n/maxT*100);
+      h.push("<div style='margin-bottom:10px'>");
+      h.push("<div style='display:flex;justify-content:space-between;margin-bottom:3px'><span style='color:#a07c58;font-size:10px'>"+td.l+"</span><span style='color:"+td.cor+";font-size:11px;font-weight:700'>"+n+"</span></div>");
+      h.push("<div style='background:#3c2818;border-radius:4px;height:10px'><div style='height:100%;width:"+pct+"%;background:"+td.cor+";border-radius:4px'></div></div>");
+      h.push("</div>");
+    });
+    h.push("</div>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>📍 Bairros Mais Atingidos</p>");
+    if(!topBairros.length){
+      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:12px'>Sem dados</p>");
     } else {
-      // Últimos 4 anos
-      var anoBase=hoje.getFullYear();
-      for(var k=3;k>=0;k--){
-        var an=anoBase-k;
-        periodos.push({label:String(an),de:new Date(an,0,1),ate:new Date(an+1,0,1),atual:k===0});
-      }
+      topBairros.forEach(function(tb,ii){
+        var pct=Math.round(tb.n/maxB*100);
+        var cor=ii===0?"#d4a87a":ii===1?"#f97316":ii===2?"#f59e0b":"#7a5a2a";
+        h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:7px'>");
+        h.push("<span style='color:"+cor+";font-size:10px;font-weight:800;width:16px'>"+(ii+1)+"</span>");
+        h.push("<div style='flex:1;min-width:0'>");
+        h.push("<div style='display:flex;justify-content:space-between;margin-bottom:2px'><span style='color:#ddd2c0;font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:140px'>"+esc(tb.b)+"</span><span style='color:"+cor+";font-size:10px;font-weight:700'>"+tb.n+"</span></div>");
+        h.push("<div style='background:#3c2818;border-radius:3px;height:8px'><div style='height:100%;width:"+pct+"%;background:"+cor+";border-radius:3px'></div></div>");
+        h.push("</div></div>");
+      });
     }
-    return periodos;
-  }
+    h.push("</div></div>");
 
-  var periodosCmp = gerarPeriodos();
-  // Monta matriz de dados: dados[catIdx][periodoIdx]
-  var dadosCmp = cats.map(function(cat){
-    return periodosCmp.map(function(p){ return cntCat(cat,p.de,p.ate); });
-  });
+    // Suspeitos + Vítimas
+    if(suspReinc.length||vitReinc.length){
+      h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px'>");
+      h.push("<div style='background:#2a1c10;border:1px solid #5a1a1a;border-radius:12px;padding:16px'>");
+      h.push("<p style='color:#7a3030;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>🔴 Suspeitos com Múltiplos Casos</p>");
+      if(!suspReinc.length){
+        h.push("<p style='color:#5e4636;font-size:12px;padding:10px 0'>Nenhum</p>");
+      } else {
+        suspReinc.slice(0,6).forEach(function(s){
+          h.push("<div style='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#301c16;border-radius:6px;margin-bottom:5px'>");
+          h.push("<span style='color:#f5ede0;font-size:12px'>"+esc(s.nome)+"</span>");
+          h.push("<span style='background:#ef444433;color:#ef4444;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700'>"+s.n+"x</span>");
+          h.push("</div>");
+        });
+      }
+      h.push("</div>");
+      h.push("<div style='background:#2a1c10;border:1px solid #3a2a1a;border-radius:12px;padding:16px'>");
+      h.push("<p style='color:#7a5a3a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>⚠️ Vítimas com Múltiplos Registros</p>");
+      if(!vitReinc.length){
+        h.push("<p style='color:#5e4636;font-size:12px;padding:10px 0'>Nenhuma</p>");
+      } else {
+        vitReinc.slice(0,6).forEach(function(v){
+          h.push("<div style='display:flex;justify-content:space-between;align-items:center;padding:7px 10px;background:#1a1008;border-radius:6px;margin-bottom:5px'>");
+          h.push("<span style='color:#f5ede0;font-size:12px'>"+esc(v.nome)+"</span>");
+          h.push("<span style='background:#f9731633;color:#f97316;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700'>"+v.n+"x</span>");
+          h.push("</div>");
+        });
+      }
+      h.push("</div></div>");
+    }
 
-  // ── Render da seção ───────────────────────────────
-  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
-  h.push("<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px'>");
-  h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>📊 Comparativo Criminal</p>");
-  // Tabs
-  h.push("<div style='display:flex;gap:5px'>");
-  [["trimestre","Trimestre"],["semestre","Semestre"],["ano","Ano"]].forEach(function(tb){
-    var ativ=catTab===tb[0];
-    h.push("<button onclick=\"state._cmdCompTab='"+tb[0]+"';renderDashComandante(document.getElementById('main'))\" style='padding:5px 13px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid "+(ativ?"#d4a87a":"#5e4636")+";background:"+(ativ?"#d4a87a22":"#3c2818")+";color:"+(ativ?"#d4a87a":"#8a6a4a")+"'>"+tb[1]+"</button>");
-  });
-  h.push("</div></div>");
-
-  // Tabela de comparação
-  h.push("<div style='overflow-x:auto'>");
-  h.push("<table style='width:100%;border-collapse:collapse;min-width:480px'>");
-  // Cabeçalho
-  h.push("<thead><tr>");
-  h.push("<th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #4a3224;min-width:120px'>Categoria</th>");
-  periodosCmp.forEach(function(p){
-    h.push("<th style='text-align:center;color:"+(p.atual?"#d4a87a":"#8a6a4a")+";font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224;white-space:nowrap'>"+(p.atual?"▶ ":"")+p.label+"</th>");
-  });
-  h.push("<th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Δ vs ant.</th>");
-  h.push("</tr></thead><tbody>");
-
-  cats.forEach(function(cat,ci){
-    var linha=dadosCmp[ci];
-    var atual=linha[linha.length-1];
-    var ant=linha[linha.length-2];
-    var delta=atual-ant;
-    var deltaTxt=delta>0?"<span style='color:#ef4444;font-weight:700'>▲ +"+delta+"</span>":delta<0?"<span style='color:#22c55e;font-weight:700'>▼ "+delta+"</span>":"<span style='color:#a07c58'>= 0</span>";
-    var maxLinha=Math.max.apply(null,linha)||1;
-    h.push("<tr style='border-bottom:1px solid #3c2818'>");
-    h.push("<td style='padding:8px 8px'><div style='display:flex;align-items:center;gap:6px'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:"+cat.cor+";flex-shrink:0'></span><span style='color:#ddd2c0;font-size:12px;font-weight:600'>"+cat.label+"</span></div></td>");
-    linha.forEach(function(v,pi){
-      var isAtual=(pi===linha.length-1);
-      var pct=Math.round(v/maxLinha*100);
-      h.push("<td style='text-align:center;padding:8px 6px'>");
-      h.push("<div style='display:flex;flex-direction:column;align-items:center;gap:3px'>");
-      h.push("<span style='color:"+(isAtual?cat.cor:"#ddd2c0")+";font-size:"+(isAtual?"16px":"13px")+";font-weight:"+(isAtual?"800":"500")+"'>"+v+"</span>");
-      // Mini barra
-      if(v>0) h.push("<div style='width:32px;height:4px;background:#3c2818;border-radius:2px'><div style='height:100%;width:"+pct+"%;background:"+cat.cor+";border-radius:2px;opacity:"+(isAtual?"1":"0.5")+"'></div></div>");
-      h.push("</div></td>");
+    // Comparativo Criminal
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
+    h.push("<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>📊 Comparativo Criminal</p>");
+    h.push("<div style='display:flex;gap:5px'>");
+    [["trimestre","Trimestre"],["semestre","Semestre"],["ano","Ano"]].forEach(function(tb){
+      var ativ=catTab===tb[0];
+      h.push("<button onclick=\"state._cmdCompTab='"+tb[0]+"';renderDashComandante(document.getElementById('main'))\" style='padding:5px 13px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:1px solid "+(ativ?"#d4a87a":"#5e4636")+";background:"+(ativ?"#d4a87a22":"#3c2818")+";color:"+(ativ?"#d4a87a":"#8a6a4a")+"'>"+tb[1]+"</button>");
     });
-    h.push("<td style='text-align:center;padding:8px 6px'>"+deltaTxt+"</td>");
+    h.push("</div></div>");
+    h.push("<div style='overflow-x:auto'>");
+    h.push("<table style='width:100%;border-collapse:collapse;min-width:480px'>");
+    h.push("<thead><tr>");
+    h.push("<th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;text-transform:uppercase;border-bottom:1px solid #4a3224;min-width:120px'>Categoria</th>");
+    periodosCmp.forEach(function(p){
+      h.push("<th style='text-align:center;color:"+(p.atual?"#d4a87a":"#8a6a4a")+";font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224;white-space:nowrap'>"+(p.atual?"▶ ":"")+p.label+"</th>");
+    });
+    h.push("<th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Δ vs ant.</th>");
+    h.push("</tr></thead><tbody>");
+    cats.forEach(function(cat,ci){
+      var linha=dadosCmp[ci];
+      var atual=linha[linha.length-1]; var ant=linha[linha.length-2];
+      var delta=atual-ant;
+      var deltaTxt=delta>0?"<span style='color:#ef4444;font-weight:700'>▲ +"+delta+"</span>":delta<0?"<span style='color:#22c55e;font-weight:700'>▼ "+delta+"</span>":"<span style='color:#a07c58'>= 0</span>";
+      var maxLinha=Math.max.apply(null,linha)||1;
+      h.push("<tr style='border-bottom:1px solid #3c2818'>");
+      h.push("<td style='padding:8px 8px'><div style='display:flex;align-items:center;gap:6px'><span style='display:inline-block;width:8px;height:8px;border-radius:50%;background:"+cat.cor+";flex-shrink:0'></span><span style='color:#ddd2c0;font-size:12px;font-weight:600'>"+cat.label+"</span></div></td>");
+      linha.forEach(function(v,pi){
+        var isAtual=(pi===linha.length-1); var pct=Math.round(v/maxLinha*100);
+        h.push("<td style='text-align:center;padding:8px 6px'><div style='display:flex;flex-direction:column;align-items:center;gap:3px'>");
+        h.push("<span style='color:"+(isAtual?cat.cor:"#ddd2c0")+";font-size:"+(isAtual?"16px":"13px")+";font-weight:"+(isAtual?"800":"500")+"'>"+v+"</span>");
+        if(v>0) h.push("<div style='width:32px;height:4px;background:#3c2818;border-radius:2px'><div style='height:100%;width:"+pct+"%;background:"+cat.cor+";border-radius:2px;opacity:"+(isAtual?"1":"0.5")+"'></div></div>");
+        h.push("</div></td>");
+      });
+      h.push("<td style='text-align:center;padding:8px 6px'>"+deltaTxt+"</td>");
+      h.push("</tr>");
+    });
+    h.push("<tr style='border-top:2px solid #5e4636;background:#36221a'>");
+    h.push("<td style='padding:8px 8px;color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase'>TOTAL</td>");
+    periodosCmp.forEach(function(p,pi){
+      var tot=cats.reduce(function(s,c,ci){ return s+dadosCmp[ci][pi]; },0);
+      var isAtual=(pi===periodosCmp.length-1);
+      h.push("<td style='text-align:center;padding:8px 6px;color:"+(isAtual?"#d4a87a":"#a07c58")+";font-size:"+(isAtual?"15px":"12px")+";font-weight:700'>"+tot+"</td>");
+    });
+    var totAtual=cats.reduce(function(s,c,ci){ return s+dadosCmp[ci][periodosCmp.length-1]; },0);
+    var totAnt=cats.reduce(function(s,c,ci){ return s+dadosCmp[ci][periodosCmp.length-2]; },0);
+    var dTot=totAtual-totAnt;
+    h.push("<td style='text-align:center;padding:8px 6px'>"+(dTot>0?"<span style='color:#ef4444;font-weight:700'>▲ +"+dTot+"</span>":dTot<0?"<span style='color:#22c55e;font-weight:700'>▼ "+dTot+"</span>":"<span style='color:#a07c58'>= 0</span>")+"</td>");
     h.push("</tr>");
-  });
+    h.push("</tbody></table></div>");
+    h.push("<div style='margin-top:16px;padding-top:14px;border-top:1px solid #4a3224'>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>📉 Tendência — gráfico comparativo</p>");
+    h.push("<canvas id='chart-cmp-tendencia' height='160'></canvas>");
+    h.push("</div></div>"); // fim comparativo
 
-  // Linha TOTAL
-  h.push("<tr style='border-top:2px solid #5e4636;background:#36221a'>");
-  h.push("<td style='padding:8px 8px;color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase'>TOTAL</td>");
-  periodosCmp.forEach(function(p,pi){
-    var tot=cats.reduce(function(s,c,ci){ return s+dadosCmp[ci][pi]; },0);
-    var isAtual=(pi===periodosCmp.length-1);
-    h.push("<td style='text-align:center;padding:8px 6px;color:"+(isAtual?"#d4a87a":"#a07c58")+";font-size:"+(isAtual?"15px":"12px")+";font-weight:700'>"+tot+"</td>");
-  });
-  // Delta total
-  var totAtual=cats.reduce(function(s,c,ci){ return s+dadosCmp[ci][periodosCmp.length-1]; },0);
-  var totAnt=cats.reduce(function(s,c,ci){ return s+dadosCmp[ci][periodosCmp.length-2]; },0);
-  var dTot=totAtual-totAnt;
-  h.push("<td style='text-align:center;padding:8px 6px'>"+(dTot>0?"<span style='color:#ef4444;font-weight:700'>▲ +"+dTot+"</span>":dTot<0?"<span style='color:#22c55e;font-weight:700'>▼ "+dTot+"</span>":"<span style='color:#a07c58'>= 0</span>")+"</td>");
-  h.push("</tr>");
+    // Relatório Semanal placeholder
+    h.push("<div id='sec-relatorio-semanal' style='background:#2a1c10;border:1px solid #1a3a1a;border-radius:12px;padding:16px;margin-bottom:18px'>");
+    h.push("<p style='color:#5e4636;font-size:12px;text-align:center;padding:10px 0'>Carregando...</p>");
+    h.push("</div>");
 
-  h.push("</tbody></table></div>");
+    // Relatório Mensal IA placeholder
+    h.push("<div id='sec-relatorio-mensal' style='background:#2a1c10;border:1px solid #3a2a6a;border-radius:12px;padding:16px;margin-bottom:18px'>");
+    h.push("<p style='color:#5e4636;font-size:12px;text-align:center;padding:10px 0'>Carregando...</p>");
+    h.push("</div>");
 
-  // ── Mini gráfico de linha: tendência por categoria ─
-  h.push("<div style='margin-top:16px;padding-top:14px;border-top:1px solid #4a3224'>");
-  h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 12px'>📉 Tendência — gráfico comparativo</p>");
-  h.push("<canvas id='chart-cmp-tendencia' height='160'></canvas>");
-  h.push("</div>");
-
-  h.push("</div>"); // fim seção comparativos
+  } // fim aba crime
 
   // ══════════════════════════════════════════════════
-  // ── Lista Detalhada dos Casos ────────────────────
-  h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
-  h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px'>");
-  h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>📋 Casos Registrados no Período ("+todosP.length+")</p>");
-  h.push("<span style='background:"+crimeFiltro.cor+"22;color:"+crimeFiltro.cor+";padding:3px 10px;border-radius:4px;font-size:10px;font-weight:700'>"+todosP.length+" "+crimeFiltro.label.toUpperCase()+"</span>");
-  h.push("</div>");
-  if(!todosP.length){
-    h.push("<p style='color:#5e4636;text-align:center;padding:30px 0;font-size:13px'>Nenhum caso no período selecionado.</p>");
-  } else {
-    var casosSorted = todosP.slice().sort(function(a,b){ return (_pdLocal(b.data)||new Date(0))-(_pdLocal(a.data)||new Date(0)); });
-    casosSorted.forEach(function(o,idx){
-      var isH=isHomic(o);
-      var cor=isH?"#ef4444":"#ff6b6b";
-      var label=isH?"HOMICÍDIO":"TENT. HOMICÍDIO";
-      var temSusp=o.suspeito_nome&&o.suspeito_nome.trim()&&o.suspeito_nome.toLowerCase()!=="não identificado";
-      h.push("<div onclick=\"this.querySelector('.cmd-case-detail').style.display=this.querySelector('.cmd-case-detail').style.display==='none'?'block':'none'\" style='border:1px solid #2a2218;border-left:3px solid "+cor+";border-radius:8px;padding:11px 14px;margin-bottom:6px;cursor:pointer;background:#36221a;transition:background 0.15s' onmouseover=\"this.style.background='#3e2c22'\" onmouseout=\"this.style.background='#36221a'\">");
-      // Linha principal
-      h.push("<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap'>");
-      h.push("<span style='background:"+cor+"22;color:"+cor+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+label+"</span>");
-      h.push("<span style='color:#ddd2c0;font-size:12px;font-weight:600'>"+(o.vitima_nome||"Vítima não identificada")+"</span>");
-      if(o.vitima_idade) h.push("<span style='color:#8a6a4a;font-size:11px'>"+o.vitima_idade+" anos</span>");
-      h.push("<span style='color:#5e4636;font-size:11px'>•</span>");
-      h.push("<span style='color:#a07c58;font-size:11px'>"+fmtData(o.data)+(o.hora?" · "+o.hora:"")+"</span>");
-      if(o.bairro) h.push("<span style='color:#8a6a4a;font-size:11px'>· "+esc(o.bairro)+"</span>");
-      if(temSusp){
-        h.push("<span style='background:#22c55e22;color:#22c55e;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700'>✓ Suspeito ID</span>");
-      } else {
-        h.push("<span style='background:#ef444422;color:#ef9944;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700'>? Sem suspeito</span>");
-      }
-      if(o.reincidente) h.push("<span style='background:#f9731622;color:#f97316;padding:2px 7px;border-radius:3px;font-size:10px;font-weight:700'>⚠ REINC</span>");
-      h.push("</div>");
-      // Detalhe expandível
-      h.push("<div class='cmd-case-detail' style='display:none;margin-top:10px;padding-top:10px;border-top:1px solid #2a2218'>");
-      if(temSusp) h.push("<p style='color:#7a5050;font-size:11px;margin:0 0 4px'><span style='color:#5a3a3a;font-weight:700'>Suspeito:</span> "+esc(o.suspeito_nome)+(o.suspeito_apelido?" ("+esc(o.suspeito_apelido)+")":"")+"</p>");
-      if(o.veiculo) h.push("<p style='color:#7a5050;font-size:11px;margin:0 0 4px'><span style='color:#5a3a3a;font-weight:700'>Veículo/Objeto:</span> "+esc(o.veiculo)+"</p>");
-      var textoOc=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
-      if(textoOc) h.push("<pre style='background:#0a0c06;border:1px solid #2a2a18;border-radius:6px;padding:10px;font-size:10px;color:#8a8060;white-space:pre-wrap;font-family:monospace;max-height:180px;overflow-y:auto;margin-top:6px'>"+esc(textoOc)+"</pre>");
-      h.push("</div>");
-      h.push("</div>"); // fim caso
+  // ABA: VISITAS SOLIDÁRIAS
+  // ══════════════════════════════════════════════════
+  else if(tabAtiva==="visitas"){
+    var visitas = state.db.visitas || [];
+    var ocsRequerVisita = ocs.filter(function(o){ return o.requer_visita===true; });
+    var ocsPendentes = ocsRequerVisita.filter(function(o){ return !visitas.find(function(v){ return v.ocorrenciaId===o.id; }); });
+    var ocsRealizadas = ocsRequerVisita.filter(function(o){ return !!visitas.find(function(v){ return v.ocorrenciaId===o.id; }); });
+    var pctCobertura = ocsRequerVisita.length ? Math.round(ocsRealizadas.length/ocsRequerVisita.length*100) : 0;
+
+    h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px'>");
+    h.push("<div style='background:#2a1c10;border:2px solid #d4a87a44;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Requerem Visita</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f5ede0;margin:0;line-height:1'>"+ocsRequerVisita.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#0a1a0a;border:1px solid #22c55e40;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#2a5a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Realizadas</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#22c55e;margin:0;line-height:1'>"+ocsRealizadas.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#1a0a0a;border:1px solid #f9731640;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#5a2a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Pendentes</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f97316;margin:0;line-height:1'>"+ocsPendentes.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>% Cobertura</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:"+(pctCobertura>=80?"#22c55e":pctCobertura>=40?"#f59e0b":"#ef4444")+";margin:0;line-height:1'>"+pctCobertura+"%</p>");
+    h.push("</div>");
+    h.push("</div>");
+
+    // Pendentes
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>⏳ Visitas Pendentes ("+ocsPendentes.length+")</p>");
+    if(!ocsPendentes.length){
+      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:13px'>Nenhuma visita pendente.</p>");
+    } else {
+      h.push("<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;min-width:400px'>");
+      h.push("<thead><tr><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Data</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Tipo</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Vítima</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Bairro</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'></th></tr></thead><tbody>");
+      ocsPendentes.slice().sort(function(a,b){ return (_pdLocal(b.data)||new Date(0))-(_pdLocal(a.data)||new Date(0)); }).slice(0,30).forEach(function(o){
+        h.push("<tr style='border-bottom:1px solid #3c2818'>");
+        h.push("<td style='padding:8px 8px;color:#a07c58;font-size:11px;white-space:nowrap'>"+fmtData(o.data)+"</td>");
+        h.push("<td style='padding:8px 8px;color:#ddd2c0;font-size:11px'>"+esc(o.tipo||"—")+"</td>");
+        h.push("<td style='padding:8px 8px;color:#f5ede0;font-size:12px;font-weight:600'>"+esc(o.vitima_nome||"—")+"</td>");
+        h.push("<td style='padding:8px 8px;color:#8a6a4a;font-size:11px'>"+esc(o.bairro||"—")+"</td>");
+        h.push("<td style='padding:8px;text-align:center'><button onclick=\"abrirMonitorVCM('"+o.id+"')\" style='background:#3c2818;border:1px solid #5e4636;color:#d4a87a;padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>Ver →</button></td>");
+        h.push("</tr>");
+      });
+      h.push("</tbody></table></div>");
+    }
+    h.push("</div>");
+
+    // Realizadas
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>✅ Visitas Realizadas ("+visitas.length+")</p>");
+    if(!visitas.length){
+      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:13px'>Nenhuma visita registrada.</p>");
+    } else {
+      h.push("<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;min-width:400px'>");
+      h.push("<thead><tr><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Data Visita</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Vítima / Ocorrência</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Responsável</th></tr></thead><tbody>");
+      visitas.slice().sort(function(a,b){ return (b.data||"")>(a.data||"")?1:-1; }).slice(0,30).forEach(function(v){
+        var ocVis = ocs.find(function(o){ return o.id===v.ocorrenciaId; });
+        h.push("<tr style='border-bottom:1px solid #3c2818'>");
+        h.push("<td style='padding:8px 8px;color:#a07c58;font-size:11px;white-space:nowrap'>"+esc(v.data||"—")+"</td>");
+        h.push("<td style='padding:8px 8px;color:#f5ede0;font-size:12px;font-weight:600'>"+(ocVis?esc(ocVis.vitima_nome||"—"):esc(v.ocorrenciaId||"—"))+"</td>");
+        h.push("<td style='padding:8px 8px;color:#8a6a4a;font-size:11px'>"+esc(v.responsavel||v.autor||"—")+"</td>");
+        h.push("</tr>");
+      });
+      h.push("</tbody></table></div>");
+    }
+    h.push("</div>");
+
+  } // fim aba visitas
+
+  // ══════════════════════════════════════════════════
+  // ABA: RONDA ESCOLAR
+  // ══════════════════════════════════════════════════
+  else if(tabAtiva==="escolar"){
+    var ocsEsc = ocs.filter(function(o){ return !!(o.escolaNome||o.escolaId); });
+    var escolaMap = {};
+    ocsEsc.forEach(function(o){
+      var nome = o.escolaNome || o.escolaId || "Escola não identificada";
+      if(!escolaMap[nome]) escolaMap[nome]={nome:nome,ocs:[],ultima:""};
+      escolaMap[nome].ocs.push(o);
+      var d = o.data||"";
+      if(d>escolaMap[nome].ultima) escolaMap[nome].ultima=d;
     });
-  }
-  h.push("</div>"); // fim lista
+    var escolasArr = Object.values(escolaMap).sort(function(a,b){ return b.ocs.length-a.ocs.length; });
+    var escolasAlto = escolasArr.filter(function(e){ return e.ocs.length>=4; }).length;
 
-  // ── Relatório Semanal ────────────────────────────
-  h.push("<div id='sec-relatorio-semanal' style='background:#2a1c10;border:1px solid #1a3a1a;border-radius:12px;padding:16px;margin-bottom:18px'>");
-  h.push("<p style='color:#5e4636;font-size:12px;text-align:center;padding:10px 0'>Carregando...</p>");
-  h.push("</div>");
+    h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px'>");
+    h.push("<div style='background:#2a1c10;border:2px solid #0ea5e944;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#0e7a9a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Ocorrências Escolares</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#0ea5e9;margin:0;line-height:1'>"+ocsEsc.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Escolas Envolvidas</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f5ede0;margin:0;line-height:1'>"+escolasArr.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#1a0a0a;border:1px solid #ef444440;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#5a2a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Risco Alto (≥4 oc.)</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#ef4444;margin:0;line-height:1'>"+escolasAlto+"</p>");
+    h.push("</div>");
+    h.push("</div>");
 
-  // ── Relatório Mensal IA ───────────────────────────
-  h.push("<div id='sec-relatorio-mensal' style='background:#2a1c10;border:1px solid #3a2a6a;border-radius:12px;padding:16px;margin-bottom:18px'>");
-  h.push("<p style='color:#5e4636;font-size:12px;text-align:center;padding:10px 0'>Carregando...</p>");
-  h.push("</div>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>🏫 Escolas — Ranking de Ocorrências</p>");
+    if(!escolasArr.length){
+      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:13px'>Nenhuma ocorrência escolar registrada.</p>");
+    } else {
+      h.push("<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;min-width:400px'>");
+      h.push("<thead><tr><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Escola</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Ocorrências</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Risco</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Última Oc.</th></tr></thead><tbody>");
+      escolasArr.forEach(function(e){
+        var nivel = e.ocs.length>=4?"ALTO":e.ocs.length>=2?"MÉDIO":"REGULAR";
+        var nivelCor = e.ocs.length>=4?"#ef4444":e.ocs.length>=2?"#f59e0b":"#22c55e";
+        h.push("<tr style='border-bottom:1px solid #3c2818'>");
+        h.push("<td style='padding:8px 8px;color:#ddd2c0;font-size:12px;font-weight:600'>"+esc(e.nome)+"</td>");
+        h.push("<td style='padding:8px 8px;text-align:center;color:#f5ede0;font-size:14px;font-weight:800'>"+e.ocs.length+"</td>");
+        h.push("<td style='padding:8px 8px;text-align:center'><span style='background:"+nivelCor+"22;color:"+nivelCor+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+nivel+"</span></td>");
+        h.push("<td style='padding:8px 8px;text-align:center;color:#8a6a4a;font-size:11px'>"+fmtData(e.ultima)+"</td>");
+        h.push("</tr>");
+      });
+      h.push("</tbody></table></div>");
+    }
+    h.push("</div>");
+
+  } // fim aba escolar
+
+  // ══════════════════════════════════════════════════
+  // ABA: MONITOR VCM
+  // ══════════════════════════════════════════════════
+  else if(tabAtiva==="vcm"){
+    var fridas = state.db.frida || [];
+    var ocsVCM = ocs.filter(function(o){ var t=(o.tipo||"").toLowerCase(); return !!(o.violencia_domestica||t.includes("maria da penha")||t.includes("violência doméstica")||t.includes("violencia domestica")||t.includes("vcm")); });
+
+    function getStatusVCM(o){
+      var fridaOc = fridas.filter(function(f){ return f.ocorrenciaId===o.id; }).sort(function(a,b){ return (b.data||"")>(a.data||"")?1:-1; });
+      if(!fridaOc.length) return "SEM_MONIT";
+      var last = fridaOc[0];
+      if(last.nivel==="E") return "EMERGENCIA";
+      if(last.nivel==="M"){
+        var dias = (Date.now()-new Date(last.data).getTime())/864e5;
+        if(dias>30) return "VENCIDO";
+      }
+      if(o.medida_protetiva==="Sim"&&fridaOc.length){
+        var diasMP = (Date.now()-new Date(fridaOc[0].data).getTime())/864e5;
+        if(diasMP>15) return "VENCIDO";
+      }
+      return "OK";
+    }
+
+    var vcmSemMonit = ocsVCM.filter(function(o){ return getStatusVCM(o)==="SEM_MONIT"; });
+    var vcmEmergencia = ocsVCM.filter(function(o){ return getStatusVCM(o)==="EMERGENCIA"; });
+    var vcmVencido = ocsVCM.filter(function(o){ return getStatusVCM(o)==="VENCIDO"; });
+
+    h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px'>");
+    h.push("<div style='background:#2a1c10;border:2px solid #ec489944;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#8a4a6a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Total VCM</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#ec4899;margin:0;line-height:1'>"+ocsVCM.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#1a0a10;border:1px solid #6a1a3a;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#6a2a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Sem Monitoramento</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f97316;margin:0;line-height:1'>"+vcmSemMonit.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#1a0a0a;border:1px solid #ef444440;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#5a2a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Emergência</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#ef4444;margin:0;line-height:1'>"+vcmEmergencia.length+"</p>");
+    h.push("</div>");
+    h.push("<div style='background:#1a1200;border:1px solid #f59e0b40;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#5a4a0a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Monit. Vencida</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f59e0b;margin:0;line-height:1'>"+vcmVencido.length+"</p>");
+    h.push("</div>");
+    h.push("</div>");
+
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
+    h.push("<p style='color:#ec4899;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>🌸 Casos VCM — Status de Monitoramento</p>");
+    if(!ocsVCM.length){
+      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:13px'>Nenhum caso VCM registrado.</p>");
+    } else {
+      var vcmSorted = ocsVCM.slice().sort(function(a,b){
+        var ord={"EMERGENCIA":0,"VENCIDO":1,"SEM_MONIT":2,"OK":3};
+        return (ord[getStatusVCM(a)]||3)-(ord[getStatusVCM(b)]||3);
+      });
+      h.push("<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;min-width:500px'>");
+      h.push("<thead><tr><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Data</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Vítima</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Tipo</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Med. Prot.</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Status</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'></th></tr></thead><tbody>");
+      vcmSorted.slice(0,40).forEach(function(o){
+        var status=getStatusVCM(o);
+        var statusCor={"EMERGENCIA":"#ef4444","VENCIDO":"#f59e0b","SEM_MONIT":"#f97316","OK":"#22c55e"}[status]||"#8a6a4a";
+        var statusLabel={"EMERGENCIA":"🔴 EMERGÊNCIA","VENCIDO":"🟡 VENCIDO","SEM_MONIT":"⚫ SEM MONIT.","OK":"🟢 OK"}[status]||status;
+        h.push("<tr style='border-bottom:1px solid #3c2818'>");
+        h.push("<td style='padding:8px 8px;color:#a07c58;font-size:11px;white-space:nowrap'>"+fmtData(o.data)+"</td>");
+        h.push("<td style='padding:8px 8px;color:#f5ede0;font-size:12px;font-weight:600'>"+esc(o.vitima_nome||"—")+"</td>");
+        h.push("<td style='padding:8px 8px;color:#ddd2c0;font-size:11px'>"+esc(o.tipo||"—")+"</td>");
+        h.push("<td style='padding:8px 8px;text-align:center;color:#ddd2c0;font-size:11px'>"+esc(o.medida_protetiva||"Não")+"</td>");
+        h.push("<td style='padding:8px 8px;text-align:center'><span style='background:"+statusCor+"22;color:"+statusCor+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+statusLabel+"</span></td>");
+        h.push("<td style='padding:8px;text-align:center'><button onclick=\"abrirMonitorVCM('"+o.id+"')\" style='background:#3c2818;border:1px solid #5e4636;color:#ec4899;padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>Ver →</button></td>");
+        h.push("</tr>");
+      });
+      h.push("</tbody></table></div>");
+    }
+    h.push("</div>");
+
+  } // fim aba vcm
 
   h.push("</div>"); // fim max-width
   main.innerHTML = h.join("");
 
-  // ── Chart.js — Gráficos ──────────────────────────
-  setTimeout(function(){
-    if(!state.charts) state.charts={};
-
-    // Gráfico 1: Evolução mensal — crime selecionado
-    var ctx1 = document.getElementById("chart-cmd-mensal");
-    if(ctx1){
-      if(state.charts.cmdMensal){ try{state.charts.cmdMensal.destroy();}catch(e){} }
-      var datasets1 = crimeKey==="todos"
-        ? [
-            { label:"Homicídio",       data:dataHom,  backgroundColor:"#ef444466", borderColor:"#ef4444", borderWidth:2, borderRadius:4 },
-            { label:"Tent. Homicídio", data:dataTent, backgroundColor:"#ff6b6b44", borderColor:"#ff6b6b", borderWidth:2, borderRadius:4 }
-          ]
-        : [
-            { label:crimeFiltro.label, data:dataCrime, backgroundColor:crimeFiltro.cor+"44", borderColor:crimeFiltro.cor, borderWidth:2, borderRadius:4 }
-          ];
-      state.charts.cmdMensal = new Chart(ctx1, {
-        type: "bar",
-        data: { labels: labelsMeses, datasets: datasets1 },
-        options: {
-          responsive:true,
-          plugins:{
-            legend:{labels:{color:"#a07c58",font:{size:11}}},
-            tooltip:{callbacks:{label:function(c){return " "+c.dataset.label+": "+c.raw;}}}
-          },
-          scales:{
-            x:{grid:{color:"#4a3224"},ticks:{color:"#8a6a4a",font:{size:10}}},
-            y:{grid:{color:"#4a3224"},ticks:{color:"#8a6a4a",font:{size:10},stepSize:1},beginAtZero:true}
+  // ── Charts e relatórios (só na aba crime) ────────
+  if(tabAtiva==="crime"){
+    setTimeout(function(){
+      if(!state.charts) state.charts={};
+      var ctx1 = document.getElementById("chart-cmd-mensal");
+      if(ctx1){
+        if(state.charts.cmdMensal){ try{state.charts.cmdMensal.destroy();}catch(e){} }
+        state.charts.cmdMensal = new Chart(ctx1, {
+          type: "bar",
+          data: { labels: labelsMeses, datasets: [{ label:"Ocorrências", data:dataCrime, backgroundColor:"#d4a87a44", borderColor:"#d4a87a", borderWidth:2, borderRadius:4 }] },
+          options: {
+            responsive:true,
+            plugins:{ legend:{labels:{color:"#a07c58",font:{size:11}}}, tooltip:{callbacks:{label:function(c){return " Ocorrências: "+c.raw;}}} },
+            scales:{ x:{grid:{color:"#4a3224"},ticks:{color:"#8a6a4a",font:{size:10}}}, y:{grid:{color:"#4a3224"},ticks:{color:"#8a6a4a",font:{size:10},stepSize:1},beginAtZero:true} }
           }
-        }
-      });
-    }
-
-    // Gráfico 2: Comparativo criminal por período
-    var ctx2 = document.getElementById("chart-cmp-tendencia");
-    if(ctx2){
-      if(state.charts.cmpTendencia){ try{state.charts.cmpTendencia.destroy();}catch(e){} }
-      var labelsPer = periodosCmp.map(function(p){ return p.label; });
-      var datasets2 = cats.map(function(cat,ci){
-        return {
-          label: cat.label,
-          data: dadosCmp[ci],
-          borderColor: cat.cor,
-          backgroundColor: cat.cor+"22",
-          borderWidth: 2,
-          pointRadius: 4,
-          pointHoverRadius: 6,
-          tension: 0.35,
-          fill: false
-        };
-      });
-      state.charts.cmpTendencia = new Chart(ctx2, {
-        type: "line",
-        data: { labels: labelsPer, datasets: datasets2 },
-        options: {
-          responsive: true,
-          interaction: { mode:"index", intersect:false },
-          plugins:{
-            legend:{ labels:{ color:"#a07c58", font:{size:10}, boxWidth:12 } },
-            tooltip:{ callbacks:{ label:function(c){ return " "+c.dataset.label+": "+c.raw; } } }
-          },
-          scales:{
-            x:{ grid:{color:"#4a3224"}, ticks:{color:"#8a6a4a",font:{size:10}} },
-            y:{ grid:{color:"#4a3224"}, ticks:{color:"#8a6a4a",font:{size:10},stepSize:1}, beginAtZero:true }
+        });
+      }
+      var ctx2 = document.getElementById("chart-cmp-tendencia");
+      if(ctx2){
+        if(state.charts.cmpTendencia){ try{state.charts.cmpTendencia.destroy();}catch(e){} }
+        var labelsPer = periodosCmp.map(function(p){ return p.label; });
+        var datasets2 = cats.map(function(cat,ci){
+          return { label:cat.label, data:dadosCmp[ci], borderColor:cat.cor, backgroundColor:cat.cor+"22", borderWidth:2, pointRadius:4, pointHoverRadius:6, tension:0.35, fill:false };
+        });
+        state.charts.cmpTendencia = new Chart(ctx2, {
+          type: "line",
+          data: { labels: labelsPer, datasets: datasets2 },
+          options: {
+            responsive:true,
+            interaction:{mode:"index",intersect:false},
+            plugins:{ legend:{labels:{color:"#a07c58",font:{size:10},boxWidth:12}}, tooltip:{callbacks:{label:function(c){return " "+c.dataset.label+": "+c.raw;}}} },
+            scales:{ x:{grid:{color:"#4a3224"},ticks:{color:"#8a6a4a",font:{size:10}}}, y:{grid:{color:"#4a3224"},ticks:{color:"#8a6a4a",font:{size:10},stepSize:1},beginAtZero:true} }
           }
-        }
-      });
-    }
-  }, 80);
+        });
+      }
+    }, 80);
 
-  // ── Seção Relatório Semanal ──────────────────────
-  setTimeout(function(){
-    var secS = document.getElementById("sec-relatorio-semanal");
-    if(!secS) return;
-    var hoje7 = new Date(); hoje7.setDate(hoje7.getDate()-7);
-    var labelSem = hoje7.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" a "+new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
-    secS.innerHTML=
-      "<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px'>"+
-      "<div><p style='color:#3a7a3a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>📡 Relatório Semanal — Viaturas</p>"+
-      "<p style='color:#3a4a2a;font-size:10px;margin:2px 0 0'>Semana: "+labelSem+"</p></div>"+
-      "<button onclick='gerarRelatorioSemanalIA()' style='background:linear-gradient(135deg,#1a5a1a,#0a3a0a);border:1px solid #3a7a3a;color:#a0d080;padding:7px 16px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>⚡ Gerar Relatório Semanal</button>"+
-      "</div>"+
-      "<div id='rel-semanal-output'><p style='color:#2a4a2a;font-size:12px;text-align:center;padding:16px 0'>Clique em Gerar para criar o relatório desta semana.</p></div>";
-  }, 100);
+    setTimeout(function(){
+      var secS = document.getElementById("sec-relatorio-semanal");
+      if(!secS) return;
+      var hoje7 = new Date(); hoje7.setDate(hoje7.getDate()-7);
+      var labelSem = hoje7.toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit"})+" a "+new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
+      secS.innerHTML=
+        "<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px'>"+
+        "<div><p style='color:#3a7a3a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>📡 Relatório Semanal — Viaturas</p>"+
+        "<p style='color:#3a4a2a;font-size:10px;margin:2px 0 0'>Semana: "+labelSem+"</p></div>"+
+        "<button onclick='gerarRelatorioSemanalIA()' style='background:linear-gradient(135deg,#1a5a1a,#0a3a0a);border:1px solid #3a7a3a;color:#a0d080;padding:7px 16px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>⚡ Gerar Relatório Semanal</button>"+
+        "</div>"+
+        "<div id='rel-semanal-output'><p style='color:#2a4a2a;font-size:12px;text-align:center;padding:16px 0'>Clique em Gerar para criar o relatório desta semana.</p></div>";
+    }, 100);
 
-  // ── Seção Relatório Mensal IA ─────────────────────
-  setTimeout(function(){
-    var sec = document.getElementById("sec-relatorio-mensal");
-    if(!sec) return;
-    // Mês padrão = mês atual
-    var mesAtualISO = hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0");
-    if(!state._relMes) state._relMes = mesAtualISO;
-
-    // Opções dos últimos 12 meses
-    var opsMes="";
-    for(var mi=0;mi<12;mi++){
-      var dm2=new Date(hoje.getFullYear(),hoje.getMonth()-mi,1);
-      var iso2=dm2.getFullYear()+"-"+String(dm2.getMonth()+1).padStart(2,"0");
-      var lbl2=dm2.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
-      opsMes+="<option value='"+iso2+"'"+(state._relMes===iso2?" selected":"")+">"+lbl2+"</option>";
-    }
-    sec.innerHTML=
-      "<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px'>"+
-      "<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>🤖 Relatório Mensal — Inteligência Artificial</p>"+
-      "<div style='display:flex;gap:8px;align-items:center'>"+
-      "<select id='sel-rel-mes' onchange=\"state._relMes=this.value\" style='background:#3c2818;border:1px solid #5e4636;color:#ddd2c0;padding:5px 10px;border-radius:6px;font-size:11px'>"+opsMes+"</select>"+
-      "<button onclick='gerarRelatorioMensalIA()' style='background:linear-gradient(135deg,#5a3a9a,#3a2a7a);border:none;color:#d4b8ff;padding:7px 16px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>⚡ Gerar Análise</button>"+
-      "</div></div>"+
-      "<div id='rel-mensal-output'><p style='color:#5e4636;font-size:12px;text-align:center;padding:20px 0'>Selecione o mês e clique em Gerar Análise.</p></div>";
-  }, 120);
+    setTimeout(function(){
+      var sec = document.getElementById("sec-relatorio-mensal");
+      if(!sec) return;
+      var mesAtualISO = hojeDate.getFullYear()+"-"+String(hojeDate.getMonth()+1).padStart(2,"0");
+      if(!state._relMes) state._relMes = mesAtualISO;
+      var opsMes="";
+      for(var mi=0;mi<12;mi++){
+        var dm2=new Date(hojeDate.getFullYear(),hojeDate.getMonth()-mi,1);
+        var iso2=dm2.getFullYear()+"-"+String(dm2.getMonth()+1).padStart(2,"0");
+        var lbl2=dm2.toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
+        opsMes+="<option value='"+iso2+"'"+(state._relMes===iso2?" selected":"")+">"+lbl2+"</option>";
+      }
+      sec.innerHTML=
+        "<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px'>"+
+        "<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>🤖 Relatório Mensal — Inteligência Artificial</p>"+
+        "<div style='display:flex;gap:8px;align-items:center'>"+
+        "<select id='sel-rel-mes' onchange=\"state._relMes=this.value\" style='background:#3c2818;border:1px solid #5e4636;color:#ddd2c0;padding:5px 10px;border-radius:6px;font-size:11px'>"+opsMes+"</select>"+
+        "<button onclick='gerarRelatorioMensalIA()' style='background:linear-gradient(135deg,#5a3a9a,#3a2a7a);border:none;color:#d4b8ff;padding:7px 16px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>⚡ Gerar Análise</button>"+
+        "</div></div>"+
+        "<div id='rel-mensal-output'><p style='color:#5e4636;font-size:12px;text-align:center;padding:20px 0'>Selecione o mês e clique em Gerar Análise.</p></div>";
+    }, 120);
+  }
 }
 
-// ══════════════════════════════════════════════════
-// RELATÓRIO MENSAL IA
-// ══════════════════════════════════════════════════
 async function gerarRelatorioMensalIA(){
   var mesISO = (document.getElementById("sel-rel-mes")||{}).value || state._relMes || (hoje().slice(0,7));
   state._relMes = mesISO;
