@@ -289,6 +289,8 @@ function salvarLocal() {
     if(state.visitasEscolares) localStorage.setItem("bcs_visitas_escolares",JSON.stringify(state.visitasEscolares));
     if(state.atividadesEscolares) localStorage.setItem("bcs_atividades_escolares",JSON.stringify(state.atividadesEscolares));
     if(state.agExcluidos) localStorage.setItem("bcs_ag_excluidos",JSON.stringify([...state.agExcluidos]));
+    if(state._deletedEvIds) localStorage.setItem("bcs_ev_excluidos",JSON.stringify([...state._deletedEvIds]));
+    if(state._deletedProjIds) localStorage.setItem("bcs_proj_excluidos",JSON.stringify([...state._deletedProjIds]));
     console.log("[BCS] Salvado - OC:",light.ocorrencias.length,"Agendamentos:",light.agendamentos.length,"Visitas:",light.visitas.length);
     agendarSyncSheets();
   } catch(e){
@@ -307,11 +309,19 @@ function carregarLocal() {
       db.visitas = l.visitas||[];
       db.agendamentos = l.agendamentos||[];
     }
-    // IDs de agendamentos excluídos (para evitar voltar no sync)
+    // IDs excluídos (tombstone) — persistidos para não voltar no sync
     try {
       var agExRaw = localStorage.getItem("bcs_ag_excluidos");
       state.agExcluidos = agExRaw ? new Set(JSON.parse(agExRaw)) : new Set();
     } catch(e){ state.agExcluidos = new Set(); }
+    try {
+      var evExRaw = localStorage.getItem("bcs_ev_excluidos");
+      state._deletedEvIds = evExRaw ? new Set(JSON.parse(evExRaw)) : new Set();
+    } catch(e){ state._deletedEvIds = new Set(); }
+    try {
+      var prExRaw = localStorage.getItem("bcs_proj_excluidos");
+      state._deletedProjIds = prExRaw ? new Set(JSON.parse(prExRaw)) : new Set();
+    } catch(e){ state._deletedProjIds = new Set(); }
     // 🔒 Restaurar backup SIGESPOL (imune ao Sheets — chave separada)
     try {
       const spRaw = localStorage.getItem("bcs_sigespol_backup");
@@ -573,15 +583,19 @@ async function carregarDadosAppDoSheets(){
     }
 
     if(projetos && Array.isArray(projetos) && projetos.length > 0){
-      state.projetos = localProj.length > 0 ? localProj : projetos;
+      var _projDel = state._deletedProjIds || new Set();
+      var _localProjIds = new Set(localProj.map(function(p){ return String(p.id); }));
+      var _novosPrj = projetos.filter(function(p){ return !_localProjIds.has(String(p.id)) && !_projDel.has(String(p.id)); });
+      state.projetos = localProj.concat(_novosPrj);
     } else if(projetos === null){
       if(localProj.length > 0) sincronizarSheets();
     }
 
     if(eventos && Array.isArray(eventos) && eventos.length > 0){
-      // Local é autoritário: se há dados locais, usar somente local.
-      // Sheets serve como backup/restauração (importar), não como fonte de merge.
-      state.eventosAvulsos = localEv.length > 0 ? localEv : eventos;
+      var _evDel = state._deletedEvIds || new Set();
+      var _localEvIds = new Set(localEv.map(function(e){ return String(e.id); }));
+      var _novosEv = eventos.filter(function(e){ return !_localEvIds.has(String(e.id)) && !_evDel.has(String(e.id)); });
+      state.eventosAvulsos = localEv.concat(_novosEv);
     } else if(eventos === null && localEv.length > 0){
       sincronizarSheets();
     }
@@ -593,7 +607,10 @@ async function carregarDadosAppDoSheets(){
     // 📅 Calendário
     var _localAgs = state.db.agendamentos || [];
     if(agendamentos && Array.isArray(agendamentos) && agendamentos.length > 0){
-      state.db.agendamentos = _localAgs.length > 0 ? _localAgs : agendamentos;
+      var _agDel = state.agExcluidos || new Set();
+      var _localAgIds = new Set(_localAgs.map(function(a){ return String(a.id); }));
+      var _novosAg = agendamentos.filter(function(a){ return !_localAgIds.has(String(a.id)) && !_agDel.has(String(a.id)); });
+      state.db.agendamentos = _localAgs.concat(_novosAg);
     }
     state.db.visitas          = _mergeById(state.db.visitas,          visitas);
     state.db.atendimentos     = _mergeById(state.db.atendimentos,     atendimentos);
@@ -2228,6 +2245,8 @@ function verEventoAvulso(evId){
   document.getElementById("btn-excluir-ev").onclick = function(){
     if(!confirm("Excluir este evento?")) return;
     state.eventosAvulsos = state.eventosAvulsos.filter(function(e){return e.id!==evId;});
+    if(!state._deletedEvIds) state._deletedEvIds = new Set();
+    state._deletedEvIds.add(String(evId));
     salvarLocal();
     salvarDadoAppSheets("bcs_eventos_avulsos", state.eventosAvulsos||[]).catch(function(){});
     modal.remove();
@@ -4446,6 +4465,8 @@ function salvarResultadoProjeto(projId){
 function excluirProjeto(projId){
   if(!confirm("Excluir este projeto e todas as suas tarefas?")) return;
   state.projetos=(state.projetos||[]).filter(function(p){return p.id!==projId;});
+  if(!state._deletedProjIds) state._deletedProjIds = new Set();
+  state._deletedProjIds.add(String(projId));
   // Remover eventos do calendário vinculados
   state.eventosAvulsos=(state.eventosAvulsos||[]).filter(function(e){return e.projetoId!==projId;});
   salvarLocal();
