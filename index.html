@@ -573,7 +573,15 @@ async function carregarDadosAppDoSheets(){
     }
 
     if(projetos && Array.isArray(projetos) && projetos.length > 0){
-      state.projetos = _mergeById(localProj, projetos);
+      if(localProj.length > 0){
+        // Local é autoritário: adiciona do remoto apenas IDs nunca vistos localmente.
+        // IDs que existiam localmente e foram deletados NÃO voltam do remoto.
+        var _localIds = new Set(localProj.map(function(p){ return String(p.id); }));
+        var _novosRemoto = projetos.filter(function(p){ return !_localIds.has(String(p.id)); });
+        state.projetos = localProj.concat(_novosRemoto);
+      } else {
+        state.projetos = projetos;
+      }
     } else if(projetos === null){
       if(localProj.length > 0) sincronizarSheets();
     }
@@ -4444,6 +4452,8 @@ function excluirProjeto(projId){
   // Remover eventos do calendário vinculados
   state.eventosAvulsos=(state.eventosAvulsos||[]).filter(function(e){return e.projetoId!==projId;});
   salvarLocal();
+  // Sincronizar exclusão com o servidor para evitar que o projeto retorne no próximo sync
+  salvarDadoAppSheets("bcs_projetos", state.projetos||[]).catch(function(){});
   document.getElementById("modal-projeto")?.remove();
   var m=document.getElementById("main"); if(m) renderGestaoProjectos(m);
   showToast("Projeto excluído");
