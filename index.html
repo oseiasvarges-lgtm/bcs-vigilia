@@ -9647,6 +9647,21 @@ function visualizarAgendamentoComOcorrencia(agId){
   }
 }
 
+// Toggle para expandir/recolher narrativa nos cards de ocorrência
+window._ocToggleDin = function(btn){
+  var p = document.getElementById(btn.dataset.target);
+  if(!p) return;
+  if(btn.dataset.exp === "1"){
+    btn.dataset.exp = "0";
+    btn.textContent = "▼ ver narrativa completa";
+    p.textContent = btn.dataset.prev + "…";
+  } else {
+    btn.dataset.exp = "1";
+    btn.textContent = "▲ recolher";
+    p.textContent = btn.dataset.full;
+  }
+};
+
 function exportarPDFOcorrencia(ocIdOverride){
   var id = ocIdOverride || state._pdfOcId;
   var oc = state.db.ocorrencias.find(function(o){return o.id===id;});
@@ -9707,7 +9722,7 @@ function gerarJanelaPDF(oc){
   h+=".tag-mp{background:#c47000;color:#fff}";
   h+=".tag-reinc{background:#e8943a;color:#fff}";
   h+=".tag-visita{background:#006600;color:#fff}";
-  h+=".oc-texto{white-space:pre-wrap;word-break:break-word;font-family:Arial,sans-serif;font-size:10.5px;color:#222;line-height:1.75;margin:0;background:#fff;border:1px solid #ddd;border-radius:3px;padding:10px}";
+  h+=".oc-texto{white-space:pre-wrap;word-break:break-word;overflow-wrap:break-word;font-family:Arial,sans-serif;font-size:10.5px;color:#222;line-height:1.75;margin:0;background:#fff;border:1px solid #ddd;border-radius:3px;padding:10px}";
   h+=".secao{margin-top:18px;border-top:2px solid #1a3a6a;padding-top:10px;page-break-inside:avoid}";
   h+=".secao-titulo{font-size:10px;font-weight:700;text-transform:uppercase;color:#1a3a6a;letter-spacing:1px;margin-bottom:10px}";
   h+=".ag-item{border-left:3px solid #1a3a6a;padding:5px 10px;margin-bottom:6px;background:#f5f8ff}";
@@ -9733,11 +9748,11 @@ function gerarJanelaPDF(oc){
     var isAtual = o.id===oc.id;
     h+="<div class='oc-bloco"+(isAtual?" atual":"")+"'>";
     // Cabeçalho do bloco
-    h+="<p class='oc-tipo'>"+(o.tipo||"Ocorrência").toUpperCase()+"</p>";
+    h+="<p class='oc-tipo'>"+esc((o.tipo||"Ocorrência").toUpperCase())+"</p>";
     h+="<p class='oc-meta'>";
-    if(o.numero) h+="Nº "+o.numero+" &nbsp;|&nbsp; ";
+    if(o.numero) h+="Nº "+esc(o.numero)+" &nbsp;|&nbsp; ";
     h+=fmtData(o.data)+(o.hora?" · "+normHora(o.hora):"");
-    if(o.posto) h+=" &nbsp;|&nbsp; "+o.posto;
+    if(o.posto) h+=" &nbsp;|&nbsp; "+esc(o.posto);
     h+="</p>";
     // Tags
     var tags=[];
@@ -10312,7 +10327,7 @@ function renderOcorrenciasGestor(el, perfil_atual){
 
   // Busca por texto
   h.push(_htmlFiltrosBairro("renderOcorrenciasGestor(document.getElementById('main-content'),state._ocPerfil)","#d4a87a"));
-  h.push("<input id='oc-busca' type='text' placeholder='Buscar por nome, bairro, tipo, suspeito...' value='"+(state.filtroOcBusca||"")+"' style='width:100%;background:#2a1c10;border:1px solid #2a3818;color:#f2eada;padding:10px 13px;border-radius:8px;font-size:13px;margin-bottom:12px;box-sizing:border-box;outline:none'/>");
+  h.push("<input id='oc-busca' type='text' placeholder='Buscar por nome, Nº, bairro, tipo, suspeito, policial...' value='"+(state.filtroOcBusca||"")+"' style='width:100%;background:#2a1c10;border:1px solid #2a3818;color:#f2eada;padding:10px 13px;border-radius:8px;font-size:13px;margin-bottom:12px;box-sizing:border-box;outline:none'/>");
 
   // Filtro periodo
   h.push("<div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px'>");
@@ -10346,12 +10361,24 @@ function renderOcorrenciasGestor(el, perfil_atual){
   var busca = (state.filtroOcBusca||"").toLowerCase().trim();
   if(busca){
     ocs = ocs.filter(function(o){
-      return (o.tipo||"").toLowerCase().includes(busca) ||
-             (o.bairro||"").toLowerCase().includes(busca) ||
-             (o.vitima_nome||"").toLowerCase().includes(busca) ||
-             (o.suspeito_nome||"").toLowerCase().includes(busca) ||
-             (o.veiculo||"").toLowerCase().includes(busca) ||
-             (o.descricao||"").toLowerCase().includes(busca);
+      // Busca nos campos planos
+      if((o.tipo||"").toLowerCase().includes(busca)) return true;
+      if((o.bairro||"").toLowerCase().includes(busca)) return true;
+      if((o.local||"").toLowerCase().includes(busca)) return true;
+      if((o.numero||"").toLowerCase().includes(busca)) return true;
+      if((o.relatorio||"").toLowerCase().includes(busca)) return true;
+      if((o.vitima_nome||"").toLowerCase().includes(busca)) return true;
+      if((o.suspeito_nome||"").toLowerCase().includes(busca)) return true;
+      if((o.suspeito_apelido||"").toLowerCase().includes(busca)) return true;
+      if((o.veiculo||"").toLowerCase().includes(busca)) return true;
+      if((o.policiais||"").toLowerCase().includes(busca)) return true;
+      if((o.descricao||"").toLowerCase().includes(busca)) return true;
+      if((o.descricao_dinamica||"").toLowerCase().includes(busca)) return true;
+      if((o.texto_original||"").slice(0,600).toLowerCase().includes(busca)) return true;
+      // Busca em vítimas e autores múltiplos
+      if((o.vitimas||[]).some(function(v){ return (v.nome||"").toLowerCase().includes(busca); })) return true;
+      if((o.autores||[]).some(function(a){ return (a.nome||"").toLowerCase().includes(busca); })) return true;
+      return false;
     });
   }
 
@@ -10379,8 +10406,9 @@ function renderOcorrenciasGestor(el, perfil_atual){
     else if(/roubo|arrombamento/.test(t)) cor="#f97316";
     else if(/furto/.test(t)) cor="#eab308";
     else if(/violência|violencia|maria da penha|medida protetiva/.test(t)) cor="#a855f7";
-    function nomeValido(s){ return s && s.length<=60 && s.split(" ").length<=6 && !/[\.!?]/.test(s) && !/\b(do|da|de|no|na|que|ao|o\s|a\s|foi|pelo|pela|para|com|uma|um|por|seu|sua)\b/i.test(s); }
-    function tipoValido(s){ return s && s.length<=60 && !/[\.!?]/.test(s) && s.split(" ").length<=6; }
+    // Nomes brasileiros têm preposições (da/de/do/dos/das) — não rejeitar
+    function nomeValido(s){ return s && s.length<=80 && s.split(" ").length<=8 && !/[\.!?]/.test(s) && !/\b(que|foi|pelo|pela|para|uma|um|seu|sua)\b/i.test(s); }
+    function tipoValido(s){ return s && s.length<=60 && !/[\.!?]/.test(s) && s.split(" ").length<=7; }
     var tipoExib   = tipoValido(o.tipo)          ? (o.tipo||"").toUpperCase() : "NÃO IDENTIFICADO";
     var vitimeExib = nomeValido(o.vitima_nome)   ? o.vitima_nome              : "--";
     var suspExib   = nomeValido(o.suspeito_nome) ? o.suspeito_nome            : "Não identificado";
@@ -10439,14 +10467,28 @@ function renderOcorrenciasGestor(el, perfil_atual){
       if(o.suspeito_nome) h.push("<div><span style='"+fcS+"'>Autor/Suspeito</span><span style='"+fcV+"'>"+esc(o.suspeito_nome)+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+"</span></div>");
       if(o.objetos) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Objetos</span><span style='"+fcV+"'>"+esc(o.objetos)+"</span></div>");
       h.push("</div>");
-      if(o.descricao) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Descrição</span><p style='"+fcV+";margin:0;white-space:pre-wrap'>"+esc(o.descricao)+"</p></div>");
-      var dinamica=o.descricao_dinamica||o.texto_original||"";
-      if(dinamica) h.push("<div style='background:#060d1c;border:1px solid #1a3358;border-radius:6px;padding:10px;margin-bottom:8px'><span style='"+fcS+"'>Dinâmica dos Fatos</span><p style='color:#c8d8f0;font-size:11px;line-height:1.7;margin:0;white-space:pre-wrap'>"+esc(dinamica)+"</p></div>");
+      var dinamica=o.descricao_dinamica||o.texto_original||o.descricao||"";
+      if(dinamica){
+        var _MAXD=220, _prevD=dinamica.length>_MAXD, _escId="din-"+o.id;
+        var _prevTxt=_prevD?dinamica.slice(0,_MAXD):dinamica;
+        h.push("<div style='background:#060d1c;border:1px solid #1a3358;border-radius:6px;padding:10px;margin-bottom:8px'>");
+        h.push("<span style='"+fcS+"'>Dinâmica dos Fatos</span>");
+        h.push("<p id='"+_escId+"' style='color:#c8d8f0;font-size:11px;line-height:1.7;margin:4px 0 0;white-space:pre-wrap'>"+esc(_prevTxt)+(_prevD?"…":"")+"</p>");
+        if(_prevD) h.push("<button data-full='"+esc(dinamica)+"' data-prev='"+esc(_prevTxt)+"' data-target='"+_escId+"' data-exp='0' onclick='_ocToggleDin(this)' style='background:none;border:none;color:#4a9fd4;font-size:10px;cursor:pointer;padding:3px 0 0;display:block'>▼ ver narrativa completa ("+(dinamica.length)+" chars)</button>");
+        h.push("</div>");
+      }
       if(o.medidas) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Medidas Adotadas</span><p style='"+fcV+";margin:0;white-space:pre-wrap'>"+esc(o.medidas)+"</p></div>");
       if(o.policiais) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Policiais</span><span style='"+fcV+"'>"+esc(o.policiais)+"</span></div>");
     } else {
       var relatoExib=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
-      if(relatoExib) h.push("<pre style='white-space:pre-wrap;word-break:break-word;color:#c8c0a8;font-size:11px;line-height:1.8;font-family:inherit;margin:0 0 10px;background:#2a1c10;border-radius:8px;padding:12px'>"+esc(relatoExib)+"</pre>");
+      if(relatoExib){
+        var _MAXR=220, _prevR=relatoExib.length>_MAXR, _escIdR="din-"+o.id;
+        var _prevTxtR=_prevR?relatoExib.slice(0,_MAXR):relatoExib;
+        h.push("<div style='background:#2a1c10;border-radius:8px;padding:12px;margin-bottom:10px'>");
+        h.push("<p id='"+_escIdR+"' style='white-space:pre-wrap;word-break:break-word;color:#c8c0a8;font-size:11px;line-height:1.8;font-family:inherit;margin:0'>"+esc(_prevTxtR)+(_prevR?"…":"")+"</p>");
+        if(_prevR) h.push("<button data-full='"+esc(relatoExib)+"' data-prev='"+esc(_prevTxtR)+"' data-target='"+_escIdR+"' data-exp='0' onclick='_ocToggleDin(this)' style='background:none;border:none;color:#8a6a4a;font-size:10px;cursor:pointer;padding:3px 0 0;display:block'>▼ ver narrativa completa ("+(relatoExib.length)+" chars)</button>");
+        h.push("</div>");
+      }
     }
     h.push("<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'>");
     h.push("<button data-oc='"+o.id+"' data-act='pdf' style='background:#0a1628;border:1px solid #d4a87a;color:#d4a87a;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>📄 PDF</button>");
