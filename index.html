@@ -3095,66 +3095,64 @@ function renderDashComandante(main){
   // ABA: VISITAS SOLIDÁRIAS
   // ══════════════════════════════════════════════════
   else if(tabAtiva==="visitas"){
-    var visitas = state.db.visitas || [];
-    var ocsRequerVisita = ocs.filter(function(o){ return o.requer_visita===true; });
-    var ocsPendentes = ocsRequerVisita.filter(function(o){ return !visitas.find(function(v){ return v.ocorrenciaId===o.id; }); });
-    var ocsRealizadas = ocsRequerVisita.filter(function(o){ return !!visitas.find(function(v){ return v.ocorrenciaId===o.id; }); });
-    var pctCobertura = ocsRequerVisita.length ? Math.round(ocsRealizadas.length/ocsRequerVisita.length*100) : 0;
+    // Visitas agendadas = agendamentos cujo tipo inclui "Visita"
+    var ags = state.db.agendamentos || [];
+    var agsVisita = ags.filter(function(a){ return /visita/i.test(a.tipo||""); })
+                       .slice().sort(function(a,b){ return (a.data||"")>(b.data||"")?1:-1; });
+    var agsPend  = agsVisita.filter(function(a){ return (a.status||"Agendado")==="Agendado" && (a.data||"")>=hoje(); });
+    var agsConc  = agsVisita.filter(function(a){ return (a.status||"Agendado")!=="Agendado" || (a.data||"")<hoje(); });
+    var proxima  = agsPend[0] || null;
 
+    // KPIs
     h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin-bottom:22px'>");
     h.push("<div style='background:#2a1c10;border:2px solid #d4a87a44;border-radius:12px;padding:14px 16px'>");
-    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Requerem Visita</p>");
-    h.push("<p style='font-size:30px;font-weight:800;color:#f5ede0;margin:0;line-height:1'>"+ocsRequerVisita.length+"</p>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Total Agendadas</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#f5ede0;margin:0;line-height:1'>"+agsVisita.length+"</p>");
     h.push("</div>");
-    h.push("<div style='background:#0a1a0a;border:1px solid #22c55e40;border-radius:12px;padding:14px 16px'>");
-    h.push("<p style='color:#2a5a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Realizadas</p>");
-    h.push("<p style='font-size:30px;font-weight:800;color:#22c55e;margin:0;line-height:1'>"+ocsRealizadas.length+"</p>");
+    h.push("<div style='background:#0a1a10;border:1px solid #22c55e40;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#2a5a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Pendentes</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#22c55e;margin:0;line-height:1'>"+agsPend.length+"</p>");
     h.push("</div>");
-    h.push("<div style='background:#1a0a0a;border:1px solid #f9731640;border-radius:12px;padding:14px 16px'>");
-    h.push("<p style='color:#5a2a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Pendentes</p>");
-    h.push("<p style='font-size:30px;font-weight:800;color:#f97316;margin:0;line-height:1'>"+ocsPendentes.length+"</p>");
+    h.push("<div style='background:#1a1008;border:1px solid #a07c5840;border-radius:12px;padding:14px 16px'>");
+    h.push("<p style='color:#6a4a2a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Realizadas</p>");
+    h.push("<p style='font-size:30px;font-weight:800;color:#a07c58;margin:0;line-height:1'>"+agsConc.length+"</p>");
     h.push("</div>");
-    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:14px 16px'>");
-    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>% Cobertura</p>");
-    h.push("<p style='font-size:30px;font-weight:800;color:"+(pctCobertura>=80?"#22c55e":pctCobertura>=40?"#f59e0b":"#ef4444")+";margin:0;line-height:1'>"+pctCobertura+"%</p>");
+    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:14px 16px;overflow:hidden'>");
+    h.push("<p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 6px'>Próxima</p>");
+    h.push("<p style='font-size:13px;font-weight:800;color:#d4a87a;margin:0;line-height:1.4'>"+(proxima?fmtData(proxima.data)+(proxima.hora?" · "+proxima.hora:""):"—")+"</p>");
+    if(proxima&&(proxima.vitima_nome||proxima.objetivo)) h.push("<p style='color:#8a6a4a;font-size:10px;margin:4px 0 0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+esc(proxima.vitima_nome||proxima.objetivo||"")+"</p>");
     h.push("</div>");
-    h.push("</div>");
-
-    // Pendentes
-    h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
-    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>⏳ Visitas Pendentes ("+ocsPendentes.length+")</p>");
-    if(!ocsPendentes.length){
-      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:13px'>Nenhuma visita pendente.</p>");
-    } else {
-      h.push("<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;min-width:400px'>");
-      h.push("<thead><tr><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Data</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Tipo</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Vítima</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Bairro</th><th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'></th></tr></thead><tbody>");
-      ocsPendentes.slice().sort(function(a,b){ return (_pdLocal(b.data)||new Date(0))-(_pdLocal(a.data)||new Date(0)); }).slice(0,30).forEach(function(o){
-        h.push("<tr style='border-bottom:1px solid #3c2818'>");
-        h.push("<td style='padding:8px 8px;color:#a07c58;font-size:11px;white-space:nowrap'>"+fmtData(o.data)+"</td>");
-        h.push("<td style='padding:8px 8px;color:#ddd2c0;font-size:11px'>"+esc(o.tipo||"—")+"</td>");
-        h.push("<td style='padding:8px 8px;color:#f5ede0;font-size:12px;font-weight:600'>"+esc(o.vitima_nome||"—")+"</td>");
-        h.push("<td style='padding:8px 8px;color:#8a6a4a;font-size:11px'>"+esc(o.bairro||"—")+"</td>");
-        h.push("<td style='padding:8px;text-align:center'><button onclick=\"abrirMonitorVCM('"+o.id+"')\" style='background:#3c2818;border:1px solid #5e4636;color:#d4a87a;padding:4px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer'>Ver →</button></td>");
-        h.push("</tr>");
-      });
-      h.push("</tbody></table></div>");
-    }
     h.push("</div>");
 
-    // Realizadas
+    // Tabela de visitas agendadas
     h.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:12px;padding:16px;margin-bottom:18px'>");
-    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 14px'>✅ Visitas Realizadas ("+visitas.length+")</p>");
-    if(!visitas.length){
-      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:13px'>Nenhuma visita registrada.</p>");
+    h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px'>");
+    h.push("<p style='color:#a07c58;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0'>📅 Visitas Agendadas ("+agsVisita.length+")</p>");
+    h.push("<button onclick=\"setTela('calendario')\" style='background:#3c2818;border:1px solid #5e4636;color:#d4a87a;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>Abrir Calendário →</button>");
+    h.push("</div>");
+    if(!agsVisita.length){
+      h.push("<p style='color:#5e4636;text-align:center;padding:20px 0;font-size:13px'>Nenhuma visita agendada.</p>");
     } else {
       h.push("<div style='overflow-x:auto'><table style='width:100%;border-collapse:collapse;min-width:400px'>");
-      h.push("<thead><tr><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Data Visita</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Vítima / Ocorrência</th><th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Responsável</th></tr></thead><tbody>");
-      visitas.slice().sort(function(a,b){ return (b.data||"")>(a.data||"")?1:-1; }).slice(0,30).forEach(function(v){
-        var ocVis = ocs.find(function(o){ return o.id===v.ocorrenciaId; });
+      h.push("<thead><tr>");
+      h.push("<th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Data</th>");
+      h.push("<th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Hora</th>");
+      h.push("<th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Tipo</th>");
+      h.push("<th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Vítima / Objetivo</th>");
+      h.push("<th style='text-align:left;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Responsável</th>");
+      h.push("<th style='text-align:center;color:#8a6a4a;font-size:10px;padding:6px 8px;font-weight:700;border-bottom:1px solid #4a3224'>Status</th>");
+      h.push("</tr></thead><tbody>");
+      agsVisita.forEach(function(a){
+        var isPend=(a.status||"Agendado")==="Agendado"&&(a.data||"")>=hoje();
+        var statusCor=isPend?"#22c55e":"#8a6a4a";
+        var statusTxt=isPend?"⏳ Agendada":"✅ Realizada";
         h.push("<tr style='border-bottom:1px solid #3c2818'>");
-        h.push("<td style='padding:8px 8px;color:#a07c58;font-size:11px;white-space:nowrap'>"+esc(v.data||"—")+"</td>");
-        h.push("<td style='padding:8px 8px;color:#f5ede0;font-size:12px;font-weight:600'>"+(ocVis?esc(ocVis.vitima_nome||"—"):esc(v.ocorrenciaId||"—"))+"</td>");
-        h.push("<td style='padding:8px 8px;color:#8a6a4a;font-size:11px'>"+esc(v.responsavel||v.autor||"—")+"</td>");
+        h.push("<td style='padding:8px;color:#a07c58;font-size:11px;white-space:nowrap'>"+fmtData(a.data||"")+"</td>");
+        h.push("<td style='padding:8px;color:#8a6a4a;font-size:11px'>"+esc(a.hora||"—")+"</td>");
+        h.push("<td style='padding:8px;color:#ddd2c0;font-size:11px'>"+esc(a.tipo||"—")+"</td>");
+        h.push("<td style='padding:8px;color:#f5ede0;font-size:12px;font-weight:600'>"+esc(a.vitima_nome||a.objetivo||"—")+"</td>");
+        h.push("<td style='padding:8px;color:#8a6a4a;font-size:11px'>"+esc(a.responsavel||"—")+"</td>");
+        h.push("<td style='padding:8px;text-align:center'><span style='background:"+statusCor+"22;color:"+statusCor+";padding:3px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+statusTxt+"</span></td>");
         h.push("</tr>");
       });
       h.push("</tbody></table></div>");
