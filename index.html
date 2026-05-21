@@ -196,6 +196,7 @@ button{cursor:pointer;}
 const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxKZVJcjgBSVUK7MXcH1ZuKY8-YhmidlTN-olcmLJ0T4ar9fPE05-iZbqJ4KUfHMgovRA/exec";
 // Token compartilhado com o Apps Script (defina o mesmo valor lá)
 const BCS_TOKEN = "bcs-token-secreto-2025"; // TROQUE antes de publicar
+const CONSELHO_PIN = "conselho77"; // PIN de acesso ao módulo do Conselho Comunitário
 // PINs validados pelo servidor (Apps Script PropertiesService) — não ficam no HTML
 const ANTHROPIC_KEY = localStorage.getItem("bcs_anthropic_key")||"";
 
@@ -279,6 +280,17 @@ function salvarLocal() {
       agendamentos:state.db.agendamentos
     };
     localStorage.setItem("bcs_db_light",JSON.stringify(light));
+    // Manter bcs_sigespol_backup sincronizado com edições locais
+    try{
+      var _spRaw = localStorage.getItem("bcs_sigespol_backup");
+      if(_spRaw){
+        var _spList = JSON.parse(_spRaw);
+        var _ocMap = {};
+        (state.db.ocorrencias||[]).forEach(function(o){ if(o.id) _ocMap[String(o.id).trim()] = o; });
+        var _spUpdated = _spList.map(function(o){ return _ocMap[String(o.id).trim()] || o; });
+        localStorage.setItem("bcs_sigespol_backup", JSON.stringify(_spUpdated));
+      }
+    } catch(e3){ /* não crítico */ }
     if(state.ocorrenciasPendentes) localStorage.setItem("bcs_oc_pendentes",JSON.stringify(state.ocorrenciasPendentes));
     if(state.ocorrenciasArquivadas) localStorage.setItem("bcs_oc_arquivadas",JSON.stringify(state.ocorrenciasArquivadas));
     if(state.ocorrenciasEncerradas) localStorage.setItem("bcs_oc_encerradas",JSON.stringify(state.ocorrenciasEncerradas));
@@ -329,10 +341,18 @@ function carregarLocal() {
         const spList = JSON.parse(spRaw);
         if(spList && spList.length>0){
           const spIds = new Set(spList.map(function(o){ return String(o.id).trim(); }));
+          // Mapa das versões editadas localmente (bcs_db_light) — sempre têm prioridade sobre backup
+          var _lightMap = {};
+          db.ocorrencias.forEach(function(o){ if(o.id) _lightMap[String(o.id).trim()] = o; });
+          // Para cada registro SIGESPOL: usar versão local editada se existir, senão usar backup
+          var spMerged = spList.map(function(o){
+            var k = String(o.id).trim();
+            return _lightMap[k] || o;
+          });
           // Remover duplicatas e re-inserir SIGESPOL no início
           db.ocorrencias = db.ocorrencias.filter(function(o){ return !spIds.has(String(o.id).trim()); });
-          db.ocorrencias = spList.concat(db.ocorrencias);
-          console.log("[BCS] Restaurado backup SIGESPOL:",spList.length,"registros");
+          db.ocorrencias = spMerged.concat(db.ocorrencias);
+          console.log("[BCS] Restaurado backup SIGESPOL:",spList.length,"registros (edições locais preservadas)");
         }
       }
     } catch(e2){ console.warn("[BCS] Erro ao restaurar SIGESPOL backup:",e2); }
@@ -868,6 +888,13 @@ let state = {
   _escolaFiltro: "",
   _escolaDetalheId: null,
   filtroBairro: "",
+  // Módulo Conselho Comunitário
+  conselho_tab: "atas",
+  conselho_atas:        JSON.parse(localStorage.getItem("bcs_conselho_atas")||"[]"),
+  conselho_associados:  JSON.parse(localStorage.getItem("bcs_conselho_associados")||"[]"),
+  conselho_diretoria:   JSON.parse(localStorage.getItem("bcs_conselho_diretoria")||"[]"),
+  // Devolutivas CRAV
+  devolutivasCrav: JSON.parse(localStorage.getItem("bcs_devolutivas_crav")||"[]"),
 };
 
 // Inicializar arrays vazios se undefined
@@ -1048,27 +1075,44 @@ function _enviarSheetsJSONP(tipo, reg){
   document.head.appendChild(s);
 }
 
-// Reimportar apenas ocorrências criadas pelo BCS (id começa com "oc_")
-// NUNCA reescreve registros do SIGESPOL (IDs em formato UUID) para preservar dados originais
+// ── Testar conexão com Sheets ────────────────────────────────────
+function testarConexaoSheets(){
+  if(!SHEETS_URL){ showToast("URL do Sheets não configurada","error"); return; }
+  var cb = "bcs_teste_" + Date.now();
+  var s = document.createElement("script");
+  var t = setTimeout(function(){
+    delete window[cb]; if(s.parentNode) s.remove();
+    showToast("❌ Sem resposta do Sheets — verifique a URL do Apps Script","error");
+  }, 12000);
+  window[cb] = function(resp){
+    clearTimeout(t); delete window[cb]; if(s.parentNode) s.remove();
+    showToast("✅ Sheets conectado: " + JSON.stringify(resp).slice(0,80));
+  };
+  s.onerror = function(){
+    clearTimeout(t); delete window[cb]; if(s.parentNode) s.remove();
+    showToast("❌ Erro ao chamar o Apps Script. URL inválida ou script não publicado.","error");
+  };
+  s.src = SHEETS_URL + "?acao=ping&token=" + encodeURIComponent(BCS_TOKEN) + "&callback=" + cb;
+  document.head.appendChild(s);
+  showToast("Testando conexão com Sheets...");
+}
+
+// ── Reenviar TODAS as ocorrências locais para o Sheets ──────────
 function reimportarParaSheets(){
   if(!SHEETS_URL){ showToast("URL do Sheets não configurada","error"); return; }
-  // Filtra SOMENTE registros criados pelo BCS (oc_TIMESTAMP)
-  // Registros SIGESPOL têm UUID (ex: "b1b013c6-0fa2-...") e NÃO são enviados
-  var ocs=(state.db.ocorrencias||[]).filter(function(o){
-    return o && o.id && String(o.id).indexOf("oc_")===0;
-  });
-  if(!ocs.length){ showToast("Nenhum registro BCS local para reimportar (registros SIGESPOL são preservados na planilha)","error"); return; }
-  if(!confirm("Reimportar "+ocs.length+" ocorrências criadas pelo BCS?\n\nRegistros importados do SIGESPOL NÃO serão alterados.")) return;
+  var ocs = (state.db.ocorrencias||[]).filter(function(o){ return o && o.id; });
+  if(!ocs.length){ showToast("Nenhuma ocorrência local encontrada","error"); return; }
+  if(!confirm("Reenviar "+ocs.length+" ocorrências para o Google Sheets?\n\nIsso substitui os dados existentes na planilha.")) return;
   var total=ocs.length, idx=0;
-  showToast("Reimportando "+total+" ocorrências BCS...");
-  function _enviarProxima(){
-    if(idx>=total){ showToast("✓ Reimportação concluída: "+total+" registros BCS enviados"); return; }
+  showToast("Enviando "+total+" ocorrências...");
+  function _prox(){
+    if(idx>=total){ showToast("✓ "+total+" ocorrências enviadas para o Sheets!"); return; }
     enviarSheets("ocorrencias", ocs[idx]);
     idx++;
-    if(idx%10===0) showToast("Reimportando... "+idx+"/"+total);
-    setTimeout(_enviarProxima, 1200);
+    if(idx%10===0) showToast("Enviando... "+idx+"/"+total);
+    setTimeout(_prox, 800);
   }
-  _enviarProxima();
+  _prox();
 }
 
 // ══════════════════════════════════════════════════
@@ -1197,24 +1241,57 @@ function _parsearWhatsApp(texto) {
 function renderImportarZap(main) {
   main.innerHTML = `
   <div style="max-width:860px;margin:0 auto">
-    <div style="margin-bottom:24px">
+    <div style="margin-bottom:20px">
       <h2 style="color:#d4a87a;font-size:20px;font-weight:700;margin-bottom:4px">📥 Importar Dados</h2>
-      <p style="color:#a07c58;font-size:13px">Importe ocorrências do WhatsApp ou do SIGESPOL (JSON) diretamente pelo sistema.</p>
+      <p style="color:#a07c58;font-size:13px">Método principal: exportação do grupo WhatsApp. Pode importar o arquivo a qualquer momento — registros já existentes são ignorados automaticamente.</p>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px">
-      <div id="zap-dropzone" style="border:2px dashed #7a5e48;border-radius:14px;padding:32px;text-align:center;cursor:pointer;transition:all 0.2s;background:#3c2818"
-        onclick="document.getElementById('zap-file-input').click()"
-        ondragover="event.preventDefault();this.style.borderColor='#d4a87a'"
-        ondragleave="this.style.borderColor='#7a5e48'"
-        ondrop="event.preventDefault();this.style.borderColor='#7a5e48';_zapHandleFile(event.dataTransfer.files[0])">
-        <div style="font-size:36px;margin-bottom:10px">💬</div>
-        <div style="color:#d4a87a;font-size:14px;font-weight:700;margin-bottom:4px">WhatsApp</div>
-        <div style="color:#8a6a4a;font-size:11px">Arquivo exportado do grupo (.txt)</div>
-        <input type="file" id="zap-file-input" accept=".txt" style="display:none" onchange="_zapHandleFile(this.files[0])">
+    <!-- WhatsApp — método principal -->
+    <div style="border:2px solid #7a5e48;border-radius:16px;padding:24px;background:#1e1008;margin-bottom:16px">
+      <div style="display:flex;align-items:center;gap:14px;margin-bottom:16px">
+        <span style="font-size:36px">💬</span>
+        <div>
+          <div style="color:#d4a87a;font-size:15px;font-weight:700">Importar via WhatsApp</div>
+          <div style="color:#8a6a4a;font-size:12px">Arraste o arquivo .txt exportado do grupo ou clique para selecionar</div>
+        </div>
       </div>
 
-      <div id="json-dropzone" style="border:2px dashed #7a5e48;border-radius:14px;padding:32px;text-align:center;cursor:pointer;transition:all 0.2s;background:#3c2818"
+      <!-- Passo a passo de exportação -->
+      <div style="background:#2a1800;border:1px solid #5e3a18;border-radius:10px;padding:14px;margin-bottom:16px">
+        <div style="color:#c49070;font-size:11px;font-weight:700;margin-bottom:8px;text-transform:uppercase;letter-spacing:.5px">📱 Como exportar o histórico do grupo</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+          <div style="color:#a07c58;font-size:11px">
+            <div style="color:#d4a87a;font-weight:700;margin-bottom:4px">Android</div>
+            Grupo → ⋮ Mais → Exportar conversa → <strong style="color:#c49070">Sem mídia</strong> → salvar o .txt
+          </div>
+          <div style="color:#a07c58;font-size:11px">
+            <div style="color:#d4a87a;font-weight:700;margin-bottom:4px">iPhone</div>
+            Grupo → Nome do grupo → Exportar conversa → <strong style="color:#c49070">Sem mídia</strong> → salvar o .txt
+          </div>
+        </div>
+      </div>
+
+      <div id="zap-dropzone" style="border:2px dashed #7a5e48;border-radius:12px;padding:28px;text-align:center;cursor:pointer;transition:all 0.2s;background:#0e0800"
+        onclick="document.getElementById('zap-file-input').click()"
+        ondragover="event.preventDefault();this.style.borderColor='#d4a87a';this.style.background='#1e1000'"
+        ondragleave="this.style.borderColor='#7a5e48';this.style.background='#0e0800'"
+        ondrop="event.preventDefault();this.style.borderColor='#7a5e48';this.style.background='#0e0800';_zapHandleFiles(event.dataTransfer.files)">
+        <div style="font-size:32px;margin-bottom:8px">📂</div>
+        <div style="color:#d4a87a;font-size:13px;font-weight:700;margin-bottom:4px">Clique ou arraste o arquivo .txt aqui</div>
+        <div style="color:#5e4030;font-size:11px">Pode importar arquivos de meses diferentes — duplicatas são ignoradas automaticamente</div>
+        <input type="file" id="zap-file-input" accept=".txt" multiple style="display:none" onchange="_zapHandleFiles(this.files)">
+      </div>
+    </div>
+
+    <div id="zap-preview" style="margin-bottom:16px"></div>
+
+    <!-- Opções secundárias -->
+    <details style="margin-bottom:16px">
+      <summary style="cursor:pointer;color:#6a5a3a;font-size:12px;padding:10px;background:#12100a;border:1px solid #3a2c18;border-radius:8px;list-style:none">
+        ▶ Outras opções de importação (JSON / SIGESPOL)
+      </summary>
+      <div style="margin-top:8px">
+      <div id="json-dropzone" style="border:2px dashed #7a5e48;border-radius:14px;padding:28px;text-align:center;cursor:pointer;transition:all 0.2s;background:#3c2818"
         onclick="document.getElementById('json-file-input').click()"
         ondragover="event.preventDefault();this.style.borderColor='#38bdf8'"
         ondragleave="this.style.borderColor='#7a5e48'"
@@ -1224,16 +1301,59 @@ function renderImportarZap(main) {
         <div style="color:#8a6a4a;font-size:11px">Arquivo de exportação BCS (.json)</div>
         <input type="file" id="json-file-input" accept=".json" style="display:none" onchange="_jsonHandleFile(this.files[0])">
       </div>
-    </div>
+      </div>
+    </details>
 
-    <div id="zap-preview" style="display:none;margin-top:8px"></div>
+    <div style="margin-top:20px;border:2px dashed #22c55e55;border-radius:14px;padding:24px;background:#0a1a0a">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <span style="font-size:32px">📊</span>
+        <div>
+          <div style="color:#22c55e;font-size:14px;font-weight:700">Importar Planilha</div>
+          <div style="color:#4a7a4a;font-size:11px">Cole os dados copiados do Excel ou Google Sheets (com cabeçalho)</div>
+        </div>
+      </div>
+      <textarea id="planilha-paste" placeholder="Copie as linhas da planilha (incluindo o cabeçalho) e cole aqui com Ctrl+V..." style="width:100%;height:110px;background:#0f1f0f;border:1px solid #2a4a2a;color:#c8e0c8;padding:10px;border-radius:8px;font-size:11px;font-family:monospace;box-sizing:border-box;resize:vertical;outline:none"></textarea>
+      <div style="margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <label style="display:flex;align-items:center;gap:6px;cursor:pointer;color:#7ac24a;font-size:12px;background:#0d1a0d;border:1px solid #2a4a2a;border-radius:8px;padding:6px 12px">
+          <input type="checkbox" id="pl-filtro-bcs" checked style="width:14px;height:14px;accent-color:#22c55e">
+          🏘 Apenas bairros BCS (Primavera, Panorama, Pedrinhas, Alto Marom, Europa Unida, Cruzeiro, Guarani)
+        </label>
+      </div>
+      <button onclick="_planilhaPreview()" style="margin-top:10px;background:#22c55e22;border:1px solid #22c55e;color:#22c55e;padding:8px 20px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer">👁 Pré-visualizar</button>
+      <div id="planilha-preview" style="margin-top:16px"></div>
+    </div>
   </div>`;
+
+  // Múltiplos arquivos: lê todos e combina
+  window._zapHandleFiles = function(files) {
+    if (!files || !files.length) return;
+    var fileArr = Array.prototype.slice.call(files);
+    var textos = [], lidos = 0;
+    fileArr.forEach(function(file, i) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        textos[i] = e.target.result;
+        lidos++;
+        if (lidos === fileArr.length) {
+          window._zapHandleTexto(textos.join("\n"), fileArr.length > 1 ? fileArr.length + " arquivos" : fileArr[0].name);
+        }
+      };
+      reader.readAsText(file, 'utf-8');
+    });
+  };
 
   window._zapHandleFile = function(file) {
     if (!file) return;
     var reader = new FileReader();
     reader.onload = function(e) {
-      var registros = _parsearWhatsApp(e.target.result);
+      window._zapHandleTexto(e.target.result, file.name);
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+
+  window._zapHandleTexto = function(texto, nomeArq) {
+    (function() {
+      var registros = _parsearWhatsApp(texto);
       var prev = document.getElementById('zap-preview');
 
       if (!registros.length) {
@@ -1257,12 +1377,13 @@ function renderImportarZap(main) {
       var html = `
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px">
         <div>
+          <div style="color:#6a5030;font-size:11px;margin-bottom:4px">📂 ${esc(nomeArq||"")}</div>
           <span style="color:#d4a87a;font-weight:700;font-size:16px">${registros.length} ocorrência${registros.length!==1?'s':''} encontrada${registros.length!==1?'s':''}</span>
           ${duplicatas>0?`<span style="color:#a07c58;font-size:12px;margin-left:10px">(${duplicatas} já existem — serão ignoradas)</span>`:''}
         </div>
         ${novos.length>0?`<button onclick="_zapImportar()" class="btn btn-gold" id="btn-zap-import">
-          📥 Importar ${novos.length} ocorrência${novos.length!==1?'s':''}
-        </button>`:`<div style="color:#8a6a4a;font-size:13px">Todas já importadas anteriormente.</div>`}
+          📥 Importar ${novos.length} nova${novos.length!==1?'s':''}
+        </button>`:`<div style="color:#2d7a5a;font-size:13px;font-weight:700">✓ Tudo já importado — sistema atualizado.</div>`}
       </div>
       <div style="border:1px solid #5e4636;border-radius:12px;overflow:hidden">
         <table style="width:100%;border-collapse:collapse;font-size:12px">
@@ -1295,8 +1416,7 @@ function renderImportarZap(main) {
 
       // Armazena para importação
       window._zapRegistrosPendentes = novos;
-    };
-    reader.readAsText(file, 'utf-8');
+    })();
   };
 
   // ── Importar JSON (SIGESPOL / BCS) ───────────────────────────
@@ -1430,6 +1550,226 @@ function renderImportarZap(main) {
       if(idx%10===0) showToast('Importando '+idx+'/'+total+'...');
       enviarSheets('ocorrencias', r);
       setTimeout(_prox, 500);
+    }
+    _prox();
+  };
+
+  // ── Importar Planilha (TSV colado do Excel/Sheets) ───────────────
+  function _parseBoolPl(v){
+    if(v===true||v===false) return v;
+    if(!v) return false;
+    return /^(sim|yes|true|1|s)$/i.test(String(v).trim());
+  }
+
+  function _parsearPlanilha(text, filtrarBCS) {
+    var linhas = text.split(/\r?\n/).filter(function(l){ return l.trim(); });
+    if(linhas.length < 2) return [];
+
+    var BAIRROS_BCS_PL = ["primavera","panorama","pedrinhas","alto marom","europa unida","cruzeiro","guarani"];
+    function _ehBarroBCS(val){
+      if(!val) return false;
+      var v = val.trim().toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"");
+      return BAIRROS_BCS_PL.some(function(b){ return v===b || v.indexOf(b)!==-1 || b.indexOf(v)!==-1; });
+    }
+    // Extrai bairro do campo Local: "Rua X, Nº 1., Guarani - Zona Urbana" → "Guarani"
+    function _extrairBairroDoLocal(local){
+      if(!local) return "";
+      var m = local.match(/,\s*([^,]+?)\s*-\s*Zona\s+(?:Urbana|Rural)/i);
+      if(m) return m[1].trim();
+      // fallback: último trecho antes de " - Zona"
+      var m2 = local.match(/([A-Za-zÀ-ÿ\s]+)\s*-\s*Zona/i);
+      if(m2) return m2[1].trim();
+      return "";
+    }
+
+    // Normaliza: minúsculo + remove acentos + remove aspas
+    function normH(s){
+      return (s||"").trim().toLowerCase()
+        .normalize("NFD").replace(/[̀-ͯ]/g,"")
+        .replace(/['"]/g,"").replace(/\s+/g," ");
+    }
+
+    var MAPA_COLUNAS = {
+      // ── Planilha original (cabeçalhos reais do sistema da CIPM)
+      "cod":"numero","codigo":"numero","numero":"numero",
+      "tipo":"tipo",
+      "data":"data",
+      "municipio":"municipio",
+      "local":"local",
+      "responsavel":"responsavel",
+      "descricao":"descricao","descricao/sinopse":"descricao",
+      "dinamica dos fatos":"descricao_dinamica",
+      "medidas adotadas":"medidas",
+      "pessoas envolvidas":"envolvidos",
+      "efetivo empregado":"policiais",
+      "objetos relacionados":"objetos",
+      "armas apreendidas":"armas_apreendidas",
+      "drogas apreendidas":"drogas_apreendidas",
+      "dados quantitativos":"dados_quantitativos",
+      "posto de servico":"posto_servico","posto servico":"posto_servico",
+      "rotulos":"rotulos",
+      // ── Planilha alternativa (com campos separados de vítima/suspeito)
+      "data lancamento":"data_lancamento","no bo":"numero","n bo":"numero",
+      "numero bo":"numero","hora":"hora","bairro":"bairro",
+      "vitima nome":"vitima_nome","vitima idade":"vitima_idade",
+      "vitima sexo":"vitima_sexo","vitima telefone":"vitima_telefone",
+      "vitima endereco":"vitima_endereco","vitima cpf":"vitima_cpf",
+      "suspeito nome":"suspeito_nome","suspeito apelido":"suspeito_apelido",
+      "suspeito caracteristicas":"suspeito_caracteristicas",
+      "veiculo":"veiculo","medida protetiva":"medida_protetiva",
+      "violencia domestica":"violencia_domestica",
+      "requer visita":"requer_visita","reincidente":"reincidente",
+      "policiais":"policiais"
+    };
+
+    var header = linhas[0].split("\t").map(normH);
+    var mapa = header.map(function(h){ return MAPA_COLUNAS[h] || null; });
+
+    var registros = [];
+    for(var i=1; i<linhas.length; i++){
+      var cols = linhas[i].split("\t");
+      var obj = {};
+      mapa.forEach(function(campo, idx){
+        if(campo && cols[idx] !== undefined) obj[campo] = cols[idx].trim().replace(/^["']|["']$/g,"");
+      });
+      if(!obj.data && !obj.tipo && !obj.vitima_nome && !obj.descricao && !obj.numero && !obj.envolvidos) continue;
+
+      // Determinar bairro: coluna Bairro > extraído do Local
+      var bairroDetectado = obj.bairro || _extrairBairroDoLocal(obj.local||"");
+
+      // Filtro BCS: pular se não for bairro padrão
+      if(filtrarBCS && !_ehBarroBCS(bairroDetectado)) continue;
+
+      var vd = _parseBoolPl(obj.violencia_domestica) ||
+               /maria da penha|violên?cia dom[eé]stica/i.test((obj.tipo||"")+" "+(obj.descricao||""));
+      var mp = vd ? "Sim" : (obj.medida_protetiva && /sim|yes|1/i.test(obj.medida_protetiva) ? "Sim" : (obj.medida_protetiva||"Não"));
+
+      // ID estável — usa Cód + Tipo + Data (estrutura real da planilha)
+      var _s = (obj.numero||"")+(obj.tipo||"").slice(0,20)+(obj.data||"")+(obj.municipio||"")+(obj.local||"").slice(0,15);
+      var _h = 0; for(var k=0;k<_s.length;k++){_h=((_h<<5)-_h+_s.charCodeAt(k))|0;}
+      var idEstavel = _s.length > 3 ? "pl_"+Math.abs(_h).toString(36) : id("OC");
+
+      registros.push({
+        id: idEstavel,
+        criadoEm: new Date().toISOString(),
+        fonte: "PLANILHA",
+        numero: obj.numero||"",
+        data: obj.data||"",
+        hora: obj.hora||"",
+        tipo: obj.tipo||"Não identificado",
+        local: obj.local||obj.vitima_endereco||"",
+        bairro: bairroDetectado||obj.local||"",
+        municipio: obj.municipio||"Vitória da Conquista",
+        // Vítima (campos planilha alternativa)
+        vitima_nome: obj.vitima_nome||"",
+        vitima_idade: obj.vitima_idade||"",
+        vitima_sexo: obj.vitima_sexo||"",
+        vitima_telefone: obj.vitima_telefone||"",
+        vitima_endereco: obj.vitima_endereco||"",
+        vitima_cpf: obj.vitima_cpf||"",
+        // Suspeito
+        suspeito_nome: obj.suspeito_nome||"",
+        suspeito_apelido: obj.suspeito_apelido||"",
+        suspeito_caracteristicas: obj.suspeito_caracteristicas||"",
+        veiculo: obj.veiculo||"",
+        // Campos planilha original
+        envolvidos: obj.envolvidos||"",
+        armas_apreendidas: obj.armas_apreendidas||"",
+        drogas_apreendidas: obj.drogas_apreendidas||"",
+        dados_quantitativos: obj.dados_quantitativos||"",
+        posto_servico: obj.posto_servico||"",
+        // Booleanos
+        medida_protetiva: mp,
+        violencia_domestica: vd,
+        requer_visita: vd || _parseBoolPl(obj.requer_visita),
+        reincidente: _parseBoolPl(obj.reincidente),
+        // Narrativa
+        descricao: (obj.descricao||"").slice(0,300),
+        descricao_dinamica: obj.descricao_dinamica||obj.descricao||"",
+        medidas: obj.medidas||"",
+        objetos: obj.objetos||"",
+        policiais: obj.policiais||"",
+        responsavel: obj.responsavel||"",
+        texto_original: ""
+      });
+    }
+    registros._totalLinhas = linhas.length - 1; // sem cabeçalho
+    return registros;
+  }
+
+  window._planilhaPreview = function() {
+    var text = (document.getElementById("planilha-paste")||{}).value||"";
+    text = text.trim();
+    if(!text){ showToast("Cole os dados da planilha primeiro","error"); return; }
+
+    var filtrarBCS = (document.getElementById("pl-filtro-bcs")||{checked:true}).checked;
+    var registros = _parsearPlanilha(text, filtrarBCS);
+    var prev = document.getElementById("planilha-preview");
+    if(!prev) return;
+
+    if(!registros.length){
+      prev.innerHTML = "<div style='background:#1a0a0a;border:1px solid #b03030;border-radius:10px;padding:16px;color:#ff6060;text-align:center'>Nenhum registro encontrado"+(filtrarBCS?" nos bairros BCS":"")+". Verifique se copiou com o cabeçalho.</div>";
+      return;
+    }
+
+    var idsExist = {};
+    (state.db.ocorrencias||[]).forEach(function(o){ if(o.id) idsExist[o.id]=true; });
+    var novos = registros.filter(function(r){ return !idsExist[r.id]; });
+    var dup = registros.length - novos.length;
+
+    var totalLinhas = registros._totalLinhas || 0;
+    var filtrados = filtrarBCS ? Math.max(0, totalLinhas - registros.length) : 0;
+    prev.innerHTML = "<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px'>" +
+      "<div><span style='color:#22c55e;font-weight:700;font-size:15px'>"+registros.length+" ocorrências BCS</span>" +
+      (filtrados>0?"<span style='color:#6a5a3a;font-size:11px;margin-left:8px'>("+filtrados+" de outros bairros ignoradas)</span>":"")+
+      (dup>0?"<span style='color:#a07c58;font-size:11px;margin-left:10px'>("+dup+" já existem)</span>":"")+"</div>" +
+      (novos.length>0?"<button id='btn-pl-import' onclick='_planilhaImportar()' style='background:#22c55e22;border:1px solid #22c55e;color:#22c55e;padding:7px 18px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📊 Importar "+novos.length+" registros</button>":
+      "<span style='color:#8a6a4a;font-size:13px'>Todos já importados.</span>")+"</div>" +
+      "<div style='border:1px solid #2a4a2a;border-radius:10px;overflow:hidden'>" +
+      "<table style='width:100%;border-collapse:collapse;font-size:12px'><thead><tr style='background:#0f1f0f'>" +
+      "<th style='padding:8px 12px;text-align:left;color:#4a9a4a'>Data</th>" +
+      "<th style='padding:8px 12px;text-align:left;color:#4a9a4a'>Tipo</th>" +
+      "<th style='padding:8px 12px;text-align:left;color:#4a9a4a'>Bairro</th>" +
+      "<th style='padding:8px 12px;text-align:left;color:#4a9a4a'>Vítima</th>" +
+      "<th style='padding:8px 12px;text-align:center;color:#4a9a4a'>Status</th>" +
+      "</tr></thead><tbody>" +
+      registros.slice(0,60).map(function(r){
+        var jaTem = idsExist[r.id];
+        return "<tr style='border-top:1px solid #1a3a1a;"+(jaTem?"opacity:0.35":"")+"'>" +
+          "<td style='padding:8px 12px;color:#c8e0a0'>"+r.data+"</td>" +
+          "<td style='padding:8px 12px;color:#f2eada;max-width:160px'>"+esc((r.tipo||"").slice(0,50))+"</td>" +
+          "<td style='padding:8px 12px;color:#6a9a6a'>"+esc(r.bairro)+"</td>" +
+          "<td style='padding:8px 12px;color:#a0c0a0'>"+esc(r.vitima_nome)+"</td>" +
+          "<td style='padding:8px 12px;text-align:center'>"+(jaTem?"<span style='color:#8a6a4a;font-size:10px'>já existe</span>":"<span style='color:#22c55e;font-size:10px;font-weight:700'>novo</span>")+"</td></tr>";
+      }).join("") +
+      (registros.length>60?"<tr><td colspan='5' style='padding:8px;text-align:center;color:#8a6a4a;font-size:11px'>... e mais "+(registros.length-60)+" registros</td></tr>":"") +
+      "</tbody></table></div>";
+
+    window._planilhaRegistrosPendentes = novos;
+  };
+
+  window._planilhaImportar = function() {
+    var registros = window._planilhaRegistrosPendentes || [];
+    if(!registros.length) return;
+    var btn = document.getElementById("btn-pl-import");
+    if(btn){ btn.disabled=true; btn.textContent="Importando..."; }
+    var total=registros.length, idx=0;
+    var _idsAtual = new Set((state.db.ocorrencias||[]).map(function(o){ return String(o.id); }));
+    function _prox(){
+      if(idx>=total){
+        registros.forEach(function(r){
+          if(!state.db.ocorrencias) state.db.ocorrencias=[];
+          if(!_idsAtual.has(String(r.id))){ state.db.ocorrencias.unshift(r); _idsAtual.add(String(r.id)); }
+        });
+        salvarLocal();
+        showToast("✓ "+total+" registros da planilha importados!");
+        if(btn){ btn.disabled=false; btn.textContent="Concluído ✓"; btn.style.background="#22c55e33"; }
+        return;
+      }
+      var r=registros[idx]; idx++;
+      if(idx%10===0) showToast("Importando "+idx+"/"+total+"...");
+      enviarSheets("ocorrencias", r);
+      setTimeout(_prox, 400);
     }
     _prox();
   };
@@ -1810,9 +2150,95 @@ function reextrairOcorrencias() {
 }
 
 // ══════════════════════════════════════════════════
+// RECUPERAR DATAS DO TEXTO ORIGINAL (sem backup)
+// ══════════════════════════════════════════════════
+function recuperarDatasDeTexto() {
+  var dataHoje = hoje();
+
+  // Tenta extrair data de DD/MM/YYYY válida do texto, retorna ISO ou null
+  function extrairDataDoTexto(texto) {
+    if(!texto) return null;
+    // Padrões em ordem de confiança (mais específico → mais genérico)
+    var pats = [
+      /^\s*(?:DATA|Data)\s*:\s*(\d{2}\/\d{2}\/\d{4})/im,   // "Data: DD/MM/YYYY" início de linha
+      /(?:DATA|Data)\s*:\s*(\d{2}\/\d{2}\/\d{4})/i,          // "Data: DD/MM/YYYY" em qualquer lugar
+      /Registrada\s+em\s*[:\s]*(\d{2}\/\d{2}\/\d{4})/i,      // "Registrada em DD/MM/YYYY"
+      /Data\s+do\s+(?:fato|evento|crime)\s*:\s*(\d{2}\/\d{2}\/\d{4})/i,
+      /\*DATA:\*\s*(\d{2}\/\d{2}\/\d{4})/i,
+      /(\d{2}\/\d{2}\/20\d{2})/                                // qualquer DD/MM/20XX (fallback)
+    ];
+    for(var i=0; i<pats.length; i++){
+      var m = texto.match(pats[i]);
+      if(m && m[1]){
+        var parts = m[1].split("/");
+        if(parts.length === 3){
+          var day=parseInt(parts[0]), mon=parseInt(parts[1]), yr=parseInt(parts[2]);
+          if(yr>=2020 && yr<=2027 && mon>=1 && mon<=12 && day>=1 && day<=31){
+            var iso = yr+"-"+String(mon).padStart(2,"0")+"-"+String(day).padStart(2,"0");
+            if(iso <= dataHoje) return iso; // só retorna datas passadas (não futuras)
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  var atualizadas = 0, semTexto = 0, semData = 0;
+  var registrosAlterados = [];
+
+  (state.db.ocorrencias||[]).forEach(function(o){
+    if(!o.texto_original){ semTexto++; return; }
+    var dataExtraida = extrairDataDoTexto(o.texto_original);
+    if(dataExtraida && dataExtraida !== o.data){
+      o.data = dataExtraida;
+      atualizadas++;
+      registrosAlterados.push(o);
+    } else if(!dataExtraida && o.data === dataHoje){
+      semData++;
+    }
+  });
+
+  if(!atualizadas){
+    showToast("Nenhuma data foi corrigida pelo texto. Tente restaurar por arquivo backup.", "error");
+    return;
+  }
+
+  salvarLocal();
+  render();
+
+  // Sincronizar datas corrigidas ao Sheets
+  var idx = 0;
+  function _syncNext(){
+    if(idx >= registrosAlterados.length) return;
+    try{ enviarSheets("ocorrencia", registrosAlterados[idx]); }catch(e){}
+    idx++;
+    setTimeout(_syncNext, 120);
+  }
+  _syncNext();
+
+  var msg = "✓ " + atualizadas + " datas recuperadas do texto";
+  if(semData > 0) msg += " · " + semData + " sem data localizável (use backup)";
+  showToast(msg);
+}
+
+// ══════════════════════════════════════════════════
 // RESTAURAR DATAS ORIGINAIS (via arquivo JSON backup)
 // ══════════════════════════════════════════════════
 function restaurarDatasOriginais() {
+  // Tenta primeiro recuperação automática pelo texto
+  var dataHoje = hoje();
+  var podeTentarTexto = (state.db.ocorrencias||[]).some(function(o){
+    return o.texto_original && o.data === dataHoje;
+  });
+
+  if(podeTentarTexto){
+    if(confirm("🔍 Recuperação Automática\n\nO IARA tentará recuperar as datas diretamente do texto das ocorrências (sem precisar de arquivo).\n\nSe preferir usar um arquivo de backup JSON, clique em Cancelar.\n\nTentar recuperação automática?")){
+      recuperarDatasDeTexto();
+      return;
+    }
+  }
+
+  // Fallback: file picker
   var input = document.createElement("input");
   input.type = "file";
   input.accept = ".json";
@@ -1840,12 +2266,26 @@ function restaurarDatasOriginais() {
         done++;
         if(done >= files.length) {
           var restauradas = 0;
+          var registrosAlterados = [];
           (state.db.ocorrencias||[]).forEach(function(o) {
-            if(MAP[o.id]) { o.data = MAP[o.id]; restauradas++; }
+            if(MAP[o.id] && MAP[o.id] !== o.data){
+              o.data = MAP[o.id];
+              restauradas++;
+              registrosAlterados.push(o);
+            }
           });
           salvarLocal();
           render();
-          showToast("✓ " + restauradas + " datas restauradas de " + Object.keys(MAP).length + " mapeadas");
+          // Sincronizar ao Sheets
+          var idx2 = 0;
+          function _syncNext2(){
+            if(idx2 >= registrosAlterados.length) return;
+            try{ enviarSheets("ocorrencia", registrosAlterados[idx2]); }catch(e){}
+            idx2++;
+            setTimeout(_syncNext2, 120);
+          }
+          _syncNext2();
+          showToast("✓ " + restauradas + " datas restauradas do backup · " + Object.keys(MAP).length + " no arquivo");
         }
       };
       reader.readAsText(file, "UTF-8");
@@ -2414,6 +2854,7 @@ function abrirModalEventoAvulso(dataPreench){
     state.calMes = new Date(parseInt(partes[0]), parseInt(partes[1])-1, 1);
     state.calDia = parseInt(partes[2]);
     salvarLocal();
+    salvarDadoAppSheets("bcs_eventos_avulsos", state.eventosAvulsos).catch(function(){});
     modal.remove();
     renderCalendar();
   };
@@ -2852,100 +3293,207 @@ function renderDashboardVCM(main){
 }
 
 // ══════════════════════════════════════════════════
-// CADASTROS VCM
+// VCM ATIVAS
 // ══════════════════════════════════════════════════
 function renderCadastrosVCM(main){
   var busca=(state._vcmBusca||"").toLowerCase().trim();
 
-  // Filtrar ocorrências VCM/Maria da Penha
-  var todas=(state.db.ocorrencias||[]).filter(function(o){
-    var t=(o.tipo||"").toLowerCase();
-    return o.violencia_domestica||t.includes("maria da penha")||t.includes("violência doméstica")||t.includes("violencia domestica")||t.includes("vcm")||t.includes("violência contra a mulher")||t.includes("violencia contra a mulher");
+  // ── Fontes de dados ──────────────────────────────
+  var ocs=(state.db.ocorrencias||[]);
+  var agendamentos=(state.db.agendamentos||[]);
+  var atendimentos=(state.db.atendimentos||[]);
+  var fridaAll=(state.db.frida||[]);
+
+  // ── Mapa de entradas: chave → {nome, ocBase, servicos[], fridas[], temMp, dataUltimo} ─
+  var mapa={};
+
+  function _chaveVit(nomeRaw,cpfRaw){
+    var c=(cpfRaw||"").replace(/\D/g,"");
+    if(c.length>=11) return "cpf:"+c;
+    var n=norm(nomeRaw||"");
+    return n.length>2?"nome:"+n:null;
+  }
+
+  function _obterEntrada(chave,nome,ocBase){
+    if(!chave) return null;
+    if(!mapa[chave]) mapa[chave]={nome:nome||"",ocBase:ocBase||null,servicos:[],fridas:[],temMp:false,dataUltimo:""};
+    var e=mapa[chave];
+    if(!e.nome&&nome) e.nome=nome;
+    if(!e.ocBase&&ocBase) e.ocBase=ocBase;
+    return e;
+  }
+
+  function _addServico(e,servico){
+    if(!e) return;
+    var dup=e.servicos.some(function(s){return s.tipo===servico.tipo&&s.data===servico.data;});
+    if(!dup) e.servicos.push(servico);
+    if((servico.data||"")>e.dataUltimo) e.dataUltimo=servico.data||"";
+  }
+
+  // 1. Avaliações FRIDA ─────────────────────────────
+  fridaAll.forEach(function(fr){
+    var ocFr=ocs.find(function(o){return o.id===fr.ocorrenciaId;})||null;
+    var nomeVit=fr.vitima_nome||(ocFr&&ocFr.vitima_nome)||"";
+    var cpfVit=(ocFr&&ocFr.vitima_cpf)||"";
+    var chave=_chaveVit(nomeVit,cpfVit)||(ocFr?"oc:"+ocFr.id:null);
+    var e=_obterEntrada(chave,nomeVit,ocFr);
+    if(!e) return;
+    var dtFr=(fr.data||"").slice(0,10);
+    _addServico(e,{tipo:"frida",label:"🧠 FRIDA",data:dtFr});
+    e.fridas.push(fr);
+    if(ocFr&&ocFr.medida_protetiva&&ocFr.medida_protetiva!=="Não") e.temMp=true;
   });
 
-  // Agrupar por vítima única (nome + CPF)
-  var vistas=[], vitimas=[];
-  todas.forEach(function(o){
-    var chave=norm(o.vitima_nome||"");
-    var cpf=(o.vitima_cpf||"").replace(/\D/g,"");
-    if(cpf.length>=11) chave+="|"+cpf;
-    if(vistas.indexOf(chave)>=0) return;
-    vistas.push(chave);
-    // Todas as ocorrências desta vítima
-    var ocs=todas.filter(function(x){return _mesmaVitima(o,x);});
-    var frida=(state.db.frida||[]).filter(function(fr){return ocs.some(function(x){return x.id===fr.ocorrenciaId;});}).sort(function(a,b){return(a.data||"")>(b.data||"")?-1:1;});
-    var temMp=ocs.some(function(x){return x.medida_protetiva&&x.medida_protetiva!=="Não";});
-    var fridaRecente=frida[0]||null;
-    vitimas.push({ocBase:o,ocs:ocs,frida:frida,fridaRecente:fridaRecente,temMp:temMp});
+  // 2. Agendamentos de Visita Solidária (qualquer status) ────
+  agendamentos.forEach(function(ag){
+    var tipoAg=(ag.tipo||ag.subtipo||"").toLowerCase();
+    if(!tipoAg.includes("solidária")&&!tipoAg.includes("solidaria")) return;
+    var ocAg=ag.ocorrenciaId?ocs.find(function(o){return o.id===ag.ocorrenciaId;}):null;
+    var nomeVit=ag.vitima_nome||ag.nome||(ocAg&&ocAg.vitima_nome)||"";
+    var cpfVit=(ocAg&&ocAg.vitima_cpf)||"";
+    var chave=_chaveVit(nomeVit,cpfVit)||(ocAg?"oc:"+ocAg.id:null)||(ag.ocorrenciaId?"oc:"+ag.ocorrenciaId:null);
+    var e=_obterEntrada(chave,nomeVit,ocAg);
+    if(!e) return;
+    _addServico(e,{tipo:"visita_solidaria",label:"🤝 Visita Solidária",data:ag.data||""});
+    if(ocAg&&ocAg.medida_protetiva&&ocAg.medida_protetiva!=="Não") e.temMp=true;
   });
 
-  // Filtrar por bairro
-  if(state.filtroBairro) vitimas=vitimas.filter(function(v){return _matchBairro(v.ocBase);});
+  // 3. Atendimentos concluídos (tipo Visita Solidária) ────
+  atendimentos.forEach(function(at){
+    var tipoAt=(at.tipo||"").toLowerCase();
+    if(!tipoAt.includes("solidária")&&!tipoAt.includes("solidaria")) return;
+    var nomeVit=at.nome||at.vitima_nome||"";
+    var chave=_chaveVit(nomeVit,"")||("at:"+at.id);
+    var e=_obterEntrada(chave,nomeVit,null);
+    if(!e) return;
+    _addServico(e,{tipo:"visita_solidaria",label:"🤝 Visita Solidária",data:at.data||""});
+  });
 
-  // Aplicar busca
+  // 4. Ocorrências diretamente classificadas como Visita Solidária ─
+  ocs.forEach(function(o){
+    var classif=(o.classificacao||"").toLowerCase();
+    var tipoO=(o.tipo||"").toLowerCase();
+    if(!classif.includes("solidária")&&!classif.includes("solidaria")&&
+       !tipoO.includes("visita solidária")&&!tipoO.includes("visita solidaria")) return;
+    var chave=_chaveVit(o.vitima_nome,o.vitima_cpf||"")||("oc:"+o.id);
+    var e=_obterEntrada(chave,o.vitima_nome||"",o);
+    if(!e) return;
+    _addServico(e,{tipo:"visita_solidaria",label:"🤝 Visita Solidária",data:o.data||""});
+  });
+
+  // ── Converter mapa em array ───────────────────────
+  var entradas=Object.keys(mapa).map(function(k){
+    var e=mapa[k];
+    e.fridas.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;});
+    e.fridaRecente=e.fridas[0]||null;
+    return e;
+  });
+
+  // ── Filtro bairro ─────────────────────────────────
+  if(state.filtroBairro) entradas=entradas.filter(function(e){return e.ocBase&&_matchBairro(e.ocBase);});
+
+  // ── Busca ─────────────────────────────────────────
   if(busca){
-    vitimas=vitimas.filter(function(v){
-      var campos=[
-        norm(v.ocBase.vitima_nome||""),
-        (v.ocBase.vitima_cpf||"").replace(/\D/g,""),
-        norm(v.ocBase.vitima_endereco||""),
-        norm(v.ocBase.suspeito_nome||""),
-        norm(v.ocBase.suspeito_apelido||""),
-        v.ocs.map(function(o){return o.numero||"";}).join(" ")
-      ].join(" ");
-      return campos.includes(busca);
+    entradas=entradas.filter(function(e){
+      return norm(e.nome||"").includes(busca)||
+        norm((e.ocBase&&e.ocBase.vitima_endereco)||"").includes(busca)||
+        norm((e.ocBase&&e.ocBase.suspeito_nome)||"").includes(busca)||
+        (e.ocBase&&(e.ocBase.numero||"").toLowerCase().includes(busca));
     });
   }
 
+  // ── Ordenar: mais recente primeiro ───────────────
+  entradas.sort(function(a,b){return(b.dataUltimo||"")>(a.dataUltimo||"")?1:-1;});
+
+  // ── Render ────────────────────────────────────────
   var h="<div style='max-width:1100px;margin:0 auto;padding:16px'>";
-  h+="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:10px'>";
-  h+="<div><h2 style='font-size:20px;font-weight:700;color:#ff69b4;margin:0 0 2px'>🌸 Cadastros VCM</h2>";
-  h+="<p style='color:#a07c58;font-size:12px;margin:0'>"+vitimas.length+" vítima(s) • Maria da Penha / Violência Doméstica</p></div>";
+  h+="<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:10px'>";
+  h+="<div><h2 style='font-size:20px;font-weight:700;color:#ff69b4;margin:0 0 2px'>💜 Atendimentos Realizados</h2>";
+  h+="<p style='color:#a07c58;font-size:12px;margin:0'>"+entradas.length+" registro(s) · FRIDA e Visita Solidária · clique no nome para abrir a ficha</p></div>";
   h+="</div>";
 
-  // Campo de busca
-  h+="<div style='background:#2a1c10;border:1px solid #3a2a2a;border-radius:10px;padding:14px;margin-bottom:16px'>";
+  h+="<div style='background:#1e1008;border:1px solid #3a2a2a;border-radius:10px;padding:12px;margin-bottom:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center'>";
   h+=_htmlFiltrosBairro("renderCadastrosVCM(document.getElementById('main-content'))","#ff69b4");
-  h+="<input id='vcm-busca' type='text' placeholder='Buscar por nome, CPF, Nº BO, RG, nome do autor...' value='"+(state._vcmBusca||"")+"' style='width:100%;background:#36221a;border:1px solid #3a2a2a;color:#f2eada;padding:10px 14px;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box' onfocus=\"this.style.borderColor='#ff1493'\" onblur=\"this.style.borderColor='#3a2a2a'\"/>";
+  h+="<input id='vcm-busca' type='text' placeholder='Buscar por nome, Nº BO, autor...' value='"+(state._vcmBusca||"")+"' style='flex:1;min-width:200px;background:#36221a;border:1px solid #3a2a2a;color:#f2eada;padding:9px 14px;border-radius:8px;font-size:13px;outline:none;box-sizing:border-box' onfocus=\"this.style.borderColor='#ff1493'\" onblur=\"this.style.borderColor='#3a2a2a'\"/>";
   h+="</div>";
 
-  if(!vitimas.length){
-    h+="<div style='background:#2a1c10;border:1px solid #2a1a1a;border-radius:10px;padding:48px;text-align:center'>";
-    h+="<p style='color:#5a3a3a;font-size:14px'>"+(busca?"Nenhuma vítima encontrada para \""+busca+"\".":"Nenhum registro VCM encontrado.")+"</p></div>";
+  if(!entradas.length){
+    h+="<div style='background:#1e1008;border:1px solid #2a1a1a;border-radius:10px;padding:48px;text-align:center'>";
+    h+="<p style='color:#5a3a3a;font-size:14px'>"+(busca?"Nenhum registro para \""+esc(busca)+"\".":"Nenhum atendimento registrado ainda.")+"</p></div>";
   } else {
-    h+="<div style='display:grid;gap:10px'>";
-    vitimas.forEach(function(v){
-      var o=v.ocBase;
-      var nivel=v.fridaRecente?v.fridaRecente.nivel:"";
-      var nivelLabel={B:"RISCO BAIXO",M:"RISCO MÉDIO",E:"RISCO ELEVADO"}[nivel]||"";
-      var nivelColor={B:"#10b981",M:"#d4a87a",E:"#ef4444"}[nivel]||"#8a6a4a";
-      h+="<div style='background:#2a1c10;border:1px solid #3a1a1a;border-left:4px solid #ff1493;border-radius:8px;padding:14px'>";
-      h+="<div style='display:flex;justify-content:space-between;align-items:start;flex-wrap:wrap;gap:8px'>";
-      h+="<div style='flex:1'>";
-      h+="<div style='display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px'>";
-      h+="<p style='color:#f5ede0;font-size:14px;font-weight:700;margin:0'>"+(o.vitima_nome||"--")+"</p>";
-      if(v.temMp) h+="<span style='background:#c47000;color:#fff;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700'>MEDIDA PROTETIVA</span>";
-      if(nivel) h+="<span style='background:"+nivelColor+"22;color:"+nivelColor+";border:1px solid "+nivelColor+";padding:1px 7px;border-radius:3px;font-size:9px;font-weight:700'>"+nivelLabel+"</span>";
-      if(v.ocBase._encerrado) h+="<span style='background:#1a3a1a;color:#10b981;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700'>ENCERRADO</span>";
-      h+="</div>";
-      h+="<div style='display:flex;gap:16px;flex-wrap:wrap'>";
-      if(o.vitima_cpf) h+="<span style='color:#a07c58;font-size:11px'>CPF: "+o.vitima_cpf+"</span>";
-      if(o.vitima_telefone) h+="<span style='color:#a07c58;font-size:11px'>📞 "+o.vitima_telefone+"</span>";
-      h+="<span style='color:#a07c58;font-size:11px'>"+v.ocs.length+" ocorrência(s)</span>";
-      if(v.frida.length) h+="<span style='color:#ff69b4;font-size:11px'>"+v.frida.length+" atendimento(s) VCM</span>";
-      h+="</div>";
-      // Suspeito(s)
-      var suspeitos=[...new Set(v.ocs.map(function(x){return norm(x.suspeito_nome||"");}).filter(function(s){return s&&s!=="nao identificado"&&s!=="não identificado";}))];
-      if(suspeitos.length) h+="<p style='color:#c8601a;font-size:11px;margin:4px 0 0'>Autor: "+v.ocs.map(function(x){return x.suspeito_nome;}).filter(function(s){return s&&s.length>3;}).slice(0,2).join(" / ")+"</p>";
-      // Bairro e última ocorrência
-      var ultima=v.ocs.sort(function(a,b){return(a.data||"")>(b.data||"")?-1:1;})[0];
-      h+="<p style='color:#8a6a4a;font-size:10px;margin:2px 0 0'>"+(ultima?fmtData(ultima.data)+" — "+(ultima.bairro||"")+(ultima.numero?" — BO: "+ultima.numero:""):"")+"</p>";
-      h+="</div>";
-      h+="<button data-vcm-id='"+o.id+"' class='btn-vcm-pdf' style='background:#1a0a00;border:1px solid #d4a87a;color:#d4a87a;padding:8px 16px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap'>📄 Ficha PDF</button>";
-      h+="</div></div>";
+    h+="<div style='background:#1e1008;border:1px solid #4a2a2a;border-radius:12px;overflow:hidden'>";
+    h+="<table style='width:100%;border-collapse:collapse;font-size:12px'>";
+    h+="<thead><tr style='background:#2a1008'>";
+    h+="<th style='padding:10px 14px;text-align:left;color:#ff69b4;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #3a1a1a'>Nome</th>";
+    h+="<th style='padding:10px 14px;text-align:left;color:#ff69b4;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #3a1a1a'>Serviço Prestado</th>";
+    h+="<th style='padding:10px 14px;text-align:left;color:#ff69b4;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #3a1a1a'>Último Atend.</th>";
+    h+="<th style='padding:10px 14px;text-align:left;color:#ff69b4;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #3a1a1a'>Risco FRIDA</th>";
+    h+="<th style='padding:10px 14px;text-align:center;color:#ff69b4;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #3a1a1a'>Ficha</th>";
+    h+="</tr></thead><tbody>";
+
+    entradas.forEach(function(e,idx){
+      var o=e.ocBase||{};
+      var nivel=e.fridaRecente?e.fridaRecente.nivel:"";
+      var nivelLabel={B:"BAIXO",M:"MÉDIO",E:"ELEVADO"}[nivel]||"—";
+      var nivelColor={B:"#10b981",M:"#f59e0b",E:"#ef4444"}[nivel]||"#5a4a3a";
+      var rowBg=idx%2===0?"#1e1008":"#221208";
+
+      h+="<tr style='background:"+rowBg+";border-bottom:1px solid #2e1a0e'>";
+
+      // Nome
+      h+="<td style='padding:10px 14px'>";
+      if(o.id){
+        h+="<button class='btn-vcm-pdf-nome' data-vcm-id='"+esc(o.id)+"' style='background:none;border:none;color:#f5ede0;font-size:13px;font-weight:700;cursor:pointer;text-align:left;padding:0;text-decoration:underline;text-decoration-color:#ff69b455'>";
+        h+=esc(e.nome||o.vitima_nome||"Sem nome")+"</button>";
+      } else {
+        h+="<span style='color:#f5ede0;font-size:13px;font-weight:700'>"+esc(e.nome||"Sem nome")+"</span>";
+      }
+      if(e.temMp) h+="<br><span style='background:#c47000;color:#fff;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700'>MEDIDA PROTETIVA</span>";
+      if(o.vitima_telefone) h+="<div style='color:#6a5a3a;font-size:10px;margin-top:2px'>📞 "+esc(o.vitima_telefone)+"</div>";
+      h+="</td>";
+
+      // Serviço prestado — badges únicos por tipo
+      h+="<td style='padding:10px 14px'>";
+      var tiposVistos={};
+      e.servicos.forEach(function(s){
+        if(tiposVistos[s.tipo]) return;
+        tiposVistos[s.tipo]=true;
+        var bgC=s.tipo==="frida"?"#1a0a3a":"#0a2a1a";
+        var bdC=s.tipo==="frida"?"#8b5cf6":"#10b981";
+        var txC=s.tipo==="frida"?"#c4b5fd":"#6ee7b7";
+        h+="<span style='display:inline-block;background:"+bgC+";border:1px solid "+bdC+";color:"+txC+";padding:3px 10px;border-radius:12px;font-size:10px;font-weight:700;margin:2px 4px 2px 0;white-space:nowrap'>"+s.label+"</span>";
+      });
+      h+="</td>";
+
+      // Último atendimento
+      h+="<td style='padding:10px 14px;color:#c8a08a;font-size:12px'>";
+      h+=e.dataUltimo?fmtData(e.dataUltimo.slice(0,10)):"—";
+      h+="</td>";
+
+      // Risco FRIDA
+      h+="<td style='padding:10px 14px'>";
+      if(nivel){
+        h+="<span style='background:"+nivelColor+"22;color:"+nivelColor+";border:1px solid "+nivelColor+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+nivelLabel+"</span>";
+      } else {
+        h+="<span style='color:#3a2a2a;font-size:11px'>—</span>";
+      }
+      h+="</td>";
+
+      // Ficha PDF
+      h+="<td style='padding:10px 14px;text-align:center'>";
+      if(o.id){
+        h+="<button class='btn-vcm-pdf-nome' data-vcm-id='"+esc(o.id)+"' style='background:#1a0a3a;border:1px solid #8b5cf6;color:#c4b5fd;padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>📄 Ficha</button>";
+      } else {
+        h+="<span style='color:#3a2a2a;font-size:11px'>—</span>";
+      }
+      h+="</td>";
+
+      h+="</tr>";
     });
-    h+="</div>";
+
+    h+="</tbody></table></div>";
   }
+
   h+="</div>";
   main.innerHTML=h;
 
@@ -2953,10 +3501,216 @@ function renderCadastrosVCM(main){
   var inp=document.getElementById("vcm-busca");
   if(inp){ inp.oninput=function(){var v=this.value;clearTimeout(inp._t);inp._t=setTimeout(function(){state._vcmBusca=v;renderCadastrosVCM(main);},300);}; inp.focus(); }
 
-  // Botões PDF
-  main.querySelectorAll(".btn-vcm-pdf").forEach(function(btn){
-    btn.onclick=function(){state._pdfOcId=this.dataset.vcmId;exportarPDFOcorrencia();};
+  // Click no nome/ficha → abre Ficha VCM
+  main.querySelectorAll(".btn-vcm-pdf-nome").forEach(function(btn){
+    btn.onclick=function(){
+      var ocId=this.dataset.vcmId;
+      if(!ocId) return;
+      var oc=(state.db.ocorrencias||[]).find(function(o){return o.id===ocId;});
+      if(oc) gerarFichaVCMPDF(oc);
+    };
   });
+}
+
+// ══════════════════════════════════════════════════
+// FICHA VCM — PDF COMPLETO
+// ══════════════════════════════════════════════════
+function gerarFichaVCMPDF(oc){
+  var w=window.open("","_blank");
+  if(!w){alert("Permita pop-ups para gerar a ficha"); return;}
+
+  // Todas as ocorrências desta vítima (mais recentes primeiro)
+  var todasOcs=(state.db.ocorrencias||[]).filter(function(o){return _mesmaVitima(oc,o);})
+    .sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;});
+  if(!todasOcs.find(function(o){return o.id===oc.id;})) todasOcs.unshift(oc);
+
+  var idsVitima=todasOcs.map(function(o){return o.id;});
+
+  // FRIDA — avaliações ordenadas (mais recente primeiro)
+  var fridaRecs=(state.db.frida||[]).filter(function(fr){return idsVitima.indexOf(fr.ocorrenciaId)>=0;})
+    .sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;});
+  var fridaAtual=fridaRecs[0]||null;
+  var nivelFrida=fridaAtual?fridaAtual.nivel:"";
+  var nivelLabel={B:"RISCO BAIXO",M:"RISCO MÉDIO",E:"RISCO ELEVADO"}[nivelFrida]||"NÃO AVALIADO";
+  var nivelColor={B:"#006600",M:"#b45700",E:"#8b0000"}[nivelFrida]||"#555";
+  var nivelBg  ={B:"#e8f8e8",M:"#fff8e8",E:"#fff0f0"}[nivelFrida]||"#f5f5f5";
+
+  // Agendamentos desta vítima — por ocorrenciaId OU por nome
+  var nomeV=norm(oc.vitima_nome||"");
+  var agsVCM=(state.db.agendamentos||[]).filter(function(a){
+    // 1) ligado diretamente a uma das ocorrências da vítima
+    if(a.ocorrenciaId && idsVitima.indexOf(a.ocorrenciaId)>=0) return true;
+    // 2) ligado por nome
+    var av=norm(a.vitima_nome||a.nome||"");
+    if(nomeV.length>4 && av.length>4 && (av===nomeV||av.includes(nomeV.split(" ")[0])||nomeV.includes(av.split(" ")[0]))) return true;
+    return false;
+  }).sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;});
+  var agAtivo=agsVCM.find(function(a){return(a.status||"Agendado")==="Agendado";});
+
+  var temMp=todasOcs.some(function(o){return o.medida_protetiva&&o.medida_protetiva!=="Não";});
+
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Ficha VCM — "+esc(oc.vitima_nome||"")+"</title><style>";
+  h+="*{box-sizing:border-box;margin:0;padding:0}";
+  h+="body{font-family:Arial,sans-serif;font-size:11px;color:#111;background:#fff;padding:20px}";
+  h+=".pg{max-width:720px;margin:0 auto}";
+  // Cabeçalho
+  h+=".cab{border-bottom:3px solid #8b0000;padding-bottom:10px;margin-bottom:16px;display:flex;justify-content:space-between;align-items:flex-start}";
+  h+=".cab h1{font-size:13px;color:#8b0000;font-weight:700;text-transform:uppercase;margin-bottom:3px}";
+  h+=".cab p{font-size:9px;color:#666}";
+  // Bloco de risco FRIDA
+  h+=".frida-topo{border:3px solid "+nivelColor+";background:"+nivelBg+";border-radius:6px;padding:12px 16px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center}";
+  h+=".frida-nivel{font-size:20px;font-weight:800;color:"+nivelColor+";text-transform:uppercase}";
+  h+=".frida-info{font-size:10px;color:#555;text-align:right}";
+  // Dados da mulher
+  h+=".dados-mulher{background:#fff8f8;border:1px solid #e0cccc;border-radius:4px;padding:10px 14px;margin-bottom:14px}";
+  h+=".dados-mulher h2{font-size:13px;font-weight:700;color:#8b0000;margin-bottom:6px}";
+  h+=".dados-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 16px}";
+  h+=".dado{font-size:10px} .dado b{color:#555;text-transform:uppercase;font-size:9px}";
+  // Ocorrência
+  h+=".oc{border-left:4px solid #1a3a6a;background:#f8faff;padding:10px 14px;margin-bottom:12px;page-break-inside:avoid}";
+  h+=".oc.principal{border-left-color:#8b0000;background:#fff8f8}";
+  h+=".oc-titulo{font-size:12px;font-weight:700;color:#1a3a6a;text-transform:uppercase;margin-bottom:3px}";
+  h+=".oc.principal .oc-titulo{color:#8b0000}";
+  h+=".oc-meta{font-size:9px;color:#888;margin-bottom:6px}";
+  h+=".campo-lab{font-size:9px;font-weight:700;text-transform:uppercase;color:#1a3a6a;margin:6px 0 2px}";
+  h+=".campo-val{font-size:10px;line-height:1.6;padding:5px 8px;background:#fff;border:1px solid #dde;border-radius:2px;white-space:pre-wrap;word-break:break-word}";
+  // Tags
+  h+=".tags{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:6px}";
+  h+=".tag{padding:2px 7px;border-radius:3px;font-size:9px;font-weight:700}";
+  h+=".tag-vd{background:#8b0000;color:#fff}";
+  h+=".tag-mp{background:#c47000;color:#fff}";
+  h+=".tag-reinc{background:#b05000;color:#fff}";
+  // Seção
+  h+=".secao{margin-top:14px;border-top:2px solid #ddd;padding-top:10px}";
+  h+=".secao-tit{font-size:10px;font-weight:700;text-transform:uppercase;color:#1a3a6a;letter-spacing:.8px;margin-bottom:8px}";
+  // Visitas
+  h+=".visita{border-left:3px solid #1a7a1a;padding:6px 10px;margin-bottom:6px;background:#f5fff5}";
+  h+=".visita p{font-size:10px;line-height:1.5;margin:1px 0}";
+  // Rodapé / assinatura
+  h+=".rodape{margin-top:24px;border-top:1px solid #ccc;padding-top:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:20px}";
+  h+=".ass{text-align:center;font-size:9px} .ass-linha{border-top:1px solid #333;margin-bottom:4px;padding-top:4px}";
+  h+="@media print{.no-print{display:none}}";
+  h+="</style></head><body><div class='pg'>";
+
+  // ── Cabeçalho ───────────────────────────────────
+  h+="<div class='cab'>";
+  h+="<div><h1>77ª CIPM — Base Comunitária de Segurança Nova Cidade</h1>";
+  h+="<p>Ficha de Acompanhamento VCM &nbsp;|&nbsp; Gerado em: "+new Date().toLocaleString("pt-BR")+"</p></div>";
+  if(temMp) h+="<span style='background:#c47000;color:#fff;padding:4px 10px;border-radius:3px;font-size:10px;font-weight:700;white-space:nowrap'>MEDIDA PROTETIVA ATIVA</span>";
+  h+="</div>";
+
+  // ── Risco FRIDA ──────────────────────────────────
+  h+="<div class='frida-topo'>";
+  h+="<div><div style='font-size:9px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px'>Avaliação de Risco FRIDA</div>";
+  h+="<div class='frida-nivel'>"+nivelLabel+"</div>";
+  if(fridaAtual&&fridaAtual.sim) h+="<div style='font-size:10px;color:"+nivelColor+";margin-top:2px'>"+fridaAtual.sim+" respostas SIM</div>";
+  h+="</div>";
+  h+="<div class='frida-info'>";
+  if(fridaAtual){
+    h+="<div>Avaliado em: "+new Date(fridaAtual.data).toLocaleDateString("pt-BR")+"</div>";
+    if(fridaAtual.relatorio) h+="<div style='max-width:280px;text-align:right;margin-top:3px;color:#333'>"+esc(fridaAtual.relatorio.slice(0,120))+(fridaAtual.relatorio.length>120?"...":"")+"</div>";
+  } else {
+    h+="<div style='color:#888'>Sem avaliação registrada</div>";
+  }
+  h+="</div></div>";
+
+  // ── Dados da mulher ──────────────────────────────
+  var ocR=todasOcs[0]; // mais recente
+  h+="<div class='dados-mulher'>";
+  h+="<h2>"+esc(ocR.vitima_nome||"Nome não informado")+"</h2>";
+  h+="<div class='dados-grid'>";
+  if(ocR.vitima_cpf) h+="<div class='dado'><b>CPF</b><br>"+esc(ocR.vitima_cpf)+"</div>";
+  if(ocR.vitima_idade) h+="<div class='dado'><b>Idade</b><br>"+esc(ocR.vitima_idade)+" anos</div>";
+  if(ocR.vitima_telefone) h+="<div class='dado'><b>Telefone</b><br>"+esc(ocR.vitima_telefone)+"</div>";
+  if(ocR.vitima_endereco) h+="<div class='dado' style='grid-column:1/-1'><b>Endereço</b><br>"+esc(ocR.vitima_endereco)+"</div>";
+  if(ocR.suspeito_nome) h+="<div class='dado' style='grid-column:1/-1'><b>Autor/Agressor</b><br><span style='color:#8b0000;font-weight:700'>"+esc(ocR.suspeito_nome)+"</span>"+(ocR.suspeito_caracteristicas?" — "+esc(ocR.suspeito_caracteristicas):"")+"</div>";
+  h+="</div></div>";
+
+  // ── Próxima visita agendada ──────────────────────
+  if(agAtivo){
+    var _dtA=_pdLocal(agAtivo.data); var _hj=new Date(); _hj.setHours(0,0,0,0);
+    var venc=!!_dtA&&_dtA<_hj;
+    h+="<div style='background:"+(venc?"#fff8e0":"#e8fff0")+";border:2px solid "+(venc?"#c47000":"#1a7a1a")+";border-radius:6px;padding:10px 14px;margin-bottom:14px'>";
+    h+="<div style='font-size:10px;font-weight:700;text-transform:uppercase;color:"+(venc?"#c47000":"#1a7a1a")+";margin-bottom:4px'>"+(venc?"⚠ Visita Vencida":"📅 Visita Agendada")+"</div>";
+    h+="<div style='font-size:12px;font-weight:700'>"+fmtData(agAtivo.data||"")+(agAtivo.hora?" · "+agAtivo.hora:"")+" &nbsp; — &nbsp; "+esc(agAtivo.tipo||"")+"</div>";
+    h+="</div>";
+  }
+
+  // ── Ocorrências (todas, narrativa completa) ──────
+  h+="<div class='secao'><div class='secao-tit'>Histórico de Ocorrências ("+todasOcs.length+")</div>";
+  todasOcs.forEach(function(o,idx){
+    var isPrinc=o.id===oc.id;
+    h+="<div class='oc"+(isPrinc?" principal":"")+"'>";
+    h+="<div class='oc-titulo'>"+(isPrinc?"★ ":"")+esc((o.tipo||"Ocorrência").toUpperCase())+"</div>";
+    h+="<div class='oc-meta'>";
+    if(o.numero) h+="Nº BO: "+esc(o.numero)+" &nbsp;·&nbsp; ";
+    h+=fmtData(o.data)+(o.hora?" às "+normHora(o.hora):"");
+    if(o.bairro) h+=" &nbsp;·&nbsp; "+esc(o.bairro);
+    h+="</div>";
+    var tags=[];
+    if(o.violencia_domestica) tags.push("<span class='tag tag-vd'>VIOLÊNCIA DOMÉSTICA</span>");
+    if(o.medida_protetiva&&o.medida_protetiva!=="Não") tags.push("<span class='tag tag-mp'>MEDIDA PROTETIVA</span>");
+    if(o.reincidente) tags.push("<span class='tag tag-reinc'>REINCIDENTE</span>");
+    if(tags.length) h+="<div class='tags'>"+tags.join("")+"</div>";
+    // Dinâmica / relato completo
+    var relato=(o.descricao_dinamica||o.texto_original||o.descricao||"").trim();
+    if(relato){
+      h+="<div class='campo-lab'>Relato do Atendimento</div>";
+      h+="<div class='campo-val'>"+esc(relato)+"</div>";
+    }
+    if(o.medidas){
+      h+="<div class='campo-lab'>Medidas Adotadas</div>";
+      h+="<div class='campo-val'>"+esc(o.medidas)+"</div>";
+    }
+    if(o.policiais){
+      h+="<div style='font-size:9px;color:#888;margin-top:4px'>Guarnição: "+esc(o.policiais)+"</div>";
+    }
+    h+="</div>";
+  });
+  h+="</div>";
+
+  // ── Avaliações FRIDA (todas) ─────────────────────
+  if(fridaRecs.length){
+    h+="<div class='secao'><div class='secao-tit'>Avaliações FRIDA ("+fridaRecs.length+")</div>";
+    fridaRecs.forEach(function(fr,idx){
+      var nl={B:"RISCO BAIXO",M:"RISCO MÉDIO",E:"RISCO ELEVADO"}[fr.nivel]||"Atendimento";
+      var nc={B:"#006600",M:"#b45700",E:"#8b0000"}[fr.nivel]||"#1a3a6a";
+      h+="<div style='border-left:4px solid "+nc+";padding:8px 12px;margin-bottom:8px;background:#fafafa'>";
+      h+="<div style='font-weight:700;color:"+nc+";font-size:11px'>"+nl+(fr.sim?" — "+fr.sim+" SIM":"")+"</div>";
+      h+="<div style='font-size:9px;color:#888;margin-bottom:4px'>"+new Date(fr.data).toLocaleString("pt-BR")+"</div>";
+      if(fr.relatorio) h+="<div style='font-size:10px;white-space:pre-wrap;line-height:1.6'>"+esc(fr.relatorio)+"</div>";
+      h+="</div>";
+    });
+    h+="</div>";
+  }
+
+  // ── Histórico de visitas realizadas ─────────────
+  var agsRealizadas=agsVCM.filter(function(a){return(a.status||"")!=="Agendado";});
+  if(agsRealizadas.length){
+    h+="<div class='secao'><div class='secao-tit'>Visitas Realizadas ("+agsRealizadas.length+")</div>";
+    agsRealizadas.forEach(function(a){
+      h+="<div class='visita'>";
+      h+="<p><b>"+fmtData(a.data||"")+(a.hora?" · "+a.hora:"")+" — "+esc(a.tipo||"Visita")+"</b></p>";
+      if(a.objetivo) h+="<p style='color:#444'>"+esc(a.objetivo)+"</p>";
+      if(a.realizadoEm) h+="<p style='color:#888;font-size:9px'>Confirmado em: "+new Date(a.realizadoEm).toLocaleDateString("pt-BR")+"</p>";
+      h+="</div>";
+    });
+    h+="</div>";
+  }
+
+  // ── Rodapé / Assinaturas ─────────────────────────
+  h+="<div class='rodape' style='margin-top:30px'>";
+  h+="<div class='ass'><div class='ass-linha'></div>Policial Responsável</div>";
+  h+="<div class='ass'><div class='ass-linha'></div>Supervisor / Comandante</div>";
+  h+="<div class='ass'><div style='font-size:9px;color:#888;text-align:center;padding-top:4px'>Data: ___/___/_____</div></div>";
+  h+="</div>";
+
+  h+="<div class='no-print' style='margin-top:24px;text-align:center'>";
+  h+="<button onclick='window.print()' style='background:#8b0000;color:#fff;border:none;padding:12px 36px;border-radius:6px;font-size:14px;cursor:pointer;font-weight:700'>🖨 Imprimir / Salvar PDF</button>";
+  h+="</div></div></body></html>";
+
+  w.document.write(h);
+  w.document.close();
 }
 
 // ══════════════════════════════════════════════════
@@ -5997,6 +6751,7 @@ function agendarRondaEscolar(escolaNome){
     if(!state.eventosAvulsos) state.eventosAvulsos=[];
     state.eventosAvulsos.push(ev);
     salvarLocal();
+    salvarDadoAppSheets("bcs_eventos_avulsos", state.eventosAvulsos).catch(function(){});
     showToast("Ronda agendada e adicionada ao Calendario!");
     modal.remove();
     var m=document.getElementById("main")||document.getElementById("main-content");
@@ -6347,7 +7102,9 @@ function salvarVisitaEscolar(){
   state.atividadesEscolares.push({id:vis.id,escolaId:escolaId,escolaNome:escNome,tipo:"Visita",subtipo:tipo,data:data,hora:hora,responsavel:(document.getElementById("vis-policial")||{value:""}).value.trim(),tema:(document.getElementById("vis-objetivo")||{value:""}).value.trim(),resultado:(document.getElementById("vis-resultado")||{value:""}).value.trim(),criadoEm:vis.criadoEm});
   if(!state.eventosAvulsos) state.eventosAvulsos=[];
   state.eventosAvulsos.push({id:"CAL_VES_"+vis.id,titulo:"🏫 Visita "+tipo+" — "+escNome,data:data,hora:hora||"08:00",tipo:"Visita Escolar",cor:"#22c55e",visitaEscolarId:vis.id});
-  salvarLocal(); showToast("✅ Visita salva e adicionada ao Calendário!");
+  salvarLocal();
+  salvarDadoAppSheets("bcs_eventos_avulsos", state.eventosAvulsos).catch(function(){});
+  showToast("✅ Visita salva e adicionada ao Calendário!");
   var m=document.getElementById("modal-visita-esc"); if(m) m.remove();
   var mf=document.getElementById("modal-ficha-escola"); if(mf) mf.remove();
   renderTela();
@@ -7919,6 +8676,12 @@ function renderTela() {
     return;
   }
 
+  // MÓDULO CONSELHO COMUNITÁRIO
+  if(tela==="conselho"){
+    renderModuloConselho(main);
+    return;
+  }
+
   // DASHBOARD COMANDANTE
   if(tela==="dashcomandante"){
     renderDashComandante(main);
@@ -8283,6 +9046,7 @@ function render(){
             <button class="login-btn" onclick="fazerLogin('operador')">👮 Operador</button>
             <button class="login-btn gold" onclick="fazerLogin('gestor')">👨‍💼 Gestor</button>
           </div>
+          <button onclick="fazerLoginConselho()" style="width:100%;margin-top:10px;background:#0f3d1f;border:2px solid #22c55e;color:#86efac;padding:12px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.5px">🏛 Conselho Comunitário</button>
           <button onclick="state.db=demoData();state.perfil='gestor';render()" style="width:100%;background:transparent;border:none;color:#5e4636;font-size:12px;padding:6px;cursor:pointer">▶ Carregar dados de demonstração</button>
         </div>
       </div>
@@ -8337,7 +9101,7 @@ function render(){
       <button class="nav-btn${state.tela==="ocorrencias"?" active":""}" data-tela="ocorrencias" onclick="setTela('ocorrencias')">🔍 Analisar Ocorrências</button>
       <button class="nav-btn${state.tela==="calendario"?" active":""}" data-tela="calendario" onclick="setTela('calendario')">🗓 Calendário</button>
       <button class="nav-btn${state.tela==="dashvcm"?" active":""}" data-tela="dashvcm" onclick="setTela('dashvcm')" style="${(function(){var _ocs=state.db.ocorrencias||[];var _fridas=state.db.frida||[];var _n=_ocs.filter(function(o){if(!(o.violencia_domestica||/maria da penha|violên?cia dom[eé]stica/i.test(o.tipo||"")))return false;var _fs=_fridas.filter(function(f){return f.ocorrenciaId===o.id;});var _uf=_fs.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];if(!_uf)return true;if(_uf.nivel==="E")return true;if(_uf.nivel==="M"&&(Date.now()-new Date(_uf.data).getTime())>30*864e5)return true;if(o.medida_protetiva==="Sim"&&(Date.now()-new Date(_uf.data).getTime())>15*864e5)return true;return false;}).length;return _n>0&&state.tela!=="dashvcm"?"animation:piscar-rosa 1.4s infinite;color:#ff69b4;border-color:#ff1493;":"color:#ff69b4;border-color:"+(state.tela==="dashvcm"?"#ff1493":"transparent")+";";})()}">🌸 Dashboard VCM${(function(){var _ocs=state.db.ocorrencias||[];var _fridas=state.db.frida||[];var _n=_ocs.filter(function(o){if(!(o.violencia_domestica||/maria da penha|violên?cia dom[eé]stica/i.test(o.tipo||"")))return false;var _fs=_fridas.filter(function(f){return f.ocorrenciaId===o.id;});var _uf=_fs.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];if(!_uf)return true;if(_uf.nivel==="E")return true;if(_uf.nivel==="M"&&(Date.now()-new Date(_uf.data).getTime())>30*864e5)return true;if(o.medida_protetiva==="Sim"&&(Date.now()-new Date(_uf.data).getTime())>15*864e5)return true;return false;}).length;return _n>0?` <span style="background:#ff1493;color:#fff;border-radius:10px;padding:1px 6px;font-size:10px;font-weight:700">${_n}</span>`:"";})()}</button>
-      <button class="nav-btn${state.tela==="cadastrosvcm"?" active":""}" data-tela="cadastrosvcm" onclick="setTela('cadastrosvcm')" style="color:#ff69b4;border-color:${state.tela==="cadastrosvcm"?"#ff1493":"transparent"}">🌸 Cadastros VCM</button>
+      <button class="nav-btn${state.tela==="cadastrosvcm"?" active":""}" data-tela="cadastrosvcm" onclick="setTela('cadastrosvcm')" style="color:#ff69b4;border-color:${state.tela==="cadastrosvcm"?"#ff1493":"transparent"}">💜 Atendimentos Realizados</button>
       <button class="nav-btn${state.tela==="assistente"?" active":""}" data-tela="assistente" onclick="setTela('assistente')" style="color:${state.tela==="assistente"?"#a78bfa":"#a78bfa88"};border-color:${state.tela==="assistente"?"#a78bfa":"transparent"}">🤖 Assistente IA</button>
       <button class="nav-btn${state.tela==="escolas"?" active":""}" data-tela="escolas" onclick="setTela('escolas')" style="color:${state.tela==="escolas"?"#38bdf8":"#38bdf888"};border-color:${state.tela==="escolas"?"#38bdf8":"transparent"}">🏫 Módulo Escolar</button>
       <button class="nav-btn${state.tela==="projetossociais"?" active":""}" data-tela="projetossociais" onclick="setTela('projetossociais')" style="color:${state.tela==='projetossociais'?'#a78bfa':'#a78bfa88'};border-color:${state.tela==='projetossociais'?'#a78bfa':'transparent'}">🌱 Projetos Sociais</button>
@@ -8352,7 +9116,18 @@ function render(){
         </div>
       </div>
       <button onclick="if(confirm('Reenviar agendamentos, visitas e atendimentos para a planilha atual?')){reenviarTudoParaPlanilha();}" style="background:transparent;border:none;color:#2a5a3a;font-size:11px;width:100%;text-align:left;padding:6px 10px;cursor:pointer">🔄 Sincronizar com planilha</button>
+      <button onclick="testarConexaoSheets()" style="background:transparent;border:none;color:#3a7a9a;font-size:11px;width:100%;text-align:left;padding:6px 10px;cursor:pointer">🔌 Testar conexão Sheets</button>
+      <button onclick="reimportarParaSheets()" style="background:transparent;border:none;color:#4a8a5a;font-size:11px;width:100%;text-align:left;padding:6px 10px;cursor:pointer">📤 Reenviar ocorrências ao Sheets</button>
+      <button onclick="restaurarDatasOriginais()" style="background:transparent;border:none;color:#c05050;font-size:11px;width:100%;text-align:left;padding:6px 10px;cursor:pointer">🗓 Restaurar Datas</button>
       <button onclick="if(confirm('Limpar todos os dados locais e recarregar do Sheets? Use apenas se os dados estiverem desatualizados.')){localStorage.clear();location.reload();}" style="background:transparent;border:none;color:#5a2020;font-size:11px;width:100%;text-align:left;padding:6px 10px;cursor:pointer">🗑 Limpar cache local</button>
+      ${state.perfil==="conselho"?`
+      <div style="margin-top:6px;padding-top:10px;border-top:1px solid #22c55e22">
+        <p style="color:#22c55e88;font-size:9px;font-weight:700;letter-spacing:1px;text-transform:uppercase;padding:0 10px;margin-bottom:6px">Conselho Comunitário</p>
+        <button class="nav-btn${state.conselho_tab==="atas"&&state.tela==="conselho"?" active":""}" onclick="state.conselho_tab='atas';setTela('conselho')" style="color:${state.conselho_tab==='atas'&&state.tela==='conselho'?'#22c55e':'#22c55e88'};border-color:${state.conselho_tab==='atas'&&state.tela==='conselho'?'#22c55e':'transparent'}">📋 Atas de Reunião</button>
+        <button class="nav-btn${state.conselho_tab==="associados"&&state.tela==="conselho"?" active":""}" onclick="state.conselho_tab='associados';setTela('conselho')" style="color:${state.conselho_tab==='associados'&&state.tela==='conselho'?'#22c55e':'#22c55e88'};border-color:${state.conselho_tab==='associados'&&state.tela==='conselho'?'#22c55e':'transparent'}">👥 Associados</button>
+        <button class="nav-btn${state.conselho_tab==="diretoria"&&state.tela==="conselho"?" active":""}" onclick="state.conselho_tab='diretoria';setTela('conselho')" style="color:${state.conselho_tab==='diretoria'&&state.tela==='conselho'?'#22c55e':'#22c55e88'};border-color:${state.conselho_tab==='diretoria'&&state.tela==='conselho'?'#22c55e':'transparent'}">🏅 Diretoria</button>
+        <button class="nav-btn${state.conselho_tab==="calendario"&&state.tela==="conselho"?" active":""}" onclick="state.conselho_tab='calendario';setTela('conselho')" style="color:${state.conselho_tab==='calendario'&&state.tela==='conselho'?'#22c55e':'#22c55e88'};border-color:${state.conselho_tab==='calendario'&&state.tela==='conselho'?'#22c55e':'transparent'}">📅 Calendário</button>
+      </div>`:""}
       <button onclick="state.perfil=null;state.tela='dashboard';render()" style="background:transparent;border:none;color:#5e4636;font-size:12px;width:100%;text-align:left;padding:8px 10px;cursor:pointer">⏏ Sair</button>
     </div>
   </div>
@@ -8399,6 +9174,43 @@ async function fazerLogin(tipo){
   s.onerror = function(){ clearTimeout(t); delete window[cb]; s.remove(); showToast("Falha na autenticação","error"); };
   s.src = SHEETS_URL+"?acao=login&hash="+encodeURIComponent(hash)+"&perfil="+encodeURIComponent(tipo)+"&callback="+cb;
   document.head.appendChild(s);
+}
+
+function fazerLoginConselho(){
+  // Modal próprio — independente do pin-input de 4 dígitos
+  var overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:#000a;z-index:9999;display:flex;align-items:center;justify-content:center";
+  overlay.innerHTML =
+    '<div style="background:#0a1a0e;border:1px solid #22c55e55;border-radius:14px;padding:28px 24px;width:300px;max-width:90vw;text-align:center">' +
+    '<div style="font-size:32px;margin-bottom:10px">🏛</div>' +
+    '<h3 style="color:#c8ffd8;font-size:15px;font-weight:700;margin:0 0 6px">Conselho Comunitário</h3>' +
+    '<p style="color:#22c55e88;font-size:12px;margin:0 0 18px">77ª CIPM — Nova Cidade / BCS</p>' +
+    '<input id="conselho-pin-input" type="password" placeholder="PIN do Conselho"' +
+    ' style="width:100%;background:#061a0e;border:1px solid #22c55e33;color:#e8ffe8;padding:11px 13px;border-radius:8px;font-size:14px;box-sizing:border-box;outline:none;text-align:center;letter-spacing:2px"' +
+    ' onkeydown="if(event.key===\'Enter\')window._confirmarLoginConselho()"/>' +
+    '<p id="conselho-pin-err" style="color:#ef4444;font-size:12px;margin:10px 0 0;display:none">PIN incorreto</p>' +
+    '<div style="display:flex;gap:8px;margin-top:16px">' +
+    '<button onclick="this.closest(\'[data-conselho-modal]\').remove()" style="flex:1;background:transparent;border:1px solid #3a2a1a;color:#7a5e48;padding:10px;border-radius:8px;font-size:13px;cursor:pointer">Cancelar</button>' +
+    '<button onclick="window._confirmarLoginConselho()" style="flex:1;background:linear-gradient(135deg,#0a2a14,#0a3a1a);border:1px solid #22c55e55;color:#22c55e;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">Entrar</button>' +
+    '</div></div>';
+  overlay.setAttribute("data-conselho-modal","1");
+  document.body.appendChild(overlay);
+  setTimeout(function(){ var el=document.getElementById("conselho-pin-input"); if(el) el.focus(); }, 80);
+  window._confirmarLoginConselho = function(){
+    var pin = (document.getElementById("conselho-pin-input")||{value:""}).value.trim();
+    if(pin === CONSELHO_PIN){
+      overlay.remove();
+      state.perfil = "conselho";
+      state.tela = "conselho";
+      render();
+      carregarConselhoDoSheets();
+    } else {
+      var err = document.getElementById("conselho-pin-err");
+      if(err){ err.textContent = pin ? "PIN incorreto" : "Digite o PIN"; err.style.display = "block"; }
+      var inp = document.getElementById("conselho-pin-input");
+      if(inp){ inp.value=""; inp.focus(); }
+    }
+  };
 }
 
 // ══════════════════════════════════════════════════
@@ -9733,6 +10545,14 @@ function visualizarAgendamentoComOcorrencia(agId){
       h.push("</div>");
     }
     
+    // Botão FRIDA — exibido para ocorrências de mulheres / VD / VCM
+    var _ehVCM = oc.violencia_domestica ||
+      (oc.vitima_sexo||"").toUpperCase()==="F" ||
+      /(vcm|maria da penha|violência doméstica|violencia domestica|violência contra a mulher|violencia contra a mulher)/i.test(oc.tipo||"") ||
+      oc.requer_visita;
+    if(_ehVCM){
+      h.push("<button id='btn-frida-ag' data-oc-id='"+oc.id+"' style='width:100%;background:linear-gradient(135deg,#2a0a40,#4a1870);border:1px solid #8b5cf6;color:#c4b5fd;padding:9px 12px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer;margin-bottom:8px'>🧠 Aplicar FRIDA / Monitor VCM</button>");
+    }
     h.push("<div style='display:flex;gap:8px;flex-wrap:wrap'>");
     h.push("<button id='btn-pdf-ag' data-oc-id='"+oc.id+"' style='flex:1;background:#1a0a00;border:1px solid #d4a87a;color:#d4a87a;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;min-width:100px'>PDF Ocorrência</button>");
     h.push("<button id='btn-encerrar-ag' data-oc-id='"+oc.id+"' style='flex:1;background:#1a3a1a;border:1px solid #10b981;color:#10b981;padding:6px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;min-width:100px'>Encerrar Caso</button>");
@@ -9772,7 +10592,14 @@ function visualizarAgendamentoComOcorrencia(agId){
     var ocId = this.dataset.ocId;
     encerrarOcorrencia(ocId, modal);
   };
-  
+
+  // Botão FRIDA — abre Monitor VCM para a ocorrência
+  var btnFridaAg = document.getElementById("btn-frida-ag");
+  if(btnFridaAg && oc) btnFridaAg.onclick = function(){
+    modal.remove();
+    abrirMonitorVCM(oc.id);
+  };
+
   // Handler para mudar tipo de próximo atendimento
   var selectProx = document.getElementById("cal-prox-tipo");
   var divDataHora = document.getElementById("cal-prox-data-hora");
@@ -10004,16 +10831,40 @@ function gerarJanelaPDF(oc){
       h+="<td style='width:60px;padding:4px 6px;background:#fde8e8;font-weight:700;border:1px solid #ccd;color:#8b0000'>TEL.</td>";
       h+="<td style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.vitima_telefone||"—")+"</td></tr>";
       if(o.vitima_endereco) h+="<tr style='background:#fff8f8'><td style='padding:4px 6px;background:#fde8e8;font-weight:700;border:1px solid #ccd;color:#8b0000'>END. VÍT.</td><td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.vitima_endereco)+"</td></tr>";
+      if(o.vitima_cpf) h+="<tr style='background:#fff8f8'><td style='padding:4px 6px;background:#fde8e8;font-weight:700;border:1px solid #ccd;color:#8b0000'>CPF VÍT.</td><td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.vitima_cpf)+"</td></tr>";
     }
     // Linha 3: Autor
     if(o.suspeito_nome){
       h+="<tr><td style='padding:4px 6px;background:#fef3e8;font-weight:700;border:1px solid #ccd;color:#8b4000'>AUTOR</td>";
-      h+="<td style='padding:4px 6px;border:1px solid #ccd' colspan='3'>"+esc(o.suspeito_nome)+(o.suspeito_apelido?" <em style='color:#888'>("+o.suspeito_apelido+")</em>":"")+(o.suspeito_sexo?" · "+({F:"Feminino",M:"Masculino"}[o.suspeito_sexo]||o.suspeito_sexo):"")+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+(o.suspeito_caracteristicas?" | "+o.suspeito_caracteristicas:"")+(o.suspeito_endereco?" | "+o.suspeito_endereco:"")+"</td></tr>";
+      h+="<td style='padding:4px 6px;border:1px solid #ccd' colspan='3'>"+esc(o.suspeito_nome)+(o.suspeito_apelido?" <em style='color:#888'>(\""+esc(o.suspeito_apelido)+"\")</em>":"")+(o.suspeito_sexo?" · "+({F:"Feminino",M:"Masculino"}[o.suspeito_sexo]||o.suspeito_sexo):"")+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+"</td></tr>";
+      if(o.suspeito_caracteristicas) h+="<tr><td style='padding:4px 6px;background:#fef3e8;font-weight:700;border:1px solid #ccd;color:#8b4000'>CARACT.</td><td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.suspeito_caracteristicas)+"</td></tr>";
+      if(o.suspeito_endereco) h+="<tr><td style='padding:4px 6px;background:#fef3e8;font-weight:700;border:1px solid #ccd;color:#8b4000'>END. SUSP.</td><td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.suspeito_endereco)+"</td></tr>";
+    }
+    // Veículo
+    if(o.veiculo){
+      h+="<tr><td style='padding:4px 6px;background:#e8eef8;font-weight:700;border:1px solid #ccd;color:#1a3a6a'>VEÍCULO</td>";
+      h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.veiculo)+"</td></tr>";
     }
     // Objetos
     if(o.objetos){
       h+="<tr><td style='padding:4px 6px;background:#e8eef8;font-weight:700;border:1px solid #ccd;color:#1a3a6a'>OBJETOS</td>";
       h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.objetos)+"</td></tr>";
+    }
+    if(o.armas_apreendidas){
+      h+="<tr><td style='padding:4px 6px;background:#e8eef8;font-weight:700;border:1px solid #ccd;color:#1a3a6a'>ARMAS</td>";
+      h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.armas_apreendidas)+"</td></tr>";
+    }
+    if(o.drogas_apreendidas){
+      h+="<tr><td style='padding:4px 6px;background:#e8eef8;font-weight:700;border:1px solid #ccd;color:#1a3a6a'>DROGAS</td>";
+      h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.drogas_apreendidas)+"</td></tr>";
+    }
+    if(o.envolvidos){
+      h+="<tr><td style='padding:4px 6px;background:#e8f0e8;font-weight:700;border:1px solid #ccd;color:#1a4a1a'>ENVOLVIDOS</td>";
+      h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.envolvidos)+"</td></tr>";
+    }
+    if(o.posto_servico){
+      h+="<tr><td style='padding:4px 6px;background:#e8f0e8;font-weight:700;border:1px solid #ccd;color:#1a4a1a'>POSTO</td>";
+      h+="<td colspan='3' style='padding:4px 6px;border:1px solid #ccd'>"+esc(o.posto_servico)+"</td></tr>";
     }
     h+="</table>";
     // Descrição
@@ -10214,9 +11065,12 @@ function renderOcorrenciasGestor(el, perfil_atual){
       mh.push("<button onclick='_edAddAutor()' style='background:#301c16;border:1px solid #c05050;border-left:none;color:#c05050;padding:5px 12px;border-radius:0 4px 4px 0;font-size:11px;font-weight:700;cursor:pointer;height:32px'>+ Adicionar</button>");
       mh.push("</div>");
       mh.push("<div id='ed-lista-autores'></div></div>");
-      // Seção 4 — Objetos
-      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>📦</span><p style='"+mST+"'>4 — Objetos Relacionados</p></div>");
-      mh.push("<textarea id='ed-objetos' rows='2' style='"+mIS+";resize:vertical;font-family:inherit'>"+esc(ocM.objetos||"")+"</textarea></div>");
+      // Seção 4 — Objetos + Armas + Drogas + Envolvidos
+      mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>📦</span><p style='"+mST+"'>4 — Apreensões e Envolvidos</p></div>");
+      mh.push("<div><label style='"+mLS+"'>Objetos Relacionados</label><textarea id='ed-objetos' rows='2' style='"+mIS+";resize:vertical;font-family:inherit'>"+esc(ocM.objetos||"")+"</textarea></div>");
+      mh.push("<div style='margin-top:8px'><label style='"+mLS+"'>Armas Apreendidas</label><input id='ed-armas' type='text' value='"+esc(ocM.armas_apreendidas||"")+"' style='"+mIS+"' placeholder='Ex: 1 revólver calibre 38'></div>");
+      mh.push("<div style='margin-top:8px'><label style='"+mLS+"'>Drogas Apreendidas</label><input id='ed-drogas' type='text' value='"+esc(ocM.drogas_apreendidas||"")+"' style='"+mIS+"' placeholder='Ex: 10g maconha, 5 pedras crack'></div>");
+      mh.push("<div style='margin-top:8px'><label style='"+mLS+"'>Pessoas Envolvidas</label><textarea id='ed-envolvidos' rows='2' style='"+mIS+";resize:vertical;font-family:inherit'>"+esc(ocM.envolvidos||"")+"</textarea></div></div>");
       // Seção 5 — Narrativa (campo único)
       var edNarrativa=(ocM.descricao_dinamica||ocM.texto_original||ocM.descricao||"");
       mh.push("<div style='"+mSC+"'><div style='"+mSH+"'><span>📝</span><p style='"+mST+"'>5 — Narrativa</p></div>");
@@ -10236,6 +11090,8 @@ function renderOcorrenciasGestor(el, perfil_atual){
       // ── Funções dinâmicas do modal edição ──
       var _edVitimas=JSON.parse(JSON.stringify(edVitimas));
       var _edAutores=JSON.parse(JSON.stringify(edAutores));
+      window._edVitimas=_edVitimas;
+      window._edAutores=_edAutores;
       function _edRenderVitimas(){
         var li=document.getElementById("ed-lista-vitimas"); if(!li) return;
         var vh=[];
@@ -10287,6 +11143,11 @@ function renderOcorrenciasGestor(el, perfil_atual){
       document.getElementById("btn-fechar-editar").onclick = function(){ state.popEditarOc=null; renderOcorrenciasGestor(el); };
       document.getElementById("btn-cancelar-editar").onclick = function(){ state.popEditarOc=null; renderOcorrenciasGestor(el); };
       document.getElementById("btn-salvar-editar").onclick = function(){
+        // Re-busca no array ATUAL (pode ter sido substituído pelo sync do Sheets)
+        var ocRef=(state.db.ocorrencias||[]).find(function(o){return o.id===ocId;})||
+                  (state.db.ocorrencias||[]).find(function(o){return String(o.id)===String(ocId);});
+        if(!ocRef){ showToast("Ocorrência não encontrada. Tente reabrir.","error"); return; }
+        ocM=ocRef; // atualiza referência local para o objeto vivo no array atual
         ocM.classificacao = (document.getElementById("ed-classificacao")||{value:""}).value.trim();
         ocM.numero  = document.getElementById("ed-numero").value.trim();
         ocM.relatorio = document.getElementById("ed-relatorio").value.trim();
@@ -10320,7 +11181,10 @@ function renderOcorrenciasGestor(el, perfil_atual){
           telefone:(document.getElementById("ed-sol-tel")||{value:""}).value.trim(),
           endereco:(document.getElementById("ed-sol-end")||{value:""}).value.trim()
         };
-        ocM.objetos  = document.getElementById("ed-objetos").value.trim();
+        ocM.objetos           = document.getElementById("ed-objetos").value.trim();
+        ocM.armas_apreendidas = (document.getElementById("ed-armas")||{value:""}).value.trim();
+        ocM.drogas_apreendidas= (document.getElementById("ed-drogas")||{value:""}).value.trim();
+        ocM.envolvidos        = (document.getElementById("ed-envolvidos")||{value:""}).value.trim();
         var narrativa = document.getElementById("ed-narrativa").value.trim();
         ocM.descricao_dinamica = narrativa;
         ocM.texto_original     = narrativa;
@@ -10354,11 +11218,14 @@ function renderOcorrenciasGestor(el, perfil_atual){
           var payloadEdit = JSON.stringify({token:BCS_TOKEN, tipo:"ocorrencias", registro:Object.assign({id:ocM.id}, camposObj)});
           fetch(SHEETS_URL, {method:'POST', mode:'no-cors', headers:{'Content-Type':'text/plain'}, body:payloadEdit})
             .then(function(){
-              ocM._editadoLocal = false;
+              // Re-busca no array atual (pode ter sido substituído pelo sync durante o fetch)
+              var ocAtual=(state.db.ocorrencias||[]).find(function(o){return o.id===ocM.id;});
+              if(ocAtual) ocAtual._editadoLocal = false;
               salvarLocal();
               showToast("✓ Ocorrência atualizada!");
               state.popEditarOc = null;
-              renderOcorrenciasGestor(el);
+              var elMain=document.getElementById("main-content")||el;
+              renderOcorrenciasGestor(elMain);
             })
             .catch(function(){
               showToast("⚠ Falha na sincronização", "error");
@@ -10366,203 +11233,19 @@ function renderOcorrenciasGestor(el, perfil_atual){
               btn.disabled = false;
             });
         } else {
-          showToast("Ocorrência atualizada!");
+          showToast("✓ Ocorrência atualizada!");
           state.popEditarOc = null;
-          renderOcorrenciasGestor(el);
+          var elMain=document.getElementById("main-content")||el;
+          renderOcorrenciasGestor(elMain);
         }
       };
     }
     // NÃO faz return — a lista renderiza normalmente abaixo do modal
   }
 
-  // MODAL VISITA SOLIDÁRIA
-  if(state.popAtendimento){
-    var ocId = state.popAtendimento;
-    var ocM = state.db.ocorrencias.find(function(o){return o.id===ocId;}) ||
-              state.db.ocorrencias.find(function(o){return String(o.id)===String(ocId);});
-    if(ocM){
-      var modal = document.createElement("div");
-      modal.id = "modal-visita";
-      modal.style.cssText = "position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.9);display:flex;align-items:center;justify-content:center;z-index:9999;padding:12px;box-sizing:border-box";
-
-      var numWpp = (ocM.vitima_telefone||"").replace(/\D/g,"");
-      if(numWpp.length===11) numWpp="55"+numWpp;
-      var linkWpp = "https://wa.me/"+numWpp;
-
-      var mh = [];
-      mh.push("<div style='background:#2a1c10;border:2px solid #3a4a28;border-radius:16px;max-width:700px;width:100%;max-height:95vh;overflow-y:auto;padding:22px;box-sizing:border-box'>");
-
-      // Header
-      mh.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px;border-bottom:1px solid #4a3224;padding-bottom:14px'>");
-      mh.push("<div><h3 style='color:#a8d890;font-size:17px;font-weight:700;margin:0'>🤝 Visita Solidária</h3><p style='color:#8a6a4a;font-size:11px;margin:4px 0 0'>Atendimento da ocorrência</p></div>");
-      mh.push("<button id='btn-fechar-modal' style='background:#3c2818;border:1px solid #5e4636;color:#8a7a5a;font-size:20px;cursor:pointer;border-radius:8px;width:34px;height:34px;display:flex;align-items:center;justify-content:center;line-height:1'>×</button>");
-      mh.push("</div>");
-
-      // Ocorrência completa
-      mh.push("<div style='background:#36221a;border:1px solid #2a3818;border-radius:10px;padding:14px;margin-bottom:16px'>");
-      mh.push("<p style='color:#6a8a50;font-size:10px;text-transform:uppercase;letter-spacing:1px;font-weight:700;margin:0 0 12px'>📋 Relato da Ocorrência</p>");
-      mh.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px 16px'>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Nº BO</p><p style='color:#d4a87a;font-size:12px;font-weight:700;margin:0'>"+(ocM.numero||"--")+"</p></div>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Tipo</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+(ocM.tipo||"--")+"</p></div>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Data / Hora</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+fmtData(ocM.data)+" "+(fmtHora(ocM.hora)||"")+"</p></div>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Bairro / Município</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+(ocM.bairro||"--")+" / "+(ocM.municipio||"--")+"</p></div>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Vítima</p><p style='color:#f5ede0;font-size:12px;font-weight:600;margin:0'>"+(ocM.vitima_nome||"--")+"</p></div>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Idade / Sexo</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+(ocM.vitima_idade||"--")+" / "+(ocM.vitima_sexo||"--")+"</p></div>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Telefone</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+(ocM.vitima_telefone||"--")+"</p></div>");
-      mh.push("<div><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>CPF</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+(ocM.vitima_cpf||"--")+"</p></div>");
-      mh.push("<div style='grid-column:1/-1'><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Endereço</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+(ocM.vitima_endereco||"--")+"</p></div>");
-      mh.push("<div style='grid-column:1/-1'><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Suspeito</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+(ocM.suspeito_nome||"Não identificado")+(ocM.suspeito_apelido?" ("+ocM.suspeito_apelido+")":"")+"</p></div>");
-      if(ocM.suspeito_caracteristicas) mh.push("<div style='grid-column:1/-1'><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Características do Suspeito</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+ocM.suspeito_caracteristicas+"</p></div>");
-      if(ocM.veiculo) mh.push("<div style='grid-column:1/-1'><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 2px'>Veículo</p><p style='color:#f5ede0;font-size:12px;margin:0'>"+ocM.veiculo+"</p></div>");
-      mh.push("<div style='grid-column:1/-1'><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 4px'>Medida Protetiva</p><p style='color:"+(ocM.medida_protetiva&&ocM.medida_protetiva!=="Não"?"#a855f7":"#8a6a4a")+";font-size:12px;margin:0'>"+(ocM.medida_protetiva||"Não")+"</p></div>");
-      mh.push("<div style='grid-column:1/-1;border-top:1px solid #4a3224;padding-top:10px;margin-top:4px'><p style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;margin:0 0 6px'>Descrição Completa</p><p style='color:#ddd2c0;font-size:12px;line-height:1.7;margin:0;white-space:pre-wrap;max-height:150px;overflow-y:auto;background:#2a1c10;padding:10px;border-radius:6px'>"+(ocM.descricao||"--")+"</p></div>");
-      mh.push("</div></div>");
-
-      // Botão WhatsApp
-      if(numWpp.length>=12){
-        mh.push("<a href='"+linkWpp+"' target='_blank' style='display:flex;align-items:center;justify-content:center;gap:8px;background:#1a2a14;border:1px solid #3a6a28;color:#a8d890;padding:10px;border-radius:8px;font-size:13px;font-weight:700;text-decoration:none;margin-bottom:14px'>📱 Contatar via WhatsApp · "+(ocM.vitima_telefone||"")+"</a>");
-      }
-
-      // Formulário
-      mh.push("<div style='display:flex;flex-direction:column;gap:12px'>");
-
-      // Anotações
-      mh.push("<div><label style='color:#6a8a50;font-size:10px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:5px'>📝 Descrição do Atendimento</label>");
-      mh.push("<textarea id='m-nota' placeholder='Descreva a conversa: dúvidas da vítima, aceitação de visita, orientações prestadas, observações importantes...' style='width:100%;background:#36221a;border:1px solid #2a3818;color:#f2eada;padding:10px 12px;border-radius:8px;font-size:12px;min-height:110px;resize:vertical;box-sizing:border-box;font-family:inherit;line-height:1.6'></textarea></div>");
-
-      // Encaminhamento (múltipla escolha)
-      mh.push("<div><label style='color:#6a8a50;font-size:10px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:8px'>📌 Tipo de Encaminhamento</label>");
-      mh.push("<div style='display:flex;flex-wrap:wrap;gap:7px' id='enc-opcoes'>");
-      var encOpcoes = ["Conselho Tutelar","CREAS","Polícia Civil","Judiciário","Visita Solidária em Casa","Ligação de Acompanhamento","Sem encaminhamento"];
-      encOpcoes.forEach(function(op){
-        mh.push("<button type='button' data-enc='"+op+"' style='background:#3c2818;border:1px solid #5e4636;color:#a07c58;padding:6px 14px;border-radius:20px;font-size:11px;font-weight:600;cursor:pointer;transition:all 0.2s' onclick='toggleEncaminhamento(this)'>"+op+"</button>");
-      });
-      mh.push("</div></div>");
-
-      // Agendamento
-      mh.push("<div style='background:#36221a;border:1px solid #2a3818;border-radius:10px;padding:14px'>");
-      mh.push("<p style='color:#6a8a50;font-size:10px;text-transform:uppercase;font-weight:700;margin:0 0 12px'>📅 Registrar Agendamento</p>");
-      mh.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px'>");
-      mh.push("<div><label style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Data</label><input id='m-data' type='date' style='width:100%;background:#2a1c10;border:1px solid #2a3818;color:#f2eada;padding:8px 10px;border-radius:8px;font-size:12px;box-sizing:border-box'/></div>");
-      mh.push("<div><label style='color:#8a6a4a;font-size:9px;text-transform:uppercase;font-weight:700;display:block;margin-bottom:4px'>Hora</label><input id='m-hora' type='time' style='width:100%;background:#2a1c10;border:1px solid #2a3818;color:#f2eada;padding:8px 10px;border-radius:8px;font-size:12px;box-sizing:border-box'/></div>");
-      mh.push("</div>");
-      mh.push("<button id='btn-registrar-ag' style='width:100%;background:linear-gradient(135deg,#2a4a18,#3a5a28);border:none;color:#a8d890;padding:10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📅 Registrar no Calendário</button>");
-      mh.push("</div>");
-
-      // Botões finais
-      mh.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:4px'>");
-      mh.push("<button id='btn-cancelar-modal' style='background:#1a0800;border:1px solid #2a1808;color:#5a4530;padding:11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>✕ Fechar</button>");
-      mh.push("<button id='btn-encerrar-atend' style='background:linear-gradient(135deg,#3a0808,#5a1010);border:1px solid #6a1818;color:#f87171;padding:11px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>✔ Encerrar Atendimento</button>");
-      mh.push("</div>");
-
-      mh.push("</div></div>");
-      modal.innerHTML = mh.join("");
-      modal.onclick = function(e){ if(e.target===this){ state.popAtendimento=null; renderOcorrenciasGestor(el); } };
-      document.body.appendChild(modal);
-
-      // Fechar
-      document.getElementById("btn-fechar-modal").onclick = function(){ state.popAtendimento=null; renderOcorrenciasGestor(el); };
-      document.getElementById("btn-cancelar-modal").onclick = function(){ state.popAtendimento=null; renderOcorrenciasGestor(el); };
-
-      // Registrar agendamento
-      document.getElementById("btn-registrar-ag").onclick = function(){
-        var nota = document.getElementById("m-nota").value.trim();
-        var data = document.getElementById("m-data").value;
-        var hora = document.getElementById("m-hora").value;
-        var encSel = [];
-        document.querySelectorAll("#enc-opcoes button.enc-ativo").forEach(function(b){ encSel.push(b.dataset.enc); });
-        if(!data||!hora){ alert("Preencha a data e hora do agendamento."); return; }
-        var ag = {
-          id:"vs_"+Date.now(),
-          criadoEm:new Date().toISOString(),
-          tipo: encSel.indexOf("Visita Solidária em Casa")>=0 ? "Visita Solidária" : (encSel[0]||"Atendimento"),
-          vitima_nome:ocM.vitima_nome,
-          endereco:ocM.vitima_endereco||ocM.bairro,
-          data:data, hora:hora,
-          responsavel:"Gestor",
-          objetivo: (nota||"Atendimento solidário") + (encSel.length?" · Encaminhamento: "+encSel.join(", "):""),
-          status:"Agendado",
-          ocorrenciaId:ocId,
-          telefone:ocM.vitima_telefone
-        };
-        if(!state.db.agendamentos) state.db.agendamentos=[];
-        state.db.agendamentos.push(ag);
-        enviarSheets("agendamentos", ag);
-        salvarLocal();
-        // Feedback visual
-        var btn = document.getElementById("btn-registrar-ag");
-        if(btn){ btn.textContent="✓ Agendado!"; btn.style.background="#1a3a10"; setTimeout(function(){ if(btn) btn.textContent="📅 Registrar no Calendário"; btn.style.background="linear-gradient(135deg,#2a4a18,#3a5a28)"; },2000); }
-      };
-
-      // Encerrar atendimento (arquiva ocorrência)
-      document.getElementById("btn-encerrar-atend").onclick = function(){
-        var nota = document.getElementById("m-nota").value.trim();
-        var encSel = [];
-        document.querySelectorAll("#enc-opcoes button.enc-ativo").forEach(function(b){ encSel.push(b.dataset.enc); });
-        if(!confirm("Encerrar atendimento e arquivar esta ocorrência?")) return;
-        // Salvar atendimento
-        if(nota){
-          var at = {
-            id:"at_"+Date.now(), criadoEm:new Date().toISOString(),
-            data:hoje(), hora:agora(),
-            nome:ocM.vitima_nome, telefone:ocM.vitima_telefone,
-            tipo:"Visita Solidária",
-            descricao:nota,
-            encaminhamento: encSel.join(", ")||"Nenhum"
-          };
-          if(!state.db.atendimentos) state.db.atendimentos=[];
-          state.db.atendimentos.push(at);
-          enviarSheets("atendimentos", at);
-        }
-        // Arquivar
-        var oc = state.db.ocorrencias.find(function(x){return x.id===ocId;});
-        if(oc){
-          if(!state.ocorrenciasArquivadas) state.ocorrenciasArquivadas=[];
-          state.ocorrenciasArquivadas.push(Object.assign({},oc,{arquivadaEm:new Date().toISOString()}));
-        }
-        state.db.ocorrencias = state.db.ocorrencias.filter(function(x){return x.id!==ocId;});
-        state.popAtendimento = null;
-        salvarLocal();
-        renderOcorrenciasGestor(el);
-      };
-    }
-    return;
-  }
-
-  // Função toggle encaminhamento (global)
-  window.toggleEncaminhamento = function(btn){
-    btn.classList.toggle("enc-ativo");
-    if(btn.classList.contains("enc-ativo")){
-      btn.style.background="#1a3a10"; btn.style.borderColor="#6a8a50"; btn.style.color="#a8d890";
-    } else {
-      btn.style.background="#3c2818"; btn.style.borderColor="#5e4636"; btn.style.color="#a07c58";
-    }
-  };
   var h = [];
   h.push("<div style='max-width:900px;margin:0 auto;padding:16px'>");
-  h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px'>");
-  h.push("<h2 style='font-size:18px;font-weight:700;color:#f5ede0;margin:0'>Ocorrencias <span style='color:#8a6a4a;font-size:12px;font-weight:400'>"+state.db.ocorrencias.length+" registros</span></h2>");
-  if(!isOperador){
-    var comTexto = state.db.ocorrencias.filter(function(o){return o.texto_original&&o.texto_original.length>20;}).length;
-    h.push("<button id='btn-reextrai' style='background:#0e1808;border:1px solid #3a5a28;color:#6a9a50;padding:6px 14px;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px'>🔧 Corrigir Dados Antigos <span style='background:#1a3818;padding:2px 6px;border-radius:4px'>"+comTexto+"</span></button>");
-    h.push("<button onclick='restaurarDatasOriginais()' style='background:#1a0808;border:1px solid #c05050;color:#e08070;padding:6px 14px;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer'>🗓 Restaurar Datas</button>");
-    var _naoRevisadas = (state.db.ocorrencias||[]).filter(function(o){ return (o.data||"").slice(0,7)===hoje().slice(0,7) && !o._revisadoIA; }).length;
-    if(_naoRevisadas > 0) h.push("<button onclick='iniciarRevisaoIALote()' style='background:#0a0a1a;border:1px solid #6a5af5;color:#a09af8;padding:6px 14px;border-radius:8px;font-size:10px;font-weight:700;cursor:pointer'>🤖 Revisar com IA <span style='background:#1a1a3a;padding:2px 6px;border-radius:4px'>"+_naoRevisadas+"</span></button>");
-  }
-  h.push("</div>");
-
-  // Busca por texto
-  h.push(_htmlFiltrosBairro("renderOcorrenciasGestor(document.getElementById('main-content'),state._ocPerfil)","#d4a87a"));
-  h.push("<input id='oc-busca' type='text' placeholder='Buscar por nome, Nº, bairro, tipo, suspeito, policial...' value='"+(state.filtroOcBusca||"")+"' style='width:100%;background:#2a1c10;border:1px solid #2a3818;color:#f2eada;padding:10px 13px;border-radius:8px;font-size:13px;margin-bottom:12px;box-sizing:border-box;outline:none'/>");
-
-  // Filtro periodo
-  h.push("<div style='display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px'>");
-  var filtros=[{l:"Hoje",d:1},{l:"7 dias",d:7},{l:"30 dias",d:30},{l:"90 dias",d:90},{l:"Tudo",d:null}];
-  filtros.forEach(function(f){
-    var sel=(state.filtroOcPeriodo===f.d)||(f.d===null&&state.filtroOcPeriodo===undefined);
-    h.push("<button data-dias='"+(f.d===null?"null":f.d)+"' style='background:"+(sel?"#3a5a28":"#2a1c10")+";border:1px solid "+(sel?"#6a8a50":"#2a3818")+";color:"+(sel?"#a8d890":"#8a6a4a")+";padding:6px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer'>"+f.l+"</button>");
-  });
-  h.push("</div>");
+  h.push("<input id='oc-busca' type='text' placeholder='🔍 Filtrar por nome, Nº, bairro, tipo, suspeito...' value='"+(state.filtroOcBusca||"")+"' style='width:100%;background:#2a1c10;border:1px solid #2a3818;color:#f2eada;padding:10px 13px;border-radius:8px;font-size:13px;margin-bottom:12px;box-sizing:border-box;outline:none'/>");
 
   // Filtrar por período
   var agora=new Date();
@@ -10659,39 +11342,60 @@ function renderOcorrenciasGestor(el, perfil_atual){
     h.push("</div>");
     // Botões de ação
     h.push("<div style='display:flex;gap:6px;flex-wrap:wrap'>");
-    if(!isOperador){
-      // Visita Solidária: pisca se requer_visita=true E sem visita registrada
-      var _semVisita=o.requer_visita&&!(state.db.visitas||[]).find(function(v){return v.ocorrenciaId===o.id;});
-      h.push("<button data-oc='"+o.id+"' data-act='visita' style='background:#1a2810;border:1px solid "+(_semVisita?"#10b981":"#6a8a50")+";color:#a8d890;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;"+(_semVisita?"animation:piscar-verde 1.2s infinite;":"")+"'>🤝 Visita Solidária</button>");
-    }
     h.push("<button data-oc='"+o.id+"' data-act='editar' style='background:#1a1a2a;border:1px solid #4a5a7a;color:#8a9aba;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>✏ Editar</button>");
     if(!isOperador){
-      // Monitor VCM: pisca se VD e sem FRIDA, ou FRIDA elevado, ou médio>30d, ou MP ativa sem visita recente
       var _vcmFridas=(state.db.frida||[]).filter(function(f){return f.ocorrenciaId===o.id;});
       var _vcmUltimaFrida=_vcmFridas.sort(function(a,b){return(b.data||"")>(a.data||"")?1:-1;})[0];
       var _isVD=o.violencia_domestica||/maria da penha|violên?cia dom[eé]stica|vcm/i.test(o.tipo||"");
-      var _piscarVCM=false;
       if(_isVD){
-        if(!_vcmUltimaFrida) _piscarVCM=true; // sem avaliação FRIDA
-        else if(_vcmUltimaFrida.nivel==="E") _piscarVCM=true; // risco elevado
-        else if(_vcmUltimaFrida.nivel==="M"&&(Date.now()-new Date(_vcmUltimaFrida.data).getTime())>30*864e5) _piscarVCM=true; // médio + 30d
-        else if(o.medida_protetiva==="Sim"&&(Date.now()-new Date(_vcmUltimaFrida.data).getTime())>15*864e5) _piscarVCM=true; // MP ativa + 15d
+        // Caso VCM: botão único "Acompanhar"
+        var _piscarVCM=false;
+        if(!_vcmUltimaFrida) _piscarVCM=true;
+        else if(_vcmUltimaFrida.nivel==="E") _piscarVCM=true;
+        else if(_vcmUltimaFrida.nivel==="M"&&(Date.now()-new Date(_vcmUltimaFrida.data).getTime())>30*864e5) _piscarVCM=true;
+        else if(o.medida_protetiva==="Sim"&&(Date.now()-new Date(_vcmUltimaFrida.data).getTime())>15*864e5) _piscarVCM=true;
+        h.push("<button data-oc='"+o.id+"' data-act='acompanhar' style='background:#1a1810;border:1px solid "+(_piscarVCM?"#ff1493":"#8a6a4a")+";color:"+(_piscarVCM?"#ff69b4":"#c09ad0")+";padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;"+(_piscarVCM?"animation:piscar-rosa 1.2s infinite;":"")+"'>💜 Acompanhar</button>");
+      } else {
+        // Demais ocorrências: Visita Solidária (pisca se requer_visita e sem visita registrada)
+        var _semVisita=o.requer_visita&&!(state.db.visitas||[]).find(function(v){return v.ocorrenciaId===o.id;});
+        h.push("<button data-oc='"+o.id+"' data-act='acompanhar' style='background:#1a2810;border:1px solid "+(_semVisita?"#10b981":"#6a8a50")+";color:#a8d890;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;"+(_semVisita?"animation:piscar-verde 1.2s infinite;":"")+"'>🤝 Visita Solidária</button>");
       }
-      h.push("<button data-oc='"+o.id+"' data-act='vcm' style='background:#1a1810;border:1px solid "+(_piscarVCM?"#ff1493":"#8a6a4a")+";color:"+(_piscarVCM?"#ff69b4":"#8a7a5a")+";padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;"+(_piscarVCM?"animation:piscar-rosa 1.2s infinite;":"")+"'>💜 Monitor VCM</button>");
     }
     if(!isOperador) h.push("<button data-oc='"+o.id+"' data-act='arq' style='background:#1a0800;border:1px solid #2a1808;color:#5a4530;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>Arquivar</button>");
     h.push("</div></div>");
-    // ── Campos estruturados SIGESPOL (novo) ou texto legado
-    var temCampos = o.vitima_nome||o.local||o.descricao_dinamica||o.medidas||o.policiais||o.objetos;
+    // ── Campos estruturados SIGESPOL/Planilha (todos os campos preenchidos)
+    var temCampos = o.vitima_nome||o.local||o.descricao_dinamica||o.medidas||o.policiais||o.objetos||o.numero||o.vitima_endereco||o.vitima_cpf||o.suspeito_nome||o.veiculo||o.envolvidos||o.armas_apreendidas||o.drogas_apreendidas||o.posto_servico;
     if(temCampos){
       var fcS="font-size:10px;color:#4a9fd4;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:2px";
       var fcV="font-size:11px;color:#c5daf5;line-height:1.5";
+      var sexoMap={F:"Feminino",M:"Masculino"};
       h.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px'>");
-      if(o.local||o.bairro) h.push("<div><span style='"+fcS+"'>Local</span><span style='"+fcV+"'>"+esc(o.local||o.bairro||"")+(o.zona?" · "+o.zona:"")+"</span></div>");
+      if(o.numero) h.push("<div><span style='"+fcS+"'>Nº BO</span><span style='"+fcV+"'>"+esc(o.numero)+"</span></div>");
+      if(o.local||o.bairro) h.push("<div><span style='"+fcS+"'>Local</span><span style='"+fcV+"'>"+esc(o.local||o.bairro||"")+(o.zona?" · "+o.zona:"")+(o.municipio&&o.municipio!=="Vitória da Conquista"?" / "+esc(o.municipio):"")+"</span></div>");
       if(o.referencia) h.push("<div><span style='"+fcS+"'>Referência</span><span style='"+fcV+"'>"+esc(o.referencia)+"</span></div>");
-      if(o.vitima_nome) h.push("<div><span style='"+fcS+"'>Vítima</span><span style='"+fcV+"'>"+esc(o.vitima_nome)+(o.vitima_idade?" · "+o.vitima_idade+" anos":"")+(o.vitima_telefone?" · "+o.vitima_telefone:"")+"</span></div>");
-      if(o.suspeito_nome) h.push("<div><span style='"+fcS+"'>Autor/Suspeito</span><span style='"+fcV+"'>"+esc(o.suspeito_nome)+(o.suspeito_idade?" · "+o.suspeito_idade+" anos":"")+"</span></div>");
-      if(o.objetos) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Objetos</span><span style='"+fcV+"'>"+esc(o.objetos)+"</span></div>");
+      if(o.vitima_nome){
+        var vInfo=esc(o.vitima_nome);
+        if(o.vitima_sexo) vInfo+=" · "+(sexoMap[o.vitima_sexo]||o.vitima_sexo);
+        if(o.vitima_idade) vInfo+=" · "+o.vitima_idade+" anos";
+        if(o.vitima_telefone) vInfo+=" · 📞 "+esc(o.vitima_telefone);
+        h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Vítima</span><span style='"+fcV+"'>"+vInfo+"</span></div>");
+      }
+      if(o.vitima_endereco) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Endereço da Vítima</span><span style='"+fcV+"'>"+esc(o.vitima_endereco)+"</span></div>");
+      if(o.vitima_cpf) h.push("<div><span style='"+fcS+"'>CPF Vítima</span><span style='"+fcV+"'>"+esc(o.vitima_cpf)+"</span></div>");
+      if(o.suspeito_nome){
+        var sInfo=esc(o.suspeito_nome);
+        if(o.suspeito_apelido) sInfo+=" <em style='color:#8a98a8'>(\""+esc(o.suspeito_apelido)+"\")</em>";
+        if(o.suspeito_idade) sInfo+=" · "+o.suspeito_idade+" anos";
+        h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Autor/Suspeito</span><span style='"+fcV+"'>"+sInfo+"</span></div>");
+      }
+      if(o.suspeito_caracteristicas) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Características do Suspeito</span><span style='"+fcV+"'>"+esc(o.suspeito_caracteristicas)+"</span></div>");
+      if(o.veiculo) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Veículo</span><span style='"+fcV+"'>"+esc(o.veiculo)+"</span></div>");
+      if(o.objetos) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Objetos Relacionados</span><span style='"+fcV+"'>"+esc(o.objetos)+"</span></div>");
+      if(o.envolvidos) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Pessoas Envolvidas</span><span style='"+fcV+"'>"+esc(o.envolvidos)+"</span></div>");
+      if(o.armas_apreendidas) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Armas Apreendidas</span><span style='"+fcV+"'>"+esc(o.armas_apreendidas)+"</span></div>");
+      if(o.drogas_apreendidas) h.push("<div style='grid-column:1/-1'><span style='"+fcS+"'>Drogas Apreendidas</span><span style='"+fcV+"'>"+esc(o.drogas_apreendidas)+"</span></div>");
+      if(o.posto_servico) h.push("<div><span style='"+fcS+"'>Posto de Serviço</span><span style='"+fcV+"'>"+esc(o.posto_servico)+"</span></div>");
+      if(o.dados_quantitativos) h.push("<div><span style='"+fcS+"'>Dados Quantitativos</span><span style='"+fcV+"'>"+esc(o.dados_quantitativos)+"</span></div>");
       h.push("</div>");
       var dinamica=o.descricao_dinamica||o.texto_original||o.descricao||"";
       if(dinamica){
@@ -10703,7 +11407,7 @@ function renderOcorrenciasGestor(el, perfil_atual){
         if(_prevD) h.push("<button data-ocid='"+o.id+"' data-target='"+_escId+"' data-exp='0' onclick='_ocToggleDin(this)' style='background:none;border:none;color:#4a9fd4;font-size:10px;cursor:pointer;padding:3px 0 0;display:block'>▼ ver narrativa completa ("+(dinamica.length)+" chars)</button>");
         h.push("</div>");
       }
-      if(o.medidas) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Medidas Adotadas</span><p style='"+fcV+";margin:0;white-space:pre-wrap'>"+esc(o.medidas)+"</p></div>");
+      if(o.medidas) h.push("<div style='margin-bottom:8px;background:#0d1208;border:1px solid #1a3818;border-radius:6px;padding:10px'><span style='"+fcS+";color:#7ac24a'>Medidas Adotadas</span><p style='font-size:11px;color:#c5e0a0;line-height:1.6;margin:4px 0 0;white-space:pre-wrap'>"+esc(o.medidas)+"</p></div>");
       if(o.policiais) h.push("<div style='margin-bottom:8px'><span style='"+fcS+"'>Policiais</span><span style='"+fcV+"'>"+esc(o.policiais)+"</span></div>");
     } else {
       var relatoExib=(o.texto_original||o.descricao_dinamica||o.descricao||"").trim();
@@ -10726,15 +11430,6 @@ function renderOcorrenciasGestor(el, perfil_atual){
   h.push("</div>");
   el.innerHTML = h.join("");
 
-  // Eventos filtro periodo
-  el.querySelectorAll("[data-dias]").forEach(function(btn){
-    btn.onclick = function(){
-      var d = this.dataset.dias;
-      state.filtroOcPeriodo = (d==="null")?null:parseInt(d);
-      renderOcorrenciasGestor(el, state._ocPerfil);
-    };
-  });
-
   // Busca por texto — debounce 300ms para não travar a cada tecla
   var buscaInput = el.querySelector("#oc-busca");
   if(buscaInput){
@@ -10753,216 +11448,16 @@ function renderOcorrenciasGestor(el, perfil_atual){
     buscaInput.onblur  = function(){ this.style.borderColor="#2a3818"; };
   }
 
-  // Botão corrigir dados antigos
-  var btnReextrai = el.querySelector("#btn-reextrai");
-  if(btnReextrai){
-    btnReextrai.onclick = function(){
-      var comTexto = state.db.ocorrencias.filter(function(o){return o.texto_original&&o.texto_original.length>20;}).length;
-      if(!comTexto){ showToast("Nenhuma ocorrência com texto original disponível","error"); return; }
-      if(!confirm("Isso vai re-extrair os campos de "+comTexto+" ocorrências usando o novo parser.\n\nCampos corrigidos: tipo, vítima, suspeito, endereço, telefone, efetivo, descrição.\n\nContinuar?")) return;
-      btnReextrai.textContent="⏳ Corrigindo...";
-      btnReextrai.disabled=true;
-      setTimeout(function(){
-        reextrairOcorrencias();
-        renderOcorrenciasGestor(el, state._ocPerfil);
-      }, 100);
-    };
-  }
-
   // Eventos botoes ocorrencias
   el.querySelectorAll("[data-act]").forEach(function(btn){
     btn.onclick = function(){
       var id = this.dataset.oc;
       var act = this.dataset.act;
-      if(act==="visita"){
-        state.popAtendimento = id;
-        renderOcorrenciasGestor(el, state._ocPerfil);
+      if(act==="acompanhar"){
+        abrirMonitorVCM(id);
       } else if(act==="editar"){
         state.popEditarOc = id;
         renderOcorrenciasGestor(el, state._ocPerfil);
-      } else if(act==="vcm"){
-        var ocVcm = state.db.ocorrencias.find(function(x){return x.id===id;});
-        if(!ocVcm) return;
-
-        var perguntas=[
-          "A violência vem aumentando de gravidade e/ou frequência no último mês?",
-          "A vítima está grávida ou teve bebê nos últimos 18 meses?",
-          "A vítima tem filhos com o agressor?",
-          "Em caso afirmativo, há conflito sobre guarda, visitas ou pensão?",
-          "O agressor persegue, tem ciúmes excessivos ou tenta controlar a vida da vítima?",
-          "A vítima se separou recentemente, tentou ou tem intenção de se separar?",
-          "O agressor é violento com outras pessoas (familiares, amigos, crianças)?",
-          "A vítima possui animal doméstico e o agressor maltrata ou agride o animal?",
-          "O agressor já agrediu fisicamente a vítima outras vezes?",
-          "Alguma vez o agressor tentou estrangular, sufocar ou afogar a vítima?",
-          "O agressor já fez ameaças de morte ou tentou matar a vítima?",
-          "O agressor já usou ou ameaçou usar arma de fogo?",
-          "O agressor já ameaçou ou feriu com outro tipo de arma ou instrumento?",
-          "A vítima necessitou de atendimento médico ou internação após agressões?",
-          "O agressor é usuário de drogas e/ou bebidas alcoólicas?",
-          "O agressor faz uso de medicação controlada para doença mental/psiquiátrica?",
-          "A vítima já teve ou tem medida protetiva de urgência?",
-          "O agressor já descumpriu medida protetiva de afastamento?",
-          "O agressor já ameaçou ou tentou se matar?",
-          "O agressor já obrigou a vítima a ter relações sexuais contra a vontade?",
-          "O agressor está com dificuldades financeiras, desempregado ou com dificuldade de manter emprego?"
-        ];
-
-        function calcFrida(respostas){
-          var sim=0,naoSabe=0;
-          respostas.forEach(function(r){if(r==="sim")sim++;else if(r==="nao_sabe"||r==="nao_aplica")naoSabe++;});
-          var tabela=[["B","B","B","B","B","B","B","B","B","B","B","M"],["B","B","B","B","B","B","B","B","M","M","M","M"],["B","B","B","B","M","M","M","M","M","M","M","M"],["M","M","M","M","M","M","M","M","M","M","E","M"],["M","M","M","M","M","M","M","M","E","E","E","M"],["M","M","M","M","M","M","E","E","E","E","E","M"],["M","M","M","M","E","E","E","E","E","E","E","M"],["M","M","E","E","E","E","E","E","E","E","E","M"],["E","E","E","E","E","E","E","E","E","E","E","M"]];
-          return {sim:sim,naoSabe:naoSabe,nivel:tabela[sim<=8?sim:8][naoSabe<=10?naoSabe:11]};
-        }
-
-        // Estado do anexo e FRIDA calculado
-        var vcmAnexoB64="",vcmAnexoNome="",vcmAnexoTipo="";
-        var fridaCalc={nivel:"",sim:0,naoSabe:0,respostas:[]};
-
-        var modalEl=document.createElement("div");
-        modalEl.id="modal-frida";
-        modalEl.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:600;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto";
-
-        var hf=[];
-        hf.push("<div style='background:#3c2818;border:1px solid #5a4a18;border-radius:16px;max-width:640px;width:100%;margin:auto'>");
-        // Header
-        hf.push("<div style='padding:18px 20px;border-bottom:1px solid #5e4636;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#3c2818;z-index:1;border-radius:16px 16px 0 0'>");
-        hf.push("<div><p style='color:#ff1493;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:0 0 2px'>Monitor VCM</p>");
-        hf.push("<p style='color:#f2eada;font-size:14px;font-weight:700;margin:0'>"+(ocVcm.vitima_nome||"Vítima")+"</p></div>");
-        hf.push("<button onclick='document.getElementById(\"modal-frida\").remove()' style='background:#42301e;border:1px solid #5e4636;color:#a07c58;width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer'>✕</button>");
-        hf.push("</div>");
-
-        hf.push("<div style='padding:20px'>");
-
-        // SEÇÃO 1 — Resumo do Atendimento (sempre visível)
-        hf.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:10px;padding:16px;margin-bottom:16px'>");
-        hf.push("<p style='color:#d4a87a;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin:0 0 14px'>Resumo do Atendimento</p>");
-        hf.push("<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px'>");
-        hf.push("<div><label style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px'>Data</label><input type='date' id='vcm-data' value='"+new Date().toISOString().split("T")[0]+"' style='width:100%;background:#36221a;border:1px solid #2a3818;color:#f2eada;padding:8px 10px;border-radius:6px;font-size:12px;outline:none;box-sizing:border-box'/></div>");
-        hf.push("<div><label style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px'>Horário</label><input type='time' id='vcm-hora' value='08:00' style='width:100%;background:#36221a;border:1px solid #2a3818;color:#f2eada;padding:8px 10px;border-radius:6px;font-size:12px;outline:none;box-sizing:border-box'/></div>");
-        hf.push("</div>");
-        hf.push("<div style='margin-bottom:12px'><label style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:5px'>Policial Responsável</label><input type='text' id='vcm-responsavel' placeholder='Nome do policial responsável pelo atendimento' style='width:100%;background:#36221a;border:1px solid #2a3818;color:#f2eada;padding:8px 10px;border-radius:6px;font-size:12px;outline:none;box-sizing:border-box' onfocus=\"this.style.borderColor='#d4a87a'\" onblur=\"this.style.borderColor='#2a3818'\"/></div>");
-        hf.push("<textarea id='vcm-relatorio' placeholder='Resumo do atendimento: encaminhamentos realizados, serviços acionados, medidas protetivas, orientações à vítima, rede de apoio...' style='width:100%;background:#36221a;border:1px solid #2a3818;color:#f2eada;padding:12px;border-radius:8px;font-size:12px;min-height:110px;resize:vertical;outline:none;font-family:inherit;box-sizing:border-box;line-height:1.6' onfocus=\"this.style.borderColor='#d4a87a'\" onblur=\"this.style.borderColor='#2a3818'\"></textarea>");
-        hf.push("<div style='margin-top:12px'>");
-        hf.push("<label style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:6px'>Anexo (foto / PDF)</label>");
-        hf.push("<input type='file' id='vcm-anexo' accept='image/*,application/pdf' style='width:100%;background:#36221a;border:1px solid #2a3818;color:#a07c58;padding:7px 10px;border-radius:6px;font-size:11px;cursor:pointer;box-sizing:border-box'/>");
-        hf.push("<div id='vcm-anexo-preview' style='display:none;color:#10b981;font-size:11px;margin-top:5px'></div>");
-        hf.push("</div>");
-        hf.push("<div style='display:flex;gap:10px;margin-top:14px'>");
-        hf.push("<button id='btn-vcm-agendar' style='flex:1;background:linear-gradient(135deg,#1a3a10,#2a5a18);border:none;color:#a8d890;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📅 Agendar Visita</button>");
-        hf.push("<button id='btn-vcm-encerrar' style='flex:1;background:linear-gradient(135deg,#0a1a3a,#1a3a6a);border:none;color:#a8c0e8;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Encerrar Acompanhamento</button>");
-        hf.push("</div></div>");
-
-        // SEÇÃO 2 — FRIDA (colapsável)
-        hf.push("<div style='border:1px solid #3a2a18;border-radius:10px;overflow:hidden'>");
-        hf.push("<button id='btn-frida-toggle' style='width:100%;background:#1a1208;border:none;color:#d4a87a;padding:14px 16px;text-align:left;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px'><span id='frida-toggle-icon'>▶</span> Aplicar Avaliação de Risco FRIDA</button>");
-        hf.push("<div id='frida-section' style='display:none;padding:16px;border-top:1px solid #3a2a18'>");
-        hf.push("<p style='color:#a07c58;font-size:12px;line-height:1.6;margin-bottom:16px;background:#0a0808;padding:10px 12px;border-radius:8px;border-left:3px solid #d4a87a'>Explique à vítima a importância do formulário. Cada pergunta deve ser respondida com base nas informações relatadas. Pode ser aplicado múltiplas vezes.</p>");
-
-        perguntas.forEach(function(q,i){
-          hf.push("<div style='margin-bottom:12px;background:#2a1c10;border:1px solid #2a3818;border-radius:8px;padding:12px'>");
-          hf.push("<p style='color:#f2eada;font-size:12px;line-height:1.5;margin:0 0 8px'><span style='color:#d4a87a;font-weight:700'>"+(i+1)+".</span> "+q+"</p>");
-          hf.push("<div style='display:flex;gap:6px;flex-wrap:wrap'>");
-          [["sim","✓ Sim","#10b981"],["nao","✗ Não","#8a6a4a"],["nao_sabe","? Não sabe","#d4a87a"],["nao_aplica","— N/A","#5e4636"]].forEach(function(opt){
-            hf.push("<label style='display:flex;align-items:center;gap:5px;cursor:pointer;background:#36221a;border:1px solid #2a3818;padding:5px 10px;border-radius:6px'>");
-            hf.push("<input type='radio' name='frida_"+i+"' value='"+opt[0]+"' style='accent-color:"+opt[2]+"'>");
-            hf.push("<span style='color:"+opt[2]+";font-size:11px;font-weight:700'>"+opt[1]+"</span></label>");
-          });
-          hf.push("</div></div>");
-        });
-
-        hf.push("<button id='btn-frida-calcular' style='width:100%;background:linear-gradient(135deg,#5a0a30,#8a1050);border:none;color:#ffaadd;padding:13px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:8px'>🔍 Calcular Resultado FRIDA</button>");
-        hf.push("<div id='frida-nivel-box' style='display:none;margin-top:12px'></div>");
-        hf.push("<button id='btn-frida-salvar' style='display:none;width:100%;background:linear-gradient(135deg,#3a1a08,#5a2a10);border:none;color:#e8a070;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;margin-top:10px'>💾 Salvar FRIDA (pode aplicar novamente)</button>");
-        hf.push("</div></div>");
-
-        hf.push("</div></div>");
-        modalEl.innerHTML=hf.join("");
-        document.body.appendChild(modalEl);
-        modalEl.onclick=function(e){if(e.target===this)this.remove();};
-
-        // Leitura do anexo
-        document.getElementById("vcm-anexo").onchange=function(){
-          var file=this.files[0]; if(!file) return;
-          vcmAnexoNome=file.name; vcmAnexoTipo=file.type;
-          var reader=new FileReader();
-          reader.onload=function(ev){vcmAnexoB64=ev.target.result;var p=document.getElementById("vcm-anexo-preview");p.textContent="✓ "+vcmAnexoNome;p.style.display="block";};
-          reader.readAsDataURL(file);
-        };
-
-        // Toggle FRIDA
-        document.getElementById("btn-frida-toggle").onclick=function(){
-          var s=document.getElementById("frida-section"),show=s.style.display==="none";
-          s.style.display=show?"block":"none";
-          document.getElementById("frida-toggle-icon").textContent=show?"▼":"▶";
-        };
-
-        // Calcular FRIDA
-        document.getElementById("btn-frida-calcular").onclick=function(){
-          var respostas=[];
-          for(var i=0;i<perguntas.length;i++){var sel=document.querySelector('input[name="frida_'+i+'"]:checked');respostas.push(sel?sel.value:"nao");}
-          var res=calcFrida(respostas);
-          fridaCalc={nivel:res.nivel,sim:res.sim,naoSabe:res.naoSabe,respostas:respostas};
-          var cores={B:{bg:"#0a1a0a",borda:"#10b981",txt:"#10b981",label:"RISCO BAIXO"},M:{bg:"#1a1400",borda:"#d4a87a",txt:"#d4a87a",label:"RISCO MÉDIO"},E:{bg:"#301c16",borda:"#ff4444",txt:"#ff4444",label:"RISCO ELEVADO"}};
-          var c=cores[res.nivel]||cores.M;
-          var nb=document.getElementById("frida-nivel-box");
-          nb.style.cssText="display:block;padding:16px;border-radius:8px;text-align:center;background:"+c.bg+";border:2px solid "+c.borda;
-          nb.innerHTML="<p style='color:"+c.txt+";font-size:24px;font-weight:700;margin:0 0 4px'>"+c.label+"</p><p style='color:#a07c58;font-size:12px;margin:0'>"+res.sim+" SIM · "+res.naoSabe+" Não sabe/N.A.</p>"+(res.nivel==="E"?"<p style='color:#ff6b6b;font-size:11px;margin:6px 0 0'>⚠ Encaminhar imediatamente para serviços especializados</p>":res.nivel==="M"?"<p style='color:#d4a87a;font-size:11px;margin:6px 0 0'>Monitorar e avaliar medidas protetivas</p>":"<p style='color:#10b981;font-size:11px;margin:6px 0 0'>Orientar e manter acompanhamento preventivo</p>");
-          document.getElementById("btn-frida-calcular").style.display="none";
-          document.getElementById("btn-frida-salvar").style.display="block";
-          ocVcm._fridaNivel=res.nivel; ocVcm._fridaSim=res.sim;
-        };
-
-        // Salvar FRIDA (independente, pode repetir)
-        document.getElementById("btn-frida-salvar").onclick=function(){
-          var rel=document.getElementById("vcm-relatorio").value.trim();
-          var resp=document.getElementById("vcm-responsavel")?document.getElementById("vcm-responsavel").value.trim():"";
-          var fr={id:"fr_"+Date.now(),ocorrenciaId:ocVcm.id,data:new Date().toISOString(),vitima_nome:ocVcm.vitima_nome||"",nivel:fridaCalc.nivel,sim:fridaCalc.sim,naoSabe:fridaCalc.naoSabe,respostas:JSON.stringify(fridaCalc.respostas),relatorio:rel,responsavel:resp,anexo_nome:vcmAnexoNome,anexo_tipo:vcmAnexoTipo,anexo_b64:vcmAnexoB64};
-          ocVcm._fridaNivel=fridaCalc.nivel; ocVcm._fridaSim=fridaCalc.sim; ocVcm._fridaRelatorio=rel; ocVcm._fridaData=fr.data;
-          if(!state.db.frida) state.db.frida=[];
-          state.db.frida.push(fr);
-          salvarLocal(); enviarSheets("frida",fr);
-          showToast("✓ FRIDA salvo! Pode aplicar novamente se necessário.");
-          // Reset para nova aplicação
-          fridaCalc={nivel:"",sim:0,naoSabe:0,respostas:[]};
-          document.getElementById("btn-frida-calcular").style.display="block";
-          document.getElementById("btn-frida-salvar").style.display="none";
-          document.getElementById("frida-nivel-box").style.display="none";
-          for(var i=0;i<perguntas.length;i++){document.querySelectorAll('input[name="frida_'+i+'"]').forEach(function(s){s.checked=false;});}
-        };
-
-        // Helper: salvar atendimento e opcionalmente encerrar
-        function _salvarAtendimentoVcm(encerrar){
-          var rel=document.getElementById("vcm-relatorio").value.trim();
-          var resp=document.getElementById("vcm-responsavel").value.trim();
-          var agData=document.getElementById("vcm-data").value||hoje();
-          var agHora=document.getElementById("vcm-hora").value||"08:00";
-          ocVcm._fridaRelatorio=rel;
-          ocVcm._fridaResponsavel=resp;
-          if(encerrar){ocVcm._encerrado=true;ocVcm._encerradoEm=new Date().toISOString();}
-          salvarLocal();
-          var at={id:"fr_at_"+Date.now(),ocorrenciaId:ocVcm.id,data:new Date().toISOString(),vitima_nome:ocVcm.vitima_nome||"",nivel:ocVcm._fridaNivel||"",sim:ocVcm._fridaSim||0,naoSabe:0,respostas:"[]",relatorio:rel,responsavel:resp,anexo_nome:vcmAnexoNome,anexo_tipo:vcmAnexoTipo,anexo_b64:vcmAnexoB64};
-          enviarSheets("frida",at);
-          return {agData:agData,agHora:agHora,resp:resp};
-        }
-
-        // Agendar Visita
-        document.getElementById("btn-vcm-agendar").onclick=function(){
-          var r=_salvarAtendimentoVcm(false);
-          var ag={id:"ag_vcm_"+Date.now(),criadoEm:new Date().toISOString(),data:r.agData,hora:r.agHora,tipo:"Visita VCM/FRIDA",vitima_nome:ocVcm.vitima_nome||"",endereco:ocVcm.vitima_endereco||"",responsavel:"Gestor",objetivo:"Monitoramento VCM"+(ocVcm._fridaNivel?" — Nível "+ocVcm._fridaNivel:"")+" — "+(ocVcm.vitima_nome||""),status:"Agendado",ocorrenciaId:ocVcm.id};
-          if(!state.db.agendamentos) state.db.agendamentos=[];
-          state.db.agendamentos.push(ag);
-          enviarSheets("agendamentos",ag); salvarLocal();
-          showToast("✓ Atendimento salvo e visita agendada!");
-          document.getElementById("modal-frida").remove();
-        };
-
-        // Encerrar Acompanhamento
-        document.getElementById("btn-vcm-encerrar").onclick=function(){
-          _salvarAtendimentoVcm(true);
-          showToast("✓ Acompanhamento encerrado e salvo!");
-          document.getElementById("modal-frida").remove();
-        };
       } else if(act==="arq"){
         if(confirm("Arquivar esta ocorrencia? Ela nao aparecera mais na lista.")){
           var oc = state.db.ocorrencias.find(function(x){return x.id===id;});
@@ -11003,6 +11498,494 @@ function renderOcorrenciasGestor(el, perfil_atual){
   });
 }
 
+// ══════════════════════════════════════════════════════════════════
+// DEVOLUTIVAS CRAV
+// ══════════════════════════════════════════════════════════════════
+
+// URL base onde os arquivos estão hospedados (configure antes de compartilhar)
+// Exemplo: "https://seuprojeto.github.io/bcs/" ou "https://sua-url.com/"
+var CRAV_BASE_URL = "https://oseiasvarges-lgtm.github.io/bcs-vigilia/";
+
+function gerarLinkCrav(ocId){
+  var oc = (state.db.ocorrencias||[]).find(function(x){return x.id===ocId;});
+  if(!oc) return;
+  var url = CRAV_BASE_URL + "crav-devolutiva.html"
+    + "?oc="     + encodeURIComponent(oc.id)
+    + "&nome="   + encodeURIComponent(oc.vitima_nome||"")
+    + "&bairro=" + encodeURIComponent(oc.bairro||"")
+    + "&ref="    + encodeURIComponent(oc.numero_bo||oc.id||"");
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){
+      showToast("✓ Link CRAV copiado! Cole no WhatsApp para o CRAV.");
+    }).catch(function(){
+      prompt("Copie o link e envie ao CRAV:", url);
+    });
+  } else {
+    prompt("Copie o link e envie ao CRAV:", url);
+  }
+}
+
+async function sincronizarDevolutivasCrav(){
+  if(!SHEETS_URL) return;
+  try{
+    // Lê aba devolutivas_crav do Sheets (linhas individuais via carregarPagina)
+    var devs = await lerDadoAppSheets("bcs_devolutivas_crav_blob");
+    if(devs && Array.isArray(devs)){
+      state.devolutivasCrav = _mergeById(state.devolutivasCrav||[], devs);
+      localStorage.setItem("bcs_devolutivas_crav", JSON.stringify(state.devolutivasCrav));
+    }
+  }catch(e){ console.log("[CRAV] Erro ao sincronizar devolutivas:", e); }
+}
+
+// ══════════════════════════════════════════════════════════════════
+// MÓDULO CONSELHO COMUNITÁRIO
+// ══════════════════════════════════════════════════════════════════
+function salvarConselho(){
+  localStorage.setItem("bcs_conselho_atas",       JSON.stringify(state.conselho_atas||[]));
+  localStorage.setItem("bcs_conselho_associados",  JSON.stringify(state.conselho_associados||[]));
+  localStorage.setItem("bcs_conselho_diretoria",   JSON.stringify(state.conselho_diretoria||[]));
+  salvarDadoAppSheets("bcs_conselho_atas",      state.conselho_atas||[]).catch(function(){});
+  salvarDadoAppSheets("bcs_conselho_associados", state.conselho_associados||[]).catch(function(){});
+  salvarDadoAppSheets("bcs_conselho_diretoria",  state.conselho_diretoria||[]).catch(function(){});
+}
+
+function renderModuloConselho(main){
+  if(!main) return;
+  var tab = state.conselho_tab || "atas";
+  var h = [];
+  var IS = "width:100%;background:#0a1a12;border:1px solid #1a3a22;color:#d0f0d8;padding:9px 11px;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box";
+  var LS = "color:#22c55e88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px";
+
+  h.push("<div style='max-width:860px;margin:0 auto;padding:16px 20px 60px'>");
+
+  // Header
+  h.push("<div style='display:flex;align-items:center;gap:12px;margin-bottom:18px;padding:14px 18px;background:linear-gradient(135deg,#061a0e,#0a2a14);border:1px solid #22c55e33;border-radius:12px'>");
+  h.push("<div style='width:44px;height:44px;background:#0a2a14;border:2px solid #22c55e;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0'>🏛</div>");
+  h.push("<div style='flex:1'><h2 style='color:#e8ffe8;font-size:16px;font-weight:700;margin:0 0 2px'>Conselho Comunitário de Segurança</h2><p style='color:#22c55e88;font-size:10px;margin:0;letter-spacing:.5px'>77ª CIPM · Nova Cidade / BCS</p></div>");
+  h.push("</div>");
+
+  // Tabs
+  var tabs=[["atas","📋 Atas"],["associados","👥 Associados"],["diretoria","🏅 Diretoria"],["calendario","📅 Calendário"]];
+  h.push("<div style='display:flex;gap:6px;margin-bottom:18px;border-bottom:1px solid #1a3a22;padding-bottom:12px;flex-wrap:wrap'>");
+  tabs.forEach(function(t){
+    var sel = tab===t[0];
+    h.push("<button onclick=\"state.conselho_tab='"+t[0]+"';renderModuloConselho(document.getElementById('main'))\" style='background:"+(sel?"#0a3a1a":"#061a0e")+";border:1px solid "+(sel?"#22c55e":"#1a3a22")+";color:"+(sel?"#c8ffd8":"#22c55e88")+";padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>"+t[1]+"</button>");
+  });
+  h.push("</div>");
+
+  // ── ABA: ATAS ──────────────────────────────────────────────────
+  if(tab==="atas"){
+    h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'>");
+    h.push("<p style='color:#22c55e;font-size:13px;font-weight:700;margin:0'>"+((state.conselho_atas||[]).length)+" ata(s) registrada(s)</p>");
+    h.push("<button onclick='abrirModalAta()' style='background:#0a3a1a;border:1px solid #22c55e;color:#22c55e;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>+ Nova Ata</button>");
+    h.push("</div>");
+    if(!(state.conselho_atas||[]).length){
+      h.push("<div style='text-align:center;padding:60px 20px;color:#1a4a2a'><div style='font-size:40px;margin-bottom:12px'>📋</div><p style='font-size:14px;color:#22c55e44'>Nenhuma ata registrada</p></div>");
+    } else {
+      var atasOrd = (state.conselho_atas||[]).slice().sort(function(a,b){return (b.data||"")>(a.data||"")?1:-1;});
+      atasOrd.forEach(function(a){
+        h.push("<div style='background:#061a0e;border:1px solid #1a3a22;border-left:3px solid #22c55e;border-radius:8px;padding:14px 16px;margin-bottom:8px'>");
+        h.push("<div style='display:flex;justify-content:space-between;align-items:flex-start;gap:10px'>");
+        h.push("<div style='flex:1'>");
+        h.push("<div style='display:flex;align-items:center;gap:8px;margin-bottom:4px'>");
+        h.push("<span style='background:#22c55e22;color:#22c55e;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>Nº "+esc(a.numero||"--")+"</span>");
+        h.push("<span style='color:#4a7a5a;font-size:11px'>"+fmtData(a.data)+(a.hora?" · "+a.hora:"")+"</span>");
+        h.push("</div>");
+        h.push("<p style='color:#c8ffd8;font-size:13px;font-weight:600;margin:0 0 4px'>"+esc(a.pauta||"Sem título")+"</p>");
+        if(a.presentes&&a.presentes.length) h.push("<p style='color:#4a7a5a;font-size:11px;margin:0'>"+a.presentes.length+" presente(s)</p>");
+        h.push("</div>");
+        h.push("<div style='display:flex;gap:6px'>");
+        h.push("<button onclick='verAta(\""+a.id+"\")' style='background:#0a2a14;border:1px solid #22c55e44;color:#22c55e;padding:4px 10px;border-radius:5px;font-size:10px;cursor:pointer'>Ver</button>");
+        h.push("<button onclick='excluirAta(\""+a.id+"\")' style='background:#1a0808;border:1px solid #c0505044;color:#c05050;padding:4px 10px;border-radius:5px;font-size:10px;cursor:pointer'>🗑</button>");
+        h.push("</div></div></div>");
+      });
+    }
+  }
+
+  // ── ABA: ASSOCIADOS ──────────────────────────────────────────
+  if(tab==="associados"){
+    var assocAtivos = (state.conselho_associados||[]).filter(function(a){return a.status!=="inativo";});
+    h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'>");
+    h.push("<p style='color:#22c55e;font-size:13px;font-weight:700;margin:0'>"+assocAtivos.length+" associado(s) ativo(s)</p>");
+    h.push("<button onclick='abrirModalAssociado()' style='background:#0a3a1a;border:1px solid #22c55e;color:#22c55e;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>+ Cadastrar</button>");
+    h.push("</div>");
+    if(!(state.conselho_associados||[]).length){
+      h.push("<div style='text-align:center;padding:60px 20px;color:#1a4a2a'><div style='font-size:40px;margin-bottom:12px'>👥</div><p style='font-size:14px;color:#22c55e44'>Nenhum associado cadastrado</p></div>");
+    } else {
+      (state.conselho_associados||[]).slice().sort(function(a,b){return (a.nome||"")>(b.nome||"")?1:-1;}).forEach(function(a){
+        var ativo = a.status !== "inativo";
+        h.push("<div style='background:#061a0e;border:1px solid #1a3a22;border-radius:8px;padding:12px 14px;margin-bottom:6px;display:flex;align-items:center;gap:12px'>");
+        h.push("<div style='width:36px;height:36px;background:#0a2a14;border:1px solid #22c55e44;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0'>👤</div>");
+        h.push("<div style='flex:1'>");
+        h.push("<p style='color:#c8ffd8;font-size:13px;font-weight:600;margin:0 0 2px'>"+esc(a.nome||"--")+"</p>");
+        h.push("<p style='color:#4a7a5a;font-size:11px;margin:0'>"+esc(a.bairro||"")+(a.telefone?" · "+esc(a.telefone):"")+"</p>");
+        h.push("</div>");
+        h.push("<span style='background:"+(ativo?"#22c55e22":"#4a4a4a22")+";color:"+(ativo?"#22c55e":"#6a6a6a")+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+(ativo?"Ativo":"Inativo")+"</span>");
+        h.push("<button onclick='verAssociado(\""+a.id+"\")' style='background:#0a2a14;border:1px solid #22c55e44;color:#22c55e;padding:4px 10px;border-radius:5px;font-size:10px;cursor:pointer'>Ver</button>");
+        h.push("</div>");
+      });
+    }
+  }
+
+  // ── ABA: DIRETORIA ─────────────────────────────────────────────
+  if(tab==="diretoria"){
+    h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'>");
+    h.push("<p style='color:#22c55e;font-size:13px;font-weight:700;margin:0'>Composição da Diretoria</p>");
+    h.push("<button onclick='abrirModalDiretoria()' style='background:#0a3a1a;border:1px solid #22c55e;color:#22c55e;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>+ Adicionar</button>");
+    h.push("</div>");
+    if(!(state.conselho_diretoria||[]).length){
+      h.push("<div style='text-align:center;padding:60px 20px;color:#1a4a2a'><div style='font-size:40px;margin-bottom:12px'>🏅</div><p style='font-size:14px;color:#22c55e44'>Nenhum membro da diretoria cadastrado</p></div>");
+    } else {
+      var cargosOrdem=["Presidente","Vice-Presidente","Secretário","Tesoureiro","Conselheiro"];
+      var dirOrd=(state.conselho_diretoria||[]).slice().sort(function(a,b){
+        return (cargosOrdem.indexOf(a.cargo)+1||99)-(cargosOrdem.indexOf(b.cargo)+1||99);
+      });
+      dirOrd.forEach(function(m){
+        var ativo=!m.mandato_fim||(m.mandato_fim>=hoje());
+        h.push("<div style='background:#061a0e;border:1px solid #1a3a22;border-radius:8px;padding:14px 16px;margin-bottom:8px;display:flex;align-items:center;gap:12px'>");
+        h.push("<div style='flex-shrink:0;width:44px;height:44px;background:#0a2a14;border:2px solid #22c55e44;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px'>🏅</div>");
+        h.push("<div style='flex:1'>");
+        h.push("<p style='color:#c8ffd8;font-size:14px;font-weight:700;margin:0 0 2px'>"+esc(m.nome||"--")+"</p>");
+        h.push("<p style='color:#22c55e;font-size:11px;font-weight:700;margin:0 0 2px;text-transform:uppercase;letter-spacing:.5px'>"+esc(m.cargo||"")+"</p>");
+        if(m.telefone) h.push("<p style='color:#4a7a5a;font-size:11px;margin:0'>📞 "+esc(m.telefone)+"</p>");
+        if(m.mandato_inicio) h.push("<p style='color:#3a5a3a;font-size:10px;margin:2px 0 0'>Mandato: "+fmtData(m.mandato_inicio)+(m.mandato_fim?" até "+fmtData(m.mandato_fim):"")+"</p>");
+        h.push("</div>");
+        h.push("<div style='display:flex;flex-direction:column;align-items:flex-end;gap:6px'>");
+        h.push("<span style='background:"+(ativo?"#22c55e22":"#4a4a4a22")+";color:"+(ativo?"#22c55e":"#6a6a6a")+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+(ativo?"Em exercício":"Mandato encerrado")+"</span>");
+        h.push("<button onclick='excluirDiretoria(\""+m.id+"\")' style='background:#1a0808;border:1px solid #c0505044;color:#c05050;padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer'>🗑</button>");
+        h.push("</div></div>");
+      });
+    }
+  }
+
+  // ── ABA: CALENDÁRIO ────────────────────────────────────────────
+  if(tab==="calendario"){
+    var evConselho=(state.eventosAvulsos||[]).filter(function(e){return e.tipo==="Conselho";}).sort(function(a,b){return a.data>b.data?1:-1;});
+    var evFut=evConselho.filter(function(e){return e.data>=hoje();});
+    var evPass=evConselho.filter(function(e){return e.data<hoje();});
+    h.push("<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:12px'>");
+    h.push("<p style='color:#22c55e;font-size:13px;font-weight:700;margin:0'>"+evFut.length+" evento(s) próximo(s)</p>");
+    h.push("<button onclick='abrirModalEventoConselho()' style='background:#0a3a1a;border:1px solid #22c55e;color:#22c55e;padding:8px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>+ Agendar</button>");
+    h.push("</div>");
+    function _renderEvs(lista,titulo){
+      if(!lista.length) return;
+      h.push("<p style='color:#22c55e88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:14px 0 6px'>"+titulo+"</p>");
+      lista.forEach(function(e){
+        h.push("<div style='background:#061a0e;border:1px solid #1a3a22;border-left:3px solid "+esc(e.cor||"#22c55e")+";border-radius:8px;padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;gap:10px'>");
+        h.push("<div style='flex:1'>");
+        h.push("<p style='color:#c8ffd8;font-size:13px;font-weight:600;margin:0 0 2px'>"+esc(e.titulo||"Evento")+"</p>");
+        h.push("<p style='color:#4a7a5a;font-size:11px;margin:0'>"+fmtData(e.data)+(e.hora?" · "+e.hora:"")+(e.local?" · "+esc(e.local):"")+"</p>");
+        h.push("</div>");
+        h.push("<button onclick='excluirEventoConselho(\""+e.id+"\")' style='background:#1a0808;border:1px solid #c0505044;color:#c05050;padding:3px 8px;border-radius:5px;font-size:10px;cursor:pointer'>🗑</button>");
+        h.push("</div>");
+      });
+    }
+    _renderEvs(evFut,"Próximos");
+    _renderEvs(evPass,"Realizados");
+    if(!evConselho.length){
+      h.push("<div style='text-align:center;padding:60px 20px'><div style='font-size:40px;margin-bottom:12px'>📅</div><p style='font-size:14px;color:#22c55e44'>Nenhum evento agendado</p></div>");
+    }
+  }
+
+  h.push("</div>");
+  main.innerHTML = h.join("");
+}
+
+// ── Modais do Conselho ───────────────────────────────────────────
+window.abrirModalAta = function(){
+  var m=document.createElement("div");
+  m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto";
+  var IS="width:100%;background:#0a1a12;border:1px solid #1a3a22;color:#d0f0d8;padding:9px 11px;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box";
+  var LS="color:#22c55e88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px";
+  m.innerHTML=[
+    "<div style='background:#061a0e;border:1px solid #22c55e33;border-radius:14px;max-width:640px;width:100%;margin:auto;padding:22px'>",
+    "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>",
+    "<h3 style='color:#c8ffd8;font-size:15px;font-weight:700;margin:0'>📋 Nova Ata de Reunião</h3>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#1a3a22;border:1px solid #2a4a2a;color:#4a7a5a;width:30px;height:30px;border-radius:6px;font-size:16px;cursor:pointer;line-height:1'>×</button>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:12px'>",
+    "<div><label style='"+LS+"'>Número</label><input id='ata-num' type='text' placeholder='001/2026' style='"+IS+"'></div>",
+    "<div><label style='"+LS+"'>Data</label><input id='ata-data' type='date' value='"+hoje()+"' style='"+IS+"'></div>",
+    "<div><label style='"+LS+"'>Hora</label><input id='ata-hora' type='time' value='19:00' style='"+IS+"'></div>",
+    "</div>",
+    "<div style='margin-bottom:12px'><label style='"+LS+"'>Local</label><input id='ata-local' type='text' placeholder='Ex: Sede da BCS' style='"+IS+"'></div>",
+    "<div style='margin-bottom:12px'><label style='"+LS+"'>Pauta / Assunto</label><input id='ata-pauta' type='text' placeholder='Assunto principal da reunião' style='"+IS+"'></div>",
+    "<div style='margin-bottom:12px'><label style='"+LS+"'>Presentes (um por linha)</label><textarea id='ata-presentes' rows='4' placeholder='João Silva\nMaria Souza\n...' style='"+IS+";resize:vertical;font-family:inherit'></textarea></div>",
+    "<div style='margin-bottom:16px'><label style='"+LS+"'>Deliberações / Resumo</label><textarea id='ata-deliberacoes' rows='5' placeholder='Decisões tomadas, encaminhamentos, observações...' style='"+IS+";resize:vertical;font-family:inherit'></textarea></div>",
+    "<div style='display:grid;grid-template-columns:1fr 2fr;gap:10px'>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#0a1a12;border:1px solid #1a3a22;color:#4a7a5a;padding:11px;border-radius:8px;font-size:13px;cursor:pointer'>Cancelar</button>",
+    "<button id='btn-salvar-ata' style='background:linear-gradient(135deg,#0a3a1a,#1a5a2a);border:1px solid #22c55e;color:#c8ffd8;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Salvar Ata</button>",
+    "</div></div>"
+  ].join("");
+  document.body.appendChild(m);
+  m.onclick=function(e){if(e.target===this)this.remove();};
+  document.getElementById("btn-salvar-ata").onclick=function(){
+    var num=(document.getElementById("ata-num")||{value:""}).value.trim();
+    var data=(document.getElementById("ata-data")||{value:""}).value;
+    var hora=(document.getElementById("ata-hora")||{value:""}).value;
+    var local=(document.getElementById("ata-local")||{value:""}).value.trim();
+    var pauta=(document.getElementById("ata-pauta")||{value:""}).value.trim();
+    var presRaw=(document.getElementById("ata-presentes")||{value:""}).value;
+    var deliber=(document.getElementById("ata-deliberacoes")||{value:""}).value.trim();
+    if(!data||!pauta){showToast("Preencha data e pauta","error");return;}
+    var presentes=presRaw.split("\n").map(function(p){return p.trim();}).filter(Boolean);
+    var ata={id:"ATA_"+Date.now(),criadoEm:new Date().toISOString(),numero:num,data:data,hora:hora,local:local,pauta:pauta,presentes:presentes,deliberacoes:deliber};
+    if(!state.conselho_atas) state.conselho_atas=[];
+    state.conselho_atas.push(ata);
+    salvarConselho();
+    showToast("✓ Ata salva!");
+    m.remove();
+    renderModuloConselho(document.getElementById("main"));
+  };
+};
+
+window.verAta = function(id){
+  var a=(state.conselho_atas||[]).find(function(x){return x.id===id;});
+  if(!a) return;
+  var m=document.createElement("div");
+  m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto";
+  m.innerHTML=[
+    "<div style='background:#061a0e;border:1px solid #22c55e33;border-radius:14px;max-width:640px;width:100%;margin:auto;padding:22px'>",
+    "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>",
+    "<div><span style='background:#22c55e22;color:#22c55e;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;display:block;margin-bottom:4px'>Nº "+esc(a.numero||"--")+"</span><h3 style='color:#c8ffd8;font-size:15px;font-weight:700;margin:0'>"+esc(a.pauta||"Sem título")+"</h3></div>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#1a3a22;border:1px solid #2a4a2a;color:#4a7a5a;width:30px;height:30px;border-radius:6px;font-size:16px;cursor:pointer;line-height:1'>×</button>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px'>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Data</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+fmtData(a.data)+(a.hora?" às "+a.hora:"")+"</p></div>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Local</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+esc(a.local||"--")+"</p></div>",
+    "</div>",
+    a.presentes&&a.presentes.length?"<div style='background:#0a2a14;border:1px solid #1a3a22;border-radius:8px;padding:12px;margin-bottom:12px'><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 8px'>Presentes ("+a.presentes.length+")</p><div style='display:flex;flex-wrap:wrap;gap:5px'>"+a.presentes.map(function(p){return "<span style='background:#0a3a1a;border:1px solid #22c55e22;color:#a8e8b8;padding:3px 8px;border-radius:12px;font-size:11px'>"+esc(p)+"</span>";}).join("")+"</div></div>":"",
+    a.deliberacoes?"<div style='background:#0a2a14;border:1px solid #1a3a22;border-radius:8px;padding:12px;margin-bottom:14px'><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 8px'>Deliberações</p><p style='color:#c8ffd8;font-size:12px;line-height:1.7;margin:0;white-space:pre-wrap'>"+esc(a.deliberacoes)+"</p></div>":"",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='width:100%;background:#0a1a12;border:1px solid #1a3a22;color:#4a7a5a;padding:10px;border-radius:8px;font-size:13px;cursor:pointer'>Fechar</button>",
+    "</div>"
+  ].join("");
+  document.body.appendChild(m);
+  m.onclick=function(e){if(e.target===this)this.remove();};
+};
+
+window.excluirAta=function(id){
+  if(!confirm("Excluir esta ata?")) return;
+  state.conselho_atas=(state.conselho_atas||[]).filter(function(a){return a.id!==id;});
+  salvarConselho(); showToast("Ata excluída");
+  renderModuloConselho(document.getElementById("main"));
+};
+
+window.abrirModalAssociado = function(){
+  var m=document.createElement("div");
+  m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto";
+  var IS="width:100%;background:#0a1a12;border:1px solid #1a3a22;color:#d0f0d8;padding:9px 11px;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box";
+  var LS="color:#22c55e88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px";
+  m.innerHTML=[
+    "<div style='background:#061a0e;border:1px solid #22c55e33;border-radius:14px;max-width:640px;width:100%;margin:auto;padding:22px'>",
+    "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>",
+    "<h3 style='color:#c8ffd8;font-size:15px;font-weight:700;margin:0'>👤 Cadastrar Associado</h3>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#1a3a22;border:1px solid #2a4a2a;color:#4a7a5a;width:30px;height:30px;border-radius:6px;font-size:16px;cursor:pointer;line-height:1'>×</button>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:2fr 1fr;gap:10px;margin-bottom:12px'>",
+    "<div><label style='"+LS+"'>Nome Completo</label><input id='as-nome' type='text' style='"+IS+"'></div>",
+    "<div><label style='"+LS+"'>CPF</label><input id='as-cpf' type='text' placeholder='000.000.000-00' style='"+IS+"'></div>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px'>",
+    "<div><label style='"+LS+"'>Telefone</label><input id='as-tel' type='text' style='"+IS+"'></div>",
+    "<div><label style='"+LS+"'>Email</label><input id='as-email' type='email' style='"+IS+"'></div>",
+    "</div>",
+    "<div style='margin-bottom:12px'><label style='"+LS+"'>Endereço</label><input id='as-end' type='text' style='"+IS+"'></div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px'>",
+    "<div><label style='"+LS+"'>Bairro</label><input id='as-bairro' type='text' style='"+IS+"'></div>",
+    "<div><label style='"+LS+"'>Profissão</label><input id='as-profissao' type='text' style='"+IS+"'></div>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 2fr;gap:10px'>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#0a1a12;border:1px solid #1a3a22;color:#4a7a5a;padding:11px;border-radius:8px;font-size:13px;cursor:pointer'>Cancelar</button>",
+    "<button id='btn-salvar-assoc' style='background:linear-gradient(135deg,#0a3a1a,#1a5a2a);border:1px solid #22c55e;color:#c8ffd8;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Salvar</button>",
+    "</div></div>"
+  ].join("");
+  document.body.appendChild(m);
+  m.onclick=function(e){if(e.target===this)this.remove();};
+  document.getElementById("btn-salvar-assoc").onclick=function(){
+    var nome=(document.getElementById("as-nome")||{value:""}).value.trim();
+    if(!nome){showToast("Informe o nome","error");return;}
+    var assoc={
+      id:"ASSOC_"+Date.now(), criadoEm:new Date().toISOString(),
+      nome:nome, cpf:(document.getElementById("as-cpf")||{value:""}).value.trim(),
+      telefone:(document.getElementById("as-tel")||{value:""}).value.trim(),
+      email:(document.getElementById("as-email")||{value:""}).value.trim(),
+      endereco:(document.getElementById("as-end")||{value:""}).value.trim(),
+      bairro:(document.getElementById("as-bairro")||{value:""}).value.trim(),
+      profissao:(document.getElementById("as-profissao")||{value:""}).value.trim(),
+      data_inscricao:hoje(), status:"ativo", assinatura_b64:""
+    };
+    if(!state.conselho_associados) state.conselho_associados=[];
+    state.conselho_associados.push(assoc);
+    salvarConselho(); showToast("✓ Associado cadastrado!");
+    m.remove();
+    renderModuloConselho(document.getElementById("main"));
+  };
+};
+
+window.verAssociado=function(id){
+  var a=(state.conselho_associados||[]).find(function(x){return x.id===id;});
+  if(!a) return;
+  var m=document.createElement("div");
+  m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto";
+  m.innerHTML=[
+    "<div style='background:#061a0e;border:1px solid #22c55e33;border-radius:14px;max-width:560px;width:100%;margin:auto;padding:22px'>",
+    "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>",
+    "<h3 style='color:#c8ffd8;font-size:15px;font-weight:700;margin:0'>👤 "+esc(a.nome)+"</h3>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#1a3a22;border:1px solid #2a4a2a;color:#4a7a5a;width:30px;height:30px;border-radius:6px;font-size:16px;cursor:pointer;line-height:1'>×</button>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px'>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>CPF</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+esc(a.cpf||"--")+"</p></div>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Telefone</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+esc(a.telefone||"--")+"</p></div>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Bairro</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+esc(a.bairro||"--")+"</p></div>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Profissão</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+esc(a.profissao||"--")+"</p></div>",
+    "<div style='grid-column:1/-1'><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Endereço</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+esc(a.endereco||"--")+"</p></div>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Inscrito em</p><p style='color:#c8ffd8;font-size:12px;margin:0'>"+fmtData(a.data_inscricao||"")+"</p></div>",
+    "<div><p style='color:#22c55e88;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 2px'>Status</p><p style='color:"+(a.status==="ativo"?"#22c55e":"#6a6a6a")+";font-size:12px;font-weight:700;margin:0'>"+(a.status==="ativo"?"Ativo":"Inativo")+"</p></div>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px'>",
+    "<button onclick='inativarAssociado(\""+a.id+"\")' style='background:#1a1a12;border:1px solid #4a4a22;color:#8a8a4a;padding:9px;border-radius:7px;font-size:12px;cursor:pointer'>"+(a.status==="ativo"?"Inativar":"Reativar")+"</button>",
+    "<button onclick='excluirAssociado(\""+a.id+"\");this.closest(\"div[style*=fixed]\").remove()' style='background:#1a0808;border:1px solid #c0505044;color:#c05050;padding:9px;border-radius:7px;font-size:12px;cursor:pointer'>🗑 Excluir</button>",
+    "</div></div>"
+  ].join("");
+  document.body.appendChild(m);
+  m.onclick=function(e){if(e.target===this)this.remove();};
+};
+
+window.inativarAssociado=function(id){
+  var a=(state.conselho_associados||[]).find(function(x){return x.id===id;});
+  if(!a) return;
+  a.status=a.status==="ativo"?"inativo":"ativo";
+  salvarConselho(); showToast("Status atualizado");
+  document.querySelectorAll("div[style*='fixed']").forEach(function(el){if(el.querySelector("h3")) el.remove();});
+  renderModuloConselho(document.getElementById("main"));
+};
+
+window.excluirAssociado=function(id){
+  if(!confirm("Excluir associado?")) return;
+  state.conselho_associados=(state.conselho_associados||[]).filter(function(a){return a.id!==id;});
+  salvarConselho(); showToast("Associado excluído");
+  renderModuloConselho(document.getElementById("main"));
+};
+
+window.abrirModalDiretoria=function(){
+  var m=document.createElement("div");
+  m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px";
+  var IS="width:100%;background:#0a1a12;border:1px solid #1a3a22;color:#d0f0d8;padding:9px 11px;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box";
+  var LS="color:#22c55e88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px";
+  var cargos=["Presidente","Vice-Presidente","Secretário","Tesoureiro","Conselheiro","Suplente"];
+  m.innerHTML=[
+    "<div style='background:#061a0e;border:1px solid #22c55e33;border-radius:14px;max-width:500px;width:100%;padding:22px'>",
+    "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>",
+    "<h3 style='color:#c8ffd8;font-size:15px;font-weight:700;margin:0'>🏅 Membro da Diretoria</h3>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#1a3a22;border:1px solid #2a4a2a;color:#4a7a5a;width:30px;height:30px;border-radius:6px;font-size:16px;cursor:pointer;line-height:1'>×</button>",
+    "</div>",
+    "<div style='margin-bottom:12px'><label style='"+LS+"'>Nome</label><input id='dir-nome' type='text' style='"+IS+"'></div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px'>",
+    "<div><label style='"+LS+"'>Cargo</label><select id='dir-cargo' style='"+IS+"'>"+cargos.map(function(c){return "<option>"+c+"</option>";}).join("")+"</select></div>",
+    "<div><label style='"+LS+"'>Telefone</label><input id='dir-tel' type='text' style='"+IS+"'></div>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px'>",
+    "<div><label style='"+LS+"'>Início do Mandato</label><input id='dir-inicio' type='date' value='"+hoje()+"' style='"+IS+"'></div>",
+    "<div><label style='"+LS+"'>Fim do Mandato</label><input id='dir-fim' type='date' style='"+IS+"'></div>",
+    "</div>",
+    "<div style='display:grid;grid-template-columns:1fr 2fr;gap:10px'>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#0a1a12;border:1px solid #1a3a22;color:#4a7a5a;padding:11px;border-radius:8px;font-size:13px;cursor:pointer'>Cancelar</button>",
+    "<button id='btn-salvar-dir' style='background:linear-gradient(135deg,#0a3a1a,#1a5a2a);border:1px solid #22c55e;color:#c8ffd8;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Salvar</button>",
+    "</div></div>"
+  ].join("");
+  document.body.appendChild(m);
+  m.onclick=function(e){if(e.target===this)this.remove();};
+  document.getElementById("btn-salvar-dir").onclick=function(){
+    var nome=(document.getElementById("dir-nome")||{value:""}).value.trim();
+    if(!nome){showToast("Informe o nome","error");return;}
+    var mem={
+      id:"DIR_"+Date.now(), criadoEm:new Date().toISOString(),
+      nome:nome, cargo:(document.getElementById("dir-cargo")||{value:""}).value,
+      telefone:(document.getElementById("dir-tel")||{value:""}).value.trim(),
+      mandato_inicio:(document.getElementById("dir-inicio")||{value:""}).value,
+      mandato_fim:(document.getElementById("dir-fim")||{value:""}).value
+    };
+    if(!state.conselho_diretoria) state.conselho_diretoria=[];
+    state.conselho_diretoria.push(mem);
+    salvarConselho(); showToast("✓ Membro adicionado!");
+    m.remove();
+    renderModuloConselho(document.getElementById("main"));
+  };
+};
+
+window.excluirDiretoria=function(id){
+  if(!confirm("Remover da diretoria?")) return;
+  state.conselho_diretoria=(state.conselho_diretoria||[]).filter(function(m){return m.id!==id;});
+  salvarConselho(); showToast("Removido");
+  renderModuloConselho(document.getElementById("main"));
+};
+
+window.abrirModalEventoConselho=function(){
+  var m=document.createElement("div");
+  m.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9000;display:flex;align-items:center;justify-content:center;padding:20px";
+  var IS="width:100%;background:#0a1a12;border:1px solid #1a3a22;color:#d0f0d8;padding:9px 11px;border-radius:6px;font-size:13px;outline:none;box-sizing:border-box";
+  var LS="color:#22c55e88;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:4px";
+  m.innerHTML=[
+    "<div style='background:#061a0e;border:1px solid #22c55e33;border-radius:14px;max-width:480px;width:100%;padding:22px'>",
+    "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:18px'>",
+    "<h3 style='color:#c8ffd8;font-size:15px;font-weight:700;margin:0'>📅 Agendar Evento</h3>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#1a3a22;border:1px solid #2a4a2a;color:#4a7a5a;width:30px;height:30px;border-radius:6px;font-size:16px;cursor:pointer;line-height:1'>×</button>",
+    "</div>",
+    "<div style='margin-bottom:12px'><label style='"+LS+"'>Título</label><input id='cev-titulo' type='text' placeholder='Ex: Reunião Ordinária' style='"+IS+"'></div>",
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px'>",
+    "<div><label style='"+LS+"'>Data</label><input id='cev-data' type='date' value='"+hoje()+"' style='"+IS+"'></div>",
+    "<div><label style='"+LS+"'>Hora</label><input id='cev-hora' type='time' value='19:00' style='"+IS+"'></div>",
+    "</div>",
+    "<div style='margin-bottom:16px'><label style='"+LS+"'>Local</label><input id='cev-local' type='text' placeholder='Ex: Sede da BCS' style='"+IS+"'></div>",
+    "<div style='display:grid;grid-template-columns:1fr 2fr;gap:10px'>",
+    "<button onclick='this.closest(\"div[style*=fixed]\").remove()' style='background:#0a1a12;border:1px solid #1a3a22;color:#4a7a5a;padding:11px;border-radius:8px;font-size:13px;cursor:pointer'>Cancelar</button>",
+    "<button id='btn-salvar-cev' style='background:linear-gradient(135deg,#0a3a1a,#1a5a2a);border:1px solid #22c55e;color:#c8ffd8;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Agendar</button>",
+    "</div></div>"
+  ].join("");
+  document.body.appendChild(m);
+  m.onclick=function(e){if(e.target===this)this.remove();};
+  document.getElementById("btn-salvar-cev").onclick=function(){
+    var titulo=(document.getElementById("cev-titulo")||{value:""}).value.trim();
+    var data=(document.getElementById("cev-data")||{value:""}).value;
+    if(!titulo||!data){showToast("Preencha título e data","error");return;}
+    var ev={id:"CEV_"+Date.now(),criadoEm:new Date().toISOString(),
+      tipo:"Conselho",titulo:titulo,data:data,
+      hora:(document.getElementById("cev-hora")||{value:""}).value,
+      local:(document.getElementById("cev-local")||{value:""}).value.trim(),
+      cor:"#22c55e"};
+    if(!state.eventosAvulsos) state.eventosAvulsos=[];
+    state.eventosAvulsos.push(ev);
+    salvarLocal();
+    salvarDadoAppSheets("bcs_eventos_avulsos", state.eventosAvulsos).catch(function(){});
+    showToast("✓ Evento agendado!");
+    m.remove();
+    renderModuloConselho(document.getElementById("main"));
+  };
+};
+
+window.excluirEventoConselho=function(id){
+  if(!confirm("Excluir este evento?")) return;
+  state.eventosAvulsos=(state.eventosAvulsos||[]).filter(function(e){return e.id!==id;});
+  salvarLocal(); showToast("Evento excluído");
+  renderModuloConselho(document.getElementById("main"));
+};
+
+// ── Carregar dados do conselho do Sheets ──────────────────────────
+async function carregarConselhoDoSheets(){
+  if(!SHEETS_URL) return;
+  try{
+    var atas=await lerDadoAppSheets("bcs_conselho_atas");
+    var assoc=await lerDadoAppSheets("bcs_conselho_associados");
+    var dir=await lerDadoAppSheets("bcs_conselho_diretoria");
+    if(atas&&Array.isArray(atas)) state.conselho_atas=_mergeById(state.conselho_atas||[],atas);
+    if(assoc&&Array.isArray(assoc)) state.conselho_associados=_mergeById(state.conselho_associados||[],assoc);
+    if(dir&&Array.isArray(dir)) state.conselho_diretoria=_mergeById(state.conselho_diretoria||[],dir);
+    localStorage.setItem("bcs_conselho_atas",JSON.stringify(state.conselho_atas||[]));
+    localStorage.setItem("bcs_conselho_associados",JSON.stringify(state.conselho_associados||[]));
+    localStorage.setItem("bcs_conselho_diretoria",JSON.stringify(state.conselho_diretoria||[]));
+  }catch(e){ console.log("[Conselho] Erro ao carregar:",e); }
+}
+
 function abrirMonitorVCM(ocId){
   var ocVcm=state.db.ocorrencias.find(function(x){return x.id===ocId;});
   if(!ocVcm) return;
@@ -11018,7 +12001,10 @@ function abrirMonitorVCM(ocId){
   hf.push("<div style='padding:18px 20px;border-bottom:1px solid #5e4636;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:#3c2818;z-index:1;border-radius:16px 16px 0 0'>");
   hf.push("<div><p style='color:#ff1493;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;margin:0 0 2px'>Monitor VCM</p>");
   hf.push("<p style='color:#f2eada;font-size:14px;font-weight:700;margin:0'>"+(ocVcm.vitima_nome||"Vítima")+"</p></div>");
+  hf.push("<div style='display:flex;gap:8px;align-items:center'>");
+  hf.push("<button onclick='gerarLinkCrav(\""+ocVcm.id+"\")' title='Gerar link para CRAV preencher devolutiva' style='background:#2d0a4a;border:1px solid #a855f7;color:#c084fc;padding:6px 10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap'>🔗 Link CRAV</button>");
   hf.push("<button onclick='document.getElementById(\"modal-frida\").remove()' style='background:#42301e;border:1px solid #5e4636;color:#a07c58;width:32px;height:32px;border-radius:8px;font-size:16px;cursor:pointer'>✕</button>");
+  hf.push("</div>");
   hf.push("</div><div style='padding:20px'>");
   hf.push("<div style='background:#2a1c10;border:1px solid #5e4636;border-radius:10px;padding:16px;margin-bottom:16px'>");
   hf.push("<p style='color:#d4a87a;font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;margin:0 0 14px'>Resumo do Atendimento</p>");
@@ -11035,6 +12021,32 @@ function abrirMonitorVCM(ocId){
   hf.push("<button id='btn-vcm-agendar' style='flex:1;background:linear-gradient(135deg,#1a3a10,#2a5a18);border:none;color:#a8d890;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📅 Agendar Visita</button>");
   hf.push("<button id='btn-vcm-encerrar' style='flex:1;background:linear-gradient(135deg,#0a1a3a,#1a3a6a);border:none;color:#a8c0e8;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Encerrar Acompanhamento</button>");
   hf.push("</div></div>");
+  // ── Devolutivas CRAV ──────────────────────────────────────
+  var _devsCrav=(state.devolutivasCrav||[]).filter(function(d){return d.ocorrenciaId===ocVcm.id;}).sort(function(a,b){return(b.data||b.timestamp||"")>(a.data||a.timestamp||"")?1:-1;});
+  hf.push("<div style='margin-bottom:14px;border:1px solid #7c3aed44;border-radius:10px;overflow:hidden'>");
+  hf.push("<div style='background:#1a0a2e;padding:12px 14px;display:flex;align-items:center;justify-content:space-between'>");
+  hf.push("<span style='color:#c084fc;font-size:12px;font-weight:700'>💜 Devolutivas CRAV</span>");
+  hf.push("<span style='background:#7c3aed33;color:#a855f7;padding:2px 8px;border-radius:12px;font-size:11px;font-weight:700'>"+_devsCrav.length+"</span>");
+  hf.push("</div>");
+  if(!_devsCrav.length){
+    hf.push("<p style='color:#7c3aed66;font-size:12px;padding:12px 14px;margin:0'>Nenhuma devolutiva recebida ainda.</p>");
+  } else {
+    _devsCrav.forEach(function(d){
+      var _sitCor=d.situacao==="Protegida / segura"?"#10b981":d.situacao==="Em situação de risco"?"#ef4444":d.situacao==="Não localizada"?"#f59e0b":"#7c3aed";
+      hf.push("<div style='padding:12px 14px;border-top:1px solid #7c3aed22;background:#2d1547'>");
+      hf.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:6px'>");
+      hf.push("<span style='color:#e9d5ff;font-size:12px;font-weight:700'>"+(d.tecnica||"—")+"</span>");
+      hf.push("<span style='color:#a78bfa88;font-size:10px'>"+(d.data||"").replace("T"," ").slice(0,16)+"</span>");
+      hf.push("</div>");
+      if(d.situacao) hf.push("<span style='background:"+_sitCor+"22;color:"+_sitCor+";padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700;display:inline-block;margin-bottom:6px'>"+d.situacao+"</span>");
+      if(d.tiposTexto) hf.push("<p style='color:#c4b5fd;font-size:11px;margin:0 0 4px'>"+d.tiposTexto+"</p>");
+      if(d.encaminhamento) hf.push("<p style='color:#a78bfa88;font-size:11px;margin:0 0 3px'>📤 "+d.encaminhamento+"</p>");
+      if(d.observacoes) hf.push("<p style='color:#d4b8f8;font-size:11px;margin:3px 0 0;font-style:italic;line-height:1.5'>\""+d.observacoes+"\"</p>");
+      hf.push("</div>");
+    });
+  }
+  hf.push("</div>");
+  // ── FRIDA ─────────────────────────────────────────────────
   hf.push("<div style='border:1px solid #3a2a18;border-radius:10px;overflow:hidden'>");
   hf.push("<button id='btn-frida-toggle' style='width:100%;background:#1a1208;border:none;color:#d4a87a;padding:14px 16px;text-align:left;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;gap:8px'><span id='frida-toggle-icon'>▶</span> Aplicar Avaliação de Risco FRIDA</button>");
   hf.push("<div id='frida-section' style='display:none;padding:16px;border-top:1px solid #3a2a18'>");
@@ -11102,6 +12114,7 @@ _carregando = false;
 if(SHEETS_URL){
   setTimeout(function(){
     carregarDoSheets(); // sempre busca tudo do Sheets
+    sincronizarDevolutivasCrav(); // sincroniza devolutivas do CRAV
   }, 300);
 }
 </script>
