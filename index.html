@@ -3698,6 +3698,23 @@ function gerarFichaVCMPDF(oc){
     h+="</div>";
   }
 
+  // ── Encaminhamento ao CRAV ───────────────────────
+  var _cravUrl = CRAV_BASE_URL + "crav-devolutiva.html"
+    + "?oc="     + encodeURIComponent(oc.id)
+    + "&nome="   + encodeURIComponent(oc.vitima_nome||"")
+    + "&bairro=" + encodeURIComponent(oc.bairro||"")
+    + "&ref="    + encodeURIComponent(oc.numero_bo||oc.id||"");
+  var _qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=130x130&margin=4&data=" + encodeURIComponent(_cravUrl);
+  h+="<div class='secao' style='margin-top:18px;page-break-inside:avoid'>";
+  h+="<div class='secao-tit' style='color:#6d28d9'>💜 Encaminhamento ao CRAV — Devolutiva Digital</div>";
+  h+="<div style='border:1.5px solid #c4b5fd;border-radius:6px;padding:12px 14px;background:#f5f0ff;display:flex;gap:14px;align-items:flex-start'>";
+  h+="<img src='"+_qrUrl+"' width='110' height='110' style='border-radius:4px;flex-shrink:0' alt='QR Code'/>";
+  h+="<div style='flex:1'>";
+  h+="<p style='font-size:10px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px'>Centro de Referência Albertina Vasconcelos</p>";
+  h+="<p style='font-size:10px;color:#4c1d95;margin-bottom:8px;line-height:1.6'>Após o atendimento, a técnica responsável deverá registrar a devolutiva escaneando o QR Code ou acessando o link abaixo. Os dados serão vinculados automaticamente à ficha desta assistida no sistema IARA.</p>";
+  h+="<div style='background:#ede9fe;border:1px solid #c4b5fd;border-radius:4px;padding:5px 8px;font-family:monospace;font-size:9px;color:#6d28d9;word-break:break-all;line-height:1.6'>"+_cravUrl+"</div>";
+  h+="</div></div></div>";
+
   // ── Rodapé / Assinaturas ─────────────────────────
   h+="<div class='rodape' style='margin-top:30px'>";
   h+="<div class='ass'><div class='ass-linha'></div>Policial Responsável</div>";
@@ -12173,9 +12190,7 @@ function abrirMonitorVCM(ocId){
   hf.push("<div style='display:flex;gap:10px;margin-top:14px'>");
   hf.push("<button id='btn-vcm-agendar' style='flex:1;background:linear-gradient(135deg,#1a3a10,#2a5a18);border:none;color:#a8d890;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📅 Agendar Visita</button>");
   hf.push("<button id='btn-vcm-encerrar' style='flex:1;background:linear-gradient(135deg,#0a1a3a,#1a3a6a);border:none;color:#a8c0e8;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Encerrar Acompanhamento</button>");
-  hf.push("</div>");
-  hf.push("<button onclick='imprimirFichaCrav(\""+ocVcm.id+"\")' style='width:100%;margin-top:10px;background:linear-gradient(135deg,#2d0a4a,#1a0a2e);border:2px solid #a855f7;color:#c084fc;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📄 Gerar Ficha de Encaminhamento ao CRAV</button>");
-  hf.push("</div>");
+  hf.push("</div></div>");
   // ── Devolutivas CRAV ──────────────────────────────────────
   var _devsCrav=(state.devolutivasCrav||[]).filter(function(d){return d.ocorrenciaId===ocVcm.id;}).sort(function(a,b){return(b.data||b.timestamp||"")>(a.data||a.timestamp||"")?1:-1;});
   hf.push("<div style='margin-bottom:14px;border:1px solid #7c3aed44;border-radius:10px;overflow:hidden'>");
