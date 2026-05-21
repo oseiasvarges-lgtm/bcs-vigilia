@@ -3705,11 +3705,18 @@ function gerarFichaVCMPDF(oc){
     + "&nome="   + encodeURIComponent(oc.vitima_nome||"")
     + "&bairro=" + encodeURIComponent(oc.bairro||"")
     + "&ref="    + encodeURIComponent(oc.numero_bo||oc.id||"");
+  var _qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=120x120&margin=4&data=" + encodeURIComponent(_cravUrl);
   h+="<div style='margin-top:18px;border:2px solid #7c3aed;border-radius:6px;padding:12px 14px;background:#f5f0ff;page-break-inside:avoid'>";
-  h+="<p style='font-size:10px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.5px;margin:0 0 6px'>&#128156; Encaminhamento ao CRAV — Devolutiva Digital</p>";
-  h+="<p style='font-size:10px;color:#4c1d95;margin:0 0 8px;line-height:1.6'>Apos o atendimento, a tecnica do CRAV deve acessar o link abaixo e registrar a devolutiva. Os dados chegam automaticamente a ficha desta assistida no sistema IARA.</p>";
+  h+="<p style='font-size:10px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.5px;margin:0 0 8px'>&#128156; Encaminhamento ao CRAV — Devolutiva Digital</p>";
+  h+="<table style='width:100%;border-collapse:collapse'><tr>";
+  h+="<td style='width:128px;padding-right:14px;vertical-align:top'>";
+  h+="<img src='"+_qrUrl+"' width='120' height='120' style='display:block;border-radius:4px;border:1px solid #c4b5fd' alt='QR Code'/>";
+  h+="<p style='font-size:8px;color:#7c3aed;text-align:center;margin:3px 0 0'>Escaneie para acessar</p>";
+  h+="</td><td style='vertical-align:top'>";
+  h+="<p style='font-size:10px;color:#4c1d95;margin:0 0 8px;line-height:1.6'>Apos o atendimento, a tecnica do CRAV deve escanear o QR Code ou acessar o link abaixo e registrar a devolutiva. Os dados chegam automaticamente a ficha desta assistida no sistema IARA.</p>";
   h+="<p style='font-size:9px;color:#555;margin:0 0 4px;font-weight:700'>Link de acesso:</p>";
-  h+="<div style='background:#ede9fe;border:1px solid #c4b5fd;border-radius:4px;padding:6px 10px;font-size:9px;color:#6d28d9;word-break:break-all;line-height:1.8'>"+_cravUrl+"</div>";
+  h+="<div style='background:#ede9fe;border:1px solid #c4b5fd;border-radius:4px;padding:5px 8px;font-size:8px;color:#6d28d9;word-break:break-all;line-height:1.8'>"+_cravUrl+"</div>";
+  h+="</td></tr></table>";
   h+="</div>";
 
   // ── Rodapé / Assinaturas ─────────────────────────
