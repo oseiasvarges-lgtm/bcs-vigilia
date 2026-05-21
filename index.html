@@ -11525,6 +11525,159 @@ function gerarLinkCrav(ocId){
   }
 }
 
+function imprimirFichaCrav(ocId){
+  var oc = (state.db.ocorrencias||[]).find(function(x){return x.id===ocId;});
+  if(!oc) return;
+  var url = CRAV_BASE_URL + "crav-devolutiva.html"
+    + "?oc="     + encodeURIComponent(oc.id)
+    + "&nome="   + encodeURIComponent(oc.vitima_nome||"")
+    + "&bairro=" + encodeURIComponent(oc.bairro||"")
+    + "&ref="    + encodeURIComponent(oc.numero_bo||oc.id||"");
+  var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=6&data=" + encodeURIComponent(url);
+  var hoje = new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"2-digit",year:"numeric"});
+  var mp = oc.medida_protetiva==="Sim" ? "✔ Sim" : oc.medida_protetiva==="Não"||oc.medida_protetiva==="Nao" ? "Não" : "—";
+  var tiposViolencia = [oc.tipo_violencia_fisica?"Física":"",oc.tipo_violencia_psicologica?"Psicológica":"",oc.tipo_violencia_sexual?"Sexual":"",oc.tipo_violencia_patrimonial?"Patrimonial":"",oc.tipo_violencia_moral?"Moral":""].filter(Boolean).join(", ")||oc.tipo||"—";
+
+  var win = window.open("","_blank","width=820,height=1100");
+  win.document.write(`<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Ficha de Encaminhamento CRAV — `+( oc.vitima_nome||"Vítima")+`</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:'Inter',Arial,sans-serif;background:#fff;color:#1a1a1a;font-size:13px;line-height:1.5}
+  @media print{
+    body{margin:0}
+    .no-print{display:none!important}
+    .page{box-shadow:none!important;margin:0!important;border-radius:0!important}
+  }
+  .page{max-width:720px;margin:20px auto;background:#fff;border:1px solid #ddd;border-radius:8px;overflow:hidden;box-shadow:0 2px 16px #0002}
+  .header{background:linear-gradient(135deg,#1a0a2e,#2d0a4a);padding:20px 24px;display:flex;align-items:center;gap:18px}
+  .header .bges{display:flex;flex-direction:column;gap:4px}
+  .header h1{color:#e9d5ff;font-size:15px;font-weight:900;letter-spacing:.5px;line-height:1.3}
+  .header p{color:#a78bfa88;font-size:11px;letter-spacing:.5px}
+  .header .selo{background:#2d0a4a;border:2px solid #a855f7;border-radius:50%;width:52px;height:52px;display:flex;align-items:center;justify-content:center;font-size:26px;flex-shrink:0}
+  .badge-confidencial{background:#7c3aed22;border:1px solid #a855f7;color:#c084fc;font-size:10px;font-weight:700;padding:3px 10px;border-radius:12px;letter-spacing:1px;text-transform:uppercase;display:inline-block;margin-top:8px}
+  .body{padding:20px 24px}
+  .section-title{font-size:10px;font-weight:700;color:#7c3aed;text-transform:uppercase;letter-spacing:1.5px;margin:18px 0 8px;padding-bottom:5px;border-bottom:1.5px solid #7c3aed33}
+  .section-title:first-child{margin-top:0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px 16px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px 12px}
+  .field label{display:block;font-size:10px;font-weight:700;color:#888;text-transform:uppercase;letter-spacing:.8px;margin-bottom:2px}
+  .field span{font-size:13px;font-weight:600;color:#1a1a1a}
+  .alerta{background:#fff5f5;border:1px solid #fca5a5;border-left:4px solid #ef4444;border-radius:6px;padding:10px 14px;margin:10px 0;display:flex;align-items:flex-start;gap:10px}
+  .alerta .ico{font-size:18px;flex-shrink:0}
+  .alerta p{font-size:12px;color:#7f1d1d;font-weight:600;line-height:1.5}
+  .link-block{background:#f5f0ff;border:1px solid #c4b5fd;border-radius:10px;padding:16px;margin:14px 0;display:flex;align-items:center;gap:16px}
+  .link-block .qr{flex-shrink:0}
+  .link-block .link-info h3{font-size:12px;font-weight:700;color:#6d28d9;text-transform:uppercase;letter-spacing:.8px;margin-bottom:6px}
+  .link-block .link-info p{font-size:11px;color:#4c1d95;margin-bottom:8px;line-height:1.5}
+  .link-block .link-url{font-size:10px;color:#7c3aed;word-break:break-all;background:#ede9fe;border:1px solid #c4b5fd;border-radius:6px;padding:6px 10px;font-family:monospace;line-height:1.6}
+  .instrucoes{background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;padding:14px;margin:12px 0}
+  .instrucoes h3{font-size:11px;font-weight:700;color:#166534;text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px}
+  .instrucoes ol{padding-left:18px}
+  .instrucoes li{font-size:12px;color:#166534;margin-bottom:4px;line-height:1.5}
+  .assinaturas{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
+  .ass-box{border-top:1.5px solid #aaa;padding-top:8px}
+  .ass-box p{font-size:11px;color:#555}
+  .footer{background:#f8f4ff;border-top:1px solid #e5e7eb;padding:12px 24px;text-align:center;font-size:10px;color:#9ca3af;line-height:1.6}
+  .btn-print{display:block;margin:16px auto 0;background:#7c3aed;color:#fff;border:none;padding:11px 28px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;border-radius:8px}
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="header">
+    <div class="selo">💜</div>
+    <div class="bges">
+      <h1>FICHA DE ENCAMINHAMENTO AO CRAV</h1>
+      <p>77ª CIPM · Base Comunitária de Segurança · Nova Cidade / Belford Roxo</p>
+      <span class="badge-confidencial">🔒 Documento Confidencial</span>
+    </div>
+  </div>
+
+  <div class="body">
+    <!-- Identificação -->
+    <div class="section-title">Identificação da Assistida</div>
+    <div class="grid2">
+      <div class="field" style="grid-column:1/-1"><label>Nome completo</label><span>`+(oc.vitima_nome||"—")+`</span></div>
+      <div class="field"><label>Data de nascimento</label><span>`+(oc.vitima_nasc||"—")+`</span></div>
+      <div class="field"><label>CPF</label><span>`+(oc.vitima_cpf||"—")+`</span></div>
+      <div class="field"><label>Bairro / Endereço</label><span>`+(oc.bairro||"—")+(oc.endereco?" · "+oc.endereco:"")+`</span></div>
+      <div class="field"><label>Telefone</label><span>`+(oc.vitima_tel||"—")+`</span></div>
+    </div>
+
+    <!-- Ocorrência -->
+    <div class="section-title">Dados da Ocorrência</div>
+    <div class="grid3">
+      <div class="field"><label>Nº BO / Protocolo</label><span>`+(oc.numero_bo||oc.id||"—")+`</span></div>
+      <div class="field"><label>Data da ocorrência</label><span>`+(oc.data||"—")+`</span></div>
+      <div class="field"><label>Data de encaminhamento</label><span>`+hoje+`</span></div>
+      <div class="field"><label>Medida Protetiva</label><span>`+mp+`</span></div>
+      <div class="field"><label>Tipo de violência</label><span>`+tiposViolencia+`</span></div>
+      <div class="field"><label>Agressor</label><span>`+(oc.suspeito_nome||"—")+`</span></div>
+    </div>
+    `+(oc.historico||oc.observacoes?`<div class="field" style="margin-top:8px"><label>Histórico / Observações</label><span style="font-weight:400;font-size:12px;line-height:1.6">`+(oc.historico||oc.observacoes||"")+`</span></div>`:"")+(oc.medida_protetiva==="Sim"?`
+    <div class="alerta">
+      <span class="ico">⚠️</span>
+      <p>Esta assistida possui <strong>medida protetiva de urgência</strong> em vigor. O agressor está proibido de se aproximar. Atenção redobrada no atendimento.</p>
+    </div>`:"")+`
+
+    <!-- Link para devolutiva -->
+    <div class="section-title">Devolutiva ao Sistema IARA — 77ª CIPM</div>
+    <div class="link-block">
+      <div class="qr">
+        <img src="`+qrUrl+`" width="120" height="120" alt="QR Code" style="display:block;border-radius:6px"/>
+        <p style="text-align:center;font-size:9px;color:#7c3aed;margin-top:4px;font-weight:600">Escaneie</p>
+      </div>
+      <div class="link-info">
+        <h3>Formulário de devolutiva</h3>
+        <p>Após o atendimento, a técnica responsável deverá preencher o formulário abaixo.<br>Os dados são enviados diretamente ao sistema da 77ª CIPM e vinculados à ficha desta assistida.</p>
+        <div class="link-url">`+url+`</div>
+      </div>
+    </div>
+
+    <div class="instrucoes">
+      <h3>Instruções ao CRAV</h3>
+      <ol>
+        <li>Escaneie o QR Code ou acesse o link acima em qualquer dispositivo</li>
+        <li>O formulário já virá com os dados da assistida pré-preenchidos</li>
+        <li>Informe o tipo de atendimento, situação atual e observações</li>
+        <li>Clique em <strong>"Enviar Devolutiva"</strong> — os dados chegam ao IARA automaticamente</li>
+        <li>Preencha uma devolutiva a cada atendimento realizado</li>
+      </ol>
+    </div>
+
+    <!-- Assinaturas -->
+    <div class="section-title">Assinaturas</div>
+    <div class="assinaturas">
+      <div class="ass-box">
+        <p>Policial Responsável pelo Encaminhamento</p>
+        <p style="margin-top:4px;font-weight:700">`+(state.db&&state.db.ocorrencias?"":"")+`&nbsp;</p>
+        <p>77ª CIPM — BCS Nova Cidade</p>
+        <p style="margin-top:2px;color:#aaa">`+hoje+`</p>
+      </div>
+      <div class="ass-box">
+        <p>Técnica Responsável pelo Recebimento</p>
+        <p style="margin-top:4px">&nbsp;</p>
+        <p>CRAV — Centro de Referência Albertina Vasconcelos</p>
+        <p style="margin-top:2px;color:#aaa">&nbsp;</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Sistema IARA · 77ª CIPM · Base Comunitária de Segurança · Nova Cidade, Belford Roxo — RJ<br>
+    Documento gerado em `+new Date().toLocaleString("pt-BR")+` · ID do caso: `+(oc.id||"")+`
+  </div>
+</div>
+<button class="btn-print no-print" onclick="window.print()">🖨 Imprimir / Salvar PDF</button>
+<script>setTimeout(function(){window.print();},800);<\/script>
+</body></html>`);
+  win.document.close();
+}
+
 async function sincronizarDevolutivasCrav(){
   if(!SHEETS_URL) return;
   try{
@@ -12020,7 +12173,9 @@ function abrirMonitorVCM(ocId){
   hf.push("<div style='display:flex;gap:10px;margin-top:14px'>");
   hf.push("<button id='btn-vcm-agendar' style='flex:1;background:linear-gradient(135deg,#1a3a10,#2a5a18);border:none;color:#a8d890;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📅 Agendar Visita</button>");
   hf.push("<button id='btn-vcm-encerrar' style='flex:1;background:linear-gradient(135deg,#0a1a3a,#1a3a6a);border:none;color:#a8c0e8;padding:12px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>✓ Encerrar Acompanhamento</button>");
-  hf.push("</div></div>");
+  hf.push("</div>");
+  hf.push("<button onclick='imprimirFichaCrav(\""+ocVcm.id+"\")' style='width:100%;margin-top:10px;background:linear-gradient(135deg,#2d0a4a,#1a0a2e);border:2px solid #a855f7;color:#c084fc;padding:11px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>📄 Gerar Ficha de Encaminhamento ao CRAV</button>");
+  hf.push("</div>");
   // ── Devolutivas CRAV ──────────────────────────────────────
   var _devsCrav=(state.devolutivasCrav||[]).filter(function(d){return d.ocorrenciaId===ocVcm.id;}).sort(function(a,b){return(b.data||b.timestamp||"")>(a.data||a.timestamp||"")?1:-1;});
   hf.push("<div style='margin-bottom:14px;border:1px solid #7c3aed44;border-radius:10px;overflow:hidden'>");
