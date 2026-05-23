@@ -4861,7 +4861,14 @@ function renderGestaoProjectos(main){
   var totalAlertas = _projetosAlerta();
 
   var h=[];
-  h.push("<div style='display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #4a3224'><button onclick=\"state.projetosView='kanban';renderGestaoProjectos(document.getElementById('main'))\" style='padding:10px 22px;background:transparent;border:none;border-bottom:3px solid #d4a87a;color:#d4a87a;font-size:13px;font-weight:700;cursor:pointer'>&#x1F5C2; Kanban</button><button onclick=\"state.projetosView='dashboard';renderDashProjetos(document.getElementById('main'))\" style='padding:10px 22px;background:transparent;border:none;border-bottom:3px solid transparent;color:#8a6a4a;font-size:13px;font-weight:700;cursor:pointer'>&#x1F4CA; Vis&#xe3;o Geral</button></div>");
+  // ── Abas de visualização ──
+  var _abas=[['kanban','🗂 Kanban'],['grade','⊞ Grade'],['dashboard','📊 Visão Geral']];
+  h.push("<div style='display:flex;gap:0;margin-bottom:16px;border-bottom:2px solid #4a3224'>");
+  _abas.forEach(function(ab){
+    var ativ=state.projetosView===ab[0];
+    h.push("<button onclick=\"state.projetosView='"+ab[0]+"';renderGestaoProjectos(document.getElementById('main'))\" style='padding:10px 20px;background:transparent;border:none;border-bottom:3px solid "+(ativ?"#d4a87a":"transparent")+";color:"+(ativ?"#d4a87a":"#8a6a4a")+";font-size:13px;font-weight:700;cursor:pointer'>"+ab[1]+"</button>");
+  });
+  h.push("</div>");
   h.push("<div style='max-width:1200px;margin:0 auto'>");
 
   // Header
@@ -4907,7 +4914,50 @@ function renderGestaoProjectos(main){
   var isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   var statusAtivo = state._projStatusMobile || "Planejamento";
 
-  // Kanban
+  // ── GRADE ────────────────────────────────────────────
+  if(state.projetosView==='grade'){
+    if(!projetos.length){
+      h.push("<div style='background:#2a1c10;border:1px solid #4a3224;border-radius:12px;padding:60px;text-align:center'>");
+      h.push("<p style='font-size:40px;margin-bottom:12px'>🗂</p><p style='color:#5e4636;font-size:14px;margin-bottom:16px'>Nenhum projeto cadastrado ainda.</p>");
+      h.push("<button onclick='abrirModalNovoProjeto()' style='background:linear-gradient(135deg,#d4a87a,#a8882b);border:none;color:#3c2818;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer'>+ Criar Primeiro Projeto</button>");
+      h.push("</div>");
+    } else {
+      h.push("<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px'>");
+      projetos.forEach(function(p){
+        var pct=progresso(p), nAl=alertasTarefa(p);
+        var tcor=PROJ_CORES[p.tipo]||"#6b7280";
+        var scor=PROJ_SCORS[p.status]||"#6b7280";
+        var temAtrasada=(p.tarefas||[]).some(function(t){return t.status!=="Concluída"&&_pdLocal(t.dataPrevista)&&_pdLocal(t.dataPrevista)<hojeDate;});
+        h.push("<div onclick=\"verProjeto('"+p.id+"')\" style='background:#36221a;border:1px solid "+(temAtrasada?"#f59e0b55":"#4a3224")+";border-radius:12px;padding:0;cursor:pointer;overflow:hidden;transition:border-color .2s"+(temAtrasada?";animation:piscar-lento 3s infinite":"")+"'>");
+        // Topo colorido
+        h.push("<div style='background:"+tcor+"22;border-bottom:2px solid "+tcor+"44;padding:12px 14px'>");
+        h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px'>");
+        h.push("<span style='background:"+tcor+"33;color:"+tcor+";padding:2px 8px;border-radius:5px;font-size:9px;font-weight:700;text-transform:uppercase'>"+esc(p.tipo||"—")+"</span>");
+        h.push("<span style='background:"+scor+"22;color:"+scor+";padding:2px 8px;border-radius:5px;font-size:9px;font-weight:700'>"+esc(p.status||"")+"</span>");
+        h.push("</div>");
+        h.push("<p style='color:#f5ede0;font-size:13px;font-weight:700;margin:6px 0 0;line-height:1.3'>"+esc(p.nome)+"</p>");
+        h.push("</div>");
+        // Corpo
+        h.push("<div style='padding:12px 14px'>");
+        if(p.responsavel) h.push("<p style='color:#8a6a4a;font-size:11px;margin:0 0 4px'>👤 "+esc(p.responsavel)+"</p>");
+        if(p.dataFim)     h.push("<p style='color:#5a4a2a;font-size:11px;margin:0 0 8px'>📅 até "+fmtData(p.dataFim)+"</p>");
+        if(nAl>0)         h.push("<p style='color:#f59e0b;font-size:10px;font-weight:700;margin:0 0 6px'>⚠ "+nAl+" tarefa(s) atrasada(s)</p>");
+        // Barra de progresso
+        h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:4px'>");
+        h.push("<span style='color:#5e4636;font-size:10px'>"+(p.tarefas||[]).length+" tarefa(s)</span>");
+        h.push("<span style='color:"+(pct===100?"#22c55e":"#d4a87a")+";font-size:10px;font-weight:700'>"+pct+"%</span>");
+        h.push("</div>");
+        h.push("<div style='background:#3c2818;border-radius:4px;height:5px'><div style='height:100%;width:"+pct+"%;background:"+(pct===100?"#22c55e":tcor)+";border-radius:4px'></div></div>");
+        h.push("</div></div>");
+      });
+      h.push("</div>");
+    }
+    h.push("</div>");
+    main.innerHTML = h.join("");
+    return;
+  }
+
+  // ── KANBAN ───────────────────────────────────────────
   if(!projetos.length){
     h.push("<div style='background:#2a1c10;border:1px solid #4a3224;border-radius:12px;padding:60px;text-align:center'>");
     h.push("<p style='font-size:40px;margin-bottom:12px'>🗂</p>");
