@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Carga de Armamento — 77ª CIPM BCS</title>
+<style>
+*{ box-sizing:border-box; margin:0; padding:0; }
+body{ background:#0a0f1a; color:#e8f0ff; font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
+.topo{ background:linear-gradient(135deg,#0a1628,#0f2040); border-bottom:2px solid #3a6abf44; padding:16px 20px; text-align:center; }
+.topo-icon{ font-size:28px; margin-bottom:4px; }
+.topo-titulo{ color:#6a9ae8; font-size:13px; font-weight:700; letter-spacing:2px; text-transform:uppercase; }
+.topo-sub{ color:#2a4a7a; font-size:11px; margin-top:2px; }
+.card{ background:#0f1a2e; border:2px solid #1a3a6a; border-radius:16px; max-width:480px; margin:20px auto; padding:22px; }
+label.campo{ display:block; margin-bottom:14px; }
+label.campo span{ color:#4a7ab8; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; display:block; margin-bottom:5px; }
+label.campo span em{ color:#ef4444; font-style:normal; }
+input[type=text],input[type=number],input[type=date],select{
+  width:100%; background:#0a1428; border:1px solid #1a3a6a; color:#e8f0ff;
+  padding:10px 12px; border-radius:8px; font-size:14px; font-family:inherit; outline:none;
+  transition:border-color .2s;
+}
+input:focus,select:focus{ border-color:#3a6ae8; }
+.row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+/* Assinatura */
+.assin-box{ border:2px dashed #1a3a6a; border-radius:10px; background:#070d1a; position:relative; overflow:hidden; }
+.assin-box canvas{ display:block; width:100%; touch-action:none; cursor:crosshair; }
+.assin-label{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#1a3a5a; font-size:12px; pointer-events:none; text-align:center; white-space:nowrap; transition:opacity .3s; }
+.assin-actions{ display:flex; gap:8px; margin-top:8px; }
+.btn-limpar{ flex:1; background:none; border:1px solid #1a3a6a; color:#3a6ab8; padding:8px; border-radius:7px; font-size:12px; cursor:pointer; }
+.btn-enviar{ width:100%; background:linear-gradient(135deg,#1a3a8a,#0f2a6a); border:2px solid #3a6ae8; color:#a0c0ff; padding:14px; border-radius:10px; font-size:15px; font-weight:800; cursor:pointer; margin-top:8px; letter-spacing:.5px; transition:opacity .2s; }
+.btn-enviar:disabled{ opacity:.5; cursor:not-allowed; }
+.sucesso{ text-align:center; padding:40px 16px; display:none; }
+.sucesso .icon{ font-size:60px; margin-bottom:14px; }
+.sucesso h2{ color:#6a9ae8; font-size:20px; margin-bottom:8px; }
+.sucesso p{ color:#3a5a8a; font-size:13px; line-height:1.7; }
+.erro-msg{ color:#ef4444; font-size:11px; margin-top:5px; display:none; }
+select option{ background:#0f1a2e; }
+@media(max-width:500px){ .card{ margin:10px; padding:16px; } }
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <div class="topo-icon">🔫</div>
+  <div class="topo-titulo">77ª CIPM — BCS</div>
+  <div class="topo-sub">Polícia Militar da Bahia · Carga de Armamento</div>
+</div>
+
+<div class="card" id="card-form">
+  <form id="form-carga" onsubmit="enviarCarga(event)">
+
+    <div class="row2">
+      <label class="campo">
+        <span>Data <em>*</em></span>
+        <input type="date" id="f-data" required/>
+      </label>
+      <label class="campo">
+        <span>Hora <em>*</em></span>
+        <input type="text" id="f-hora" placeholder="Ex: 07:30" required/>
+      </label>
+    </div>
+
+    <label class="campo">
+      <span>Nome completo <em>*</em></span>
+      <input type="text" id="f-nome" placeholder="Nome do policial" required autocomplete="name"/>
+    </label>
+
+    <label class="campo">
+      <span>Matrícula <em>*</em></span>
+      <input type="text" id="f-matricula" placeholder="Ex: 123456" required/>
+    </label>
+
+    <label class="campo">
+      <span>Tipo de Arma <em>*</em></span>
+      <select id="f-tipo-arma" required>
+        <option value="">Selecione...</option>
+        <option>Pistola Taurus PT-840</option>
+        <option>Pistola Taurus PT-100</option>
+        <option>Pistola Glock G17</option>
+        <option>Pistola Glock G19</option>
+        <option>Revólver .38</option>
+        <option>Espingarda 12</option>
+        <option>Carabina .40</option>
+        <option>Submetralhadora</option>
+        <option>Outro</option>
+      </select>
+    </label>
+
+    <label class="campo">
+      <span>Nº de Série / Registro <em>*</em></span>
+      <input type="text" id="f-serie" placeholder="Ex: TM123456" required style="text-transform:uppercase"/>
+    </label>
+
+    <div class="row2">
+      <label class="campo">
+        <span>Qtd Munição <em>*</em></span>
+        <input type="number" id="f-municao" min="0" max="999" placeholder="0" required/>
+      </label>
+      <label class="campo">
+        <span>Qtd Carregadores</span>
+        <input type="number" id="f-carregadores" min="0" max="99" placeholder="0"/>
+      </label>
+    </div>
+
+    <label class="campo">
+      <span>Tipo de Carga</span>
+      <select id="f-tipo-carga">
+        <option value="Carga">🔫 Carga (saída para serviço)</option>
+        <option value="Descarga">📦 Descarga (retorno)</option>
+        <option value="Transferência">🔄 Transferência</option>
+        <option value="Conferência">🔍 Conferência</option>
+      </select>
+    </label>
+
+    <label class="campo">
+      <span>Observação</span>
+      <input type="text" id="f-obs" placeholder="Opcional"/>
+    </label>
+
+    <!-- Assinatura Digital -->
+    <div class="campo">
+      <span>Assinatura Digital <em>*</em></span>
+      <div class="assin-box" id="assin-box">
+        <canvas id="assin-canvas" height="140"></canvas>
+        <div class="assin-label" id="assin-label">✍ Assine aqui com o dedo</div>
+      </div>
+      <div class="assin-actions">
+        <button type="button" class="btn-limpar" onclick="limparAssinatura()">🗑 Limpar assinatura</button>
+      </div>
+      <div class="erro-msg" id="erro-assin">Assinatura obrigatória</div>
+    </div>
+
+    <button type="submit" class="btn-enviar" id="btn-enviar">✅ Registrar Carga</button>
+  </form>
+
+  <div class="sucesso" id="bloco-sucesso">
+    <div class="icon">✅</div>
+    <h2>Carga registrada!</h2>
+    <p id="msg-sucesso">Registro salvo com sucesso.<br>Guarde o protocolo abaixo.</p>
+    <div id="protocolo" style="margin-top:16px;background:#070d1a;border:1px solid #1a3a6a;border-radius:10px;padding:14px;font-size:13px;color:#6a9ae8;font-family:monospace;word-break:break-all"></div>
+  </div>
+</div>
+
+<script>
+// ── Parâmetros da URL ────────────────────────────────
+var params   = new URLSearchParams(location.search);
+var SHEETS_URL = params.get("sheets") || "";
+var TOKEN      = params.get("token")  || "";
+
+// ── Data e hora automáticas ──────────────────────────
+(function(){
+  var hoje = new Date();
+  var dd = String(hoje.getDate()).padStart(2,"0");
+  var mm = String(hoje.getMonth()+1).padStart(2,"0");
+  var yyyy = hoje.getFullYear();
+  document.getElementById("f-data").value = yyyy+"-"+mm+"-"+dd;
+  var hh = String(hoje.getHours()).padStart(2,"0");
+  var min = String(hoje.getMinutes()).padStart(2,"0");
+  document.getElementById("f-hora").value = hh+":"+min;
+})();
+
+// ── Assinatura Digital (Canvas) ───────────────────────
+var canvas = document.getElementById("assin-canvas");
+var ctx    = canvas.getContext("2d");
+var desenhando = false;
+var temAssinatura = false;
+
+function redimensionarCanvas(){
+  var box = document.getElementById("assin-box");
+  var ratio = window.devicePixelRatio || 1;
+  canvas.width  = box.clientWidth * ratio;
+  canvas.height = 140 * ratio;
+  canvas.style.height = "140px";
+  ctx.scale(ratio, ratio);
+  ctx.strokeStyle = "#6a9ae8";
+  ctx.lineWidth   = 2.5;
+  ctx.lineCap     = "round";
+  ctx.lineJoin    = "round";
+}
+redimensionarCanvas();
+window.addEventListener("resize", redimensionarCanvas);
+
+function getPosicao(e){
+  var rect = canvas.getBoundingClientRect();
+  var src  = e.touches ? e.touches[0] : e;
+  return { x: src.clientX - rect.left, y: src.clientY - rect.top };
+}
+
+canvas.addEventListener("mousedown",  function(e){ desenhando=true; var p=getPosicao(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+canvas.addEventListener("mousemove",  function(e){ if(!desenhando) return; var p=getPosicao(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssinatura=true; document.getElementById("assin-label").style.opacity="0"; });
+canvas.addEventListener("mouseup",    function(){ desenhando=false; });
+canvas.addEventListener("mouseleave", function(){ desenhando=false; });
+
+canvas.addEventListener("touchstart", function(e){ e.preventDefault(); desenhando=true; var p=getPosicao(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }, {passive:false});
+canvas.addEventListener("touchmove",  function(e){ e.preventDefault(); if(!desenhando) return; var p=getPosicao(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssinatura=true; document.getElementById("assin-label").style.opacity="0"; }, {passive:false});
+canvas.addEventListener("touchend",   function(){ desenhando=false; });
+
+function limparAssinatura(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  temAssinatura=false;
+  document.getElementById("assin-label").style.opacity="1";
+  document.getElementById("erro-assin").style.display="none";
+}
+
+// ── Envio ─────────────────────────────────────────────
+function enviarCarga(e){
+  e.preventDefault();
+  if(!temAssinatura){
+    document.getElementById("erro-assin").style.display="block";
+    canvas.scrollIntoView({behavior:"smooth"});
+    return;
+  }
+  document.getElementById("erro-assin").style.display="none";
+
+  var btn = document.getElementById("btn-enviar");
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+
+  var assinaturaB64 = canvas.toDataURL("image/png");
+  var protocolo = "CA-" + Date.now();
+
+  var dados = {
+    protocolo:    protocolo,
+    tipo:         "carga_armamento",
+    data:         document.getElementById("f-data").value,
+    hora:         document.getElementById("f-hora").value,
+    nome:         document.getElementById("f-nome").value.trim(),
+    matricula:    document.getElementById("f-matricula").value.trim(),
+    tipo_arma:    document.getElementById("f-tipo-arma").value,
+    serie:        document.getElementById("f-serie").value.trim().toUpperCase(),
+    municao:      document.getElementById("f-municao").value,
+    carregadores: document.getElementById("f-carregadores").value || "0",
+    tipo_carga:   document.getElementById("f-tipo-carga").value,
+    obs:          document.getElementById("f-obs").value.trim(),
+    assinatura:   assinaturaB64,
+    data_registro: new Date().toISOString(),
+    origem:       "qr_armamento"
+  };
+
+  function mostrarSucesso(){
+    document.getElementById("form-carga").style.display="none";
+    var bloco = document.getElementById("bloco-sucesso");
+    bloco.style.display="block";
+    var nome1 = dados.nome.split(" ")[0];
+    document.getElementById("msg-sucesso").innerHTML =
+      "<strong style='color:#a0c0ff'>"+nome1+"</strong>, carga registrada com sucesso!<br><br>"+
+      "📅 "+dados.data+" às "+dados.hora+"<br>"+
+      "🔫 "+dados.tipo_arma+" · "+dados.serie+"<br>"+
+      "🔹 "+dados.municao+" munições · "+dados.carregadores+" carregador(es)<br>"+
+      "<span style='color:#2a5a3a;font-size:11px'>Tipo: "+dados.tipo_carga+"</span>";
+    document.getElementById("protocolo").textContent = "Protocolo: "+protocolo;
+  }
+
+  if(SHEETS_URL && TOKEN){
+    var cbName = "cb_arm_"+Date.now();
+    window[cbName] = function(){ delete window[cbName]; clearTimeout(tmout); mostrarSucesso(); };
+    var tmout = setTimeout(mostrarSucesso, 8000);
+    var script = document.createElement("script");
+    script.src = SHEETS_URL
+      + "?acao=salvar&tipo=carga_armamento&dados="
+      + encodeURIComponent(JSON.stringify(dados))
+      + "&token=" + encodeURIComponent(TOKEN)
+      + "&callback=" + cbName;
+    script.onerror = function(){ clearTimeout(tmout); mostrarSucesso(); };
+    document.head.appendChild(script);
+  } else {
+    setTimeout(mostrarSucesso, 600);
+  }
+}
+</script>
+</body>
+</html>

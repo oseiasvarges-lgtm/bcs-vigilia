@@ -311,6 +311,7 @@ function salvarLocal() {
     if(state.projetosSociais) localStorage.setItem("bcs_projetos_sociais",JSON.stringify(state.projetosSociais));
     if(state.inscricoesProjetos) localStorage.setItem("bcs_inscricoes_projetos",JSON.stringify(state.inscricoesProjetos));
     if(state.chamadas) localStorage.setItem("bcs_chamadas",JSON.stringify(state.chamadas));
+    if(state.cargasArmamento) localStorage.setItem("bcs_cargas_armamento",JSON.stringify(state.cargasArmamento));
     if(state.escolas) localStorage.setItem("bcs_escolas",JSON.stringify(state.escolas));
     if(state.visitasEscolares) localStorage.setItem("bcs_visitas_escolares",JSON.stringify(state.visitasEscolares));
     if(state.atividadesEscolares) localStorage.setItem("bcs_atividades_escolares",JSON.stringify(state.atividadesEscolares));
@@ -902,6 +903,7 @@ let state = {
   projetosSociais: JSON.parse(localStorage.getItem("bcs_projetos_sociais")||"[]"),
   inscricoesProjetos: JSON.parse(localStorage.getItem("bcs_inscricoes_projetos")||"[]"),
   chamadas: JSON.parse(localStorage.getItem("bcs_chamadas")||"[]"),
+  cargasArmamento: JSON.parse(localStorage.getItem("bcs_cargas_armamento")||"[]"),
   instrutorNome: "",  // preenchido no login, não persistido
   alertasCrescimento: JSON.parse(localStorage.getItem("bcs_alertas_crescimento")||"[]"),
   escolas: JSON.parse(localStorage.getItem("bcs_escolas")||"[]"),
@@ -9993,6 +9995,10 @@ function renderTela() {
     renderProjetosSociais(main);
     return;
   }
+  if(tela==="armamento"){
+    renderLivroParteArmamento(main);
+    return;
+  }
 
   if(tela==="importar_zap"){
     renderImportarZap(main);
@@ -10446,6 +10452,7 @@ function render(){
       <button class="nav-btn${state.tela==="assistente"?" active":""}" data-tela="assistente" onclick="setTela('assistente')" style="color:${state.tela==="assistente"?"#a78bfa":"#a78bfa88"};border-color:${state.tela==="assistente"?"#a78bfa":"transparent"}">🤖 Assistente IA</button>
       <button class="nav-btn${state.tela==="escolas"?" active":""}" data-tela="escolas" onclick="setTela('escolas')" style="color:${state.tela==="escolas"?"#38bdf8":"#38bdf888"};border-color:${state.tela==="escolas"?"#38bdf8":"transparent"}">🏫 Módulo Escolar</button>
       <button class="nav-btn${state.tela==="projetossociais"?" active":""}" data-tela="projetossociais" onclick="setTela('projetossociais')" style="color:${state.tela==='projetossociais'?'#a78bfa':'#a78bfa88'};border-color:${state.tela==='projetossociais'?'#a78bfa':'transparent'}">🌱 Projetos Sociais</button>
+      <button class="nav-btn${state.tela==="armamento"?" active":""}" data-tela="armamento" onclick="setTela('armamento')" style="color:${state.tela==='armamento'?'#60a5fa':'#60a5fa66'};border-color:${state.tela==='armamento'?'#60a5fa':'transparent'}">🔫 Livro de Parte</button>
           `}
     <div style="margin-top:auto;border-top:1px solid #42301e;padding-top:10px">
       <button onclick="setTela('config')" style="background:${state.tela==='config'?'rgba(100,120,140,0.15)':'transparent'};border:none;border-left:2px solid ${state.tela==='config'?'#6a9aba':'transparent'};color:${state.tela==='config'?'#a0bcd0':'#6a7a8a'};font-size:11px;width:100%;text-align:left;padding:6px 10px;cursor:pointer;display:flex;align-items:center;gap:6px;border-radius:0 6px 6px 0">⚙️ <span>Configurações</span></button>
@@ -10876,6 +10883,213 @@ function renderTabInstrutores(container){
 function _expandirInstrutor(id){
   var el=document.getElementById(id); if(!el) return;
   el.style.display=el.style.display==="none"?"table-row":"none";
+}
+
+// ══════════════════════════════════════════════════
+// MÓDULO LIVRO DE PARTE — ARMAMENTO
+// ══════════════════════════════════════════════════
+function renderLivroParteArmamento(main){
+  var isLocal=(location.protocol==="file:"||location.hostname==="localhost"||location.hostname==="127.0.0.1");
+  var linkBase=isLocal
+    ? location.href.replace(/\/[^/]*$/,"/"+"carga-armamento.html")
+    : (typeof CRAV_BASE_URL!=="undefined"?CRAV_BASE_URL:"https://bcs-iara.github.io/")+"carga-armamento.html";
+  var linkQR=linkBase+"?sheets="+encodeURIComponent(typeof SHEETS_URL!=="undefined"?SHEETS_URL:"")+"&token="+encodeURIComponent(typeof BCS_TOKEN!=="undefined"?BCS_TOKEN:"");
+  var qrUrl="https://api.qrserver.com/v1/create-qr-code/?size=180x180&color=ffffff&bgcolor=0a0f1a&data="+encodeURIComponent(linkQR);
+
+  if(!state._armF) state._armF={busca:"",filtroTipo:"",de:"",ate:""};
+  var f=state._armF;
+  var cargas=(state.cargasArmamento||[]).slice().reverse();
+
+  // Filtros
+  var busca=(f.busca||"").toLowerCase().trim();
+  if(busca) cargas=cargas.filter(function(c){
+    return (c.nome||"").toLowerCase().includes(busca)||
+           (c.matricula||"").toLowerCase().includes(busca)||
+           (c.serie||"").toLowerCase().includes(busca)||
+           (c.tipo_arma||"").toLowerCase().includes(busca);
+  });
+  if(f.filtroTipo) cargas=cargas.filter(function(c){return c.tipo_carga===f.filtroTipo;});
+  if(f.de) cargas=cargas.filter(function(c){return c.data>=f.de;});
+  if(f.ate) cargas=cargas.filter(function(c){return c.data<=f.ate;});
+
+  var IS="width:100%;background:#070d1a;border:1px solid #1a3a6a;color:#a0c0ff;padding:8px 10px;border-radius:7px;font-size:12px;outline:none;box-sizing:border-box";
+  var h=[];
+  h.push("<div style='max-width:900px;margin:0 auto;padding:16px 20px 40px'>");
+
+  // Header
+  h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;flex-wrap:wrap;gap:10px'>");
+  h.push("<div style='display:flex;align-items:center;gap:12px'>");
+  h.push("<div style='width:44px;height:44px;background:#0a1428;border:2px solid #3a6ae8;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0'>🔫</div>");
+  h.push("<div><h2 style='color:#a0c0ff;font-size:16px;font-weight:800;margin:0'>Livro de Parte — Armamento</h2><p style='color:#3a6a9a;font-size:11px;margin:0'>"+cargas.length+" registro(s) encontrado(s)</p></div>");
+  h.push("</div>");
+  h.push("<div style='display:flex;gap:8px'>");
+  h.push("<button onclick='_armQRModal()' style='background:linear-gradient(135deg,#0f2a6a,#0a1a4a);border:1px solid #3a6ae8;color:#6a9ae8;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📲 QR Code</button>");
+  h.push("<button onclick='_armSincronizar()' style='background:#0a0f1a;border:1px solid #1a3a6a;color:#3a6a9a;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>🔄 Sincronizar</button>");
+  h.push("</div></div>");
+
+  // Filtros
+  h.push("<div style='background:#0a1428;border:1px solid #1a3a6a;border-radius:10px;padding:14px;margin-bottom:16px;display:flex;flex-wrap:wrap;gap:10px'>");
+  h.push("<input type='text' placeholder='🔍  Buscar por nome, matrícula, série ou arma...' value='"+esc(f.busca||"")+"' oninput=\"state._armF.busca=this.value;renderLivroParteArmamento(document.getElementById('main'))\" style='"+IS+";flex:2;min-width:220px'/>");
+  h.push("<select onchange=\"state._armF.filtroTipo=this.value;renderLivroParteArmamento(document.getElementById('main'))\" style='"+IS+";flex:1;min-width:140px'>");
+  h.push("<option value=''>Todos os tipos</option>");
+  ["Carga","Descarga","Transferência","Conferência"].forEach(function(t){
+    h.push("<option value='"+t+"'"+(f.filtroTipo===t?" selected":"")+">"+t+"</option>");
+  });
+  h.push("</select>");
+  h.push("<input type='date' value='"+(f.de||"")+"' onchange=\"state._armF.de=this.value;renderLivroParteArmamento(document.getElementById('main'))\" style='"+IS+";flex:1;min-width:130px' title='Data inicial'/>");
+  h.push("<input type='date' value='"+(f.ate||"")+"' onchange=\"state._armF.ate=this.value;renderLivroParteArmamento(document.getElementById('main'))\" style='"+IS+";flex:1;min-width:130px' title='Data final'/>");
+  if(busca||f.filtroTipo||f.de||f.ate) h.push("<button onclick=\"state._armF={busca:'',filtroTipo:'',de:'',ate:''};renderLivroParteArmamento(document.getElementById('main'))\" style='background:none;border:1px solid #3a1a1a;color:#6a3a3a;padding:8px 12px;border-radius:7px;font-size:11px;cursor:pointer'>✕ Limpar</button>");
+  h.push("</div>");
+
+  if(!cargas.length){
+    h.push("<div style='text-align:center;padding:60px 20px;background:#070d1a;border:1px dashed #1a3a6a;border-radius:12px'>");
+    h.push("<div style='font-size:52px;margin-bottom:14px'>🔫</div>");
+    h.push("<h3 style='color:#3a6a9a;font-size:14px;margin:0 0 8px'>Nenhum registro encontrado</h3>");
+    h.push("<p style='color:#1a3a5a;font-size:12px;margin:0 0 18px'>Use o QR Code para registrar a carga de armamento.</p>");
+    h.push("<button onclick='_armQRModal()' style='background:#0f2a6a;border:1px solid #3a6ae8;color:#6a9ae8;padding:10px 24px;border-radius:8px;font-size:13px;cursor:pointer'>📲 Gerar QR Code</button>");
+    h.push("</div>");
+  } else {
+    // Tabela
+    h.push("<div style='overflow-x:auto;border-radius:12px;border:1px solid #1a3a6a'>");
+    h.push("<table style='width:100%;border-collapse:collapse;font-size:12px'>");
+    h.push("<thead><tr style='background:#0a1428'>");
+    ["Data/Hora","Policial","Matrícula","Arma","Série","Munição","Carreg.","Tipo","Assinatura"].forEach(function(col){
+      h.push("<th style='padding:9px 12px;color:#3a6a9a;font-weight:700;text-align:left;font-size:10px;text-transform:uppercase;white-space:nowrap'>"+col+"</th>");
+    });
+    h.push("</tr></thead><tbody>");
+    cargas.forEach(function(c,idx){
+      var bg=idx%2===0?"#0a0f1a":"#070d1a";
+      var tipoCor={Carga:"#22c55e",Descarga:"#f59e0b",Transferência:"#60a5fa",Conferência:"#a78bfa"}[c.tipo_carga]||"#6b7280";
+      h.push("<tr style='background:"+bg+";border-top:1px solid #0f1a2e' onclick=\"_armVerRegistro('"+c.protocolo+"')\" style='cursor:pointer'>");
+      h.push("<td style='padding:8px 12px;color:#6a9ae8;white-space:nowrap'>"+esc(c.data||"")+" "+esc(c.hora||"")+"</td>");
+      h.push("<td style='padding:8px 12px;color:#e8f0ff;font-weight:600'>"+esc(c.nome||"")+"</td>");
+      h.push("<td style='padding:8px 12px;color:#a0c0ff;font-family:monospace'>"+esc(c.matricula||"")+"</td>");
+      h.push("<td style='padding:8px 12px;color:#c0d8ff'>"+esc(c.tipo_arma||"")+"</td>");
+      h.push("<td style='padding:8px 12px;color:#a0c0ff;font-family:monospace'>"+esc(c.serie||"")+"</td>");
+      h.push("<td style='padding:8px 12px;color:#f5ede0;font-weight:700;text-align:center'>"+esc(String(c.municao||"0"))+"</td>");
+      h.push("<td style='padding:8px 12px;color:#c0d0e0;text-align:center'>"+esc(String(c.carregadores||"0"))+"</td>");
+      h.push("<td style='padding:8px 12px'><span style='background:"+tipoCor+"22;color:"+tipoCor+";padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700'>"+esc(c.tipo_carga||"")+"</span></td>");
+      h.push("<td style='padding:8px 12px'>"+(c.assinatura?"<img src='"+c.assinatura+"' style='height:32px;border-radius:4px;border:1px solid #1a3a6a;background:#070d1a'/>":"<span style='color:#1a3a5a'>—</span>")+"</td>");
+      h.push("</tr>");
+    });
+    h.push("</tbody></table></div>");
+
+    // KPIs resumo
+    var totalCargas=(state.cargasArmamento||[]).filter(function(c){return c.tipo_carga==="Carga";}).length;
+    var totalDesc=(state.cargasArmamento||[]).filter(function(c){return c.tipo_carga==="Descarga";}).length;
+    var armasUnicas=[...new Set((state.cargasArmamento||[]).map(function(c){return c.serie;}))].filter(Boolean).length;
+    var policiaisUnicos=[...new Set((state.cargasArmamento||[]).map(function(c){return c.matricula;}))].filter(Boolean).length;
+    h.push("<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:16px'>");
+    [
+      {l:"Total Cargas",v:totalCargas,c:"#22c55e"},
+      {l:"Total Descargas",v:totalDesc,c:"#f59e0b"},
+      {l:"Armas Distintas",v:armasUnicas,c:"#60a5fa"},
+      {l:"Policiais",v:policiaisUnicos,c:"#a78bfa"}
+    ].forEach(function(k){
+      h.push("<div style='background:#0a0f1a;border:1px solid #1a3a6a;border-radius:10px;padding:12px;text-align:center'>");
+      h.push("<p style='color:#3a6a9a;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 4px'>"+k.l+"</p>");
+      h.push("<p style='color:"+k.c+";font-size:22px;font-weight:900;margin:0'>"+k.v+"</p>");
+      h.push("</div>");
+    });
+    h.push("</div>");
+  }
+  h.push("</div>");
+  main.innerHTML=h.join("");
+}
+
+function _armQRModal(){
+  var isLocal=(location.protocol==="file:"||location.hostname==="localhost"||location.hostname==="127.0.0.1");
+  var linkBase=isLocal
+    ? location.href.replace(/\/[^/]*$/,"/"+"carga-armamento.html")
+    : (typeof CRAV_BASE_URL!=="undefined"?CRAV_BASE_URL:"https://bcs-iara.github.io/")+"carga-armamento.html";
+  var linkQR=linkBase+"?sheets="+encodeURIComponent(typeof SHEETS_URL!=="undefined"?SHEETS_URL:"")+"&token="+encodeURIComponent(typeof BCS_TOKEN!=="undefined"?BCS_TOKEN:"");
+  var qrUrl="https://api.qrserver.com/v1/create-qr-code/?size=240x240&color=ffffff&bgcolor=0a0f1a&data="+encodeURIComponent(linkQR);
+  var mEx=document.getElementById("modal-arm-qr"); if(mEx) mEx.remove();
+  var modal=document.createElement("div");
+  modal.id="modal-arm-qr";
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.92);display:flex;align-items:center;justify-content:center;z-index:9999;padding:20px";
+  modal.innerHTML=
+    "<div style='background:#0a0f1a;border:2px solid #3a6ae8;border-radius:16px;padding:28px;max-width:380px;width:100%;text-align:center'>"
+    +"<div style='font-size:36px;margin-bottom:8px'>🔫</div>"
+    +"<h3 style='color:#a0c0ff;font-size:15px;font-weight:800;margin:0 0 4px'>QR — Carga de Armamento</h3>"
+    +"<p style='color:#3a6a9a;font-size:11px;margin:0 0 18px'>77ª CIPM BCS · Polícia Militar da Bahia</p>"
+    +"<img src='"+qrUrl+"' width='200' height='200' style='border-radius:10px;border:2px solid #1a3a6a;margin-bottom:14px'/>"
+    +"<p style='color:#1a3a6a;font-size:9px;word-break:break-all;margin-bottom:16px'>"+linkQR+"</p>"
+    +"<div style='display:flex;gap:8px'>"
+    +"<a href='"+linkQR+"' target='_blank' style='flex:2;display:block;background:linear-gradient(135deg,#1a3a8a,#0f2a6a);border:1px solid #3a6ae8;color:#a0c0ff;padding:10px;border-radius:8px;font-size:12px;font-weight:700;text-decoration:none'>📝 Abrir Formulário</a>"
+    +"<button onclick=\"document.getElementById('modal-arm-qr').remove()\" style='flex:1;background:#070d1a;border:1px solid #1a3a6a;color:#3a6a9a;padding:10px;border-radius:8px;font-size:12px;cursor:pointer'>Fechar</button>"
+    +"</div></div>";
+  document.body.appendChild(modal);
+  modal.onclick=function(e){if(e.target===this)this.remove();};
+}
+
+function _armVerRegistro(protocolo){
+  var c=(state.cargasArmamento||[]).find(function(x){return x.protocolo===protocolo;});
+  if(!c) return;
+  var tipoCor={Carga:"#22c55e",Descarga:"#f59e0b",Transferência:"#60a5fa",Conferência:"#a78bfa"}[c.tipo_carga]||"#6b7280";
+  var mEx=document.getElementById("modal-arm-det"); if(mEx) mEx.remove();
+  var modal=document.createElement("div");
+  modal.id="modal-arm-det";
+  modal.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,0.92);display:flex;align-items:flex-start;justify-content:center;z-index:9999;padding:20px;overflow-y:auto";
+  var h="<div style='background:#0a0f1a;border:2px solid #1a3a6a;border-radius:16px;padding:24px;max-width:480px;width:100%;margin:auto'>";
+  h+="<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:16px'>";
+  h+="<div><h3 style='color:#a0c0ff;font-size:15px;font-weight:800;margin:0'>🔫 Registro de Armamento</h3><p style='color:#3a6a9a;font-size:11px;margin:3px 0 0'>Protocolo: "+esc(protocolo)+"</p></div>";
+  h+="<button onclick=\"document.getElementById('modal-arm-det').remove()\" style='background:none;border:none;color:#3a6a9a;font-size:22px;cursor:pointer'>×</button>";
+  h+="</div>";
+  var campos=[
+    ["📅 Data/Hora", c.data+" às "+c.hora],
+    ["👤 Policial", c.nome],
+    ["🪪 Matrícula", c.matricula],
+    ["🔫 Tipo de Arma", c.tipo_arma],
+    ["🔢 Nº de Série", c.serie],
+    ["🔹 Munição", c.municao+" cartuchos"],
+    ["📦 Carregadores", c.carregadores],
+    ["📋 Tipo", c.tipo_carga],
+    ["💬 Observação", c.obs||"—"]
+  ];
+  campos.forEach(function(par){
+    h+="<div style='display:flex;gap:10px;padding:7px 0;border-bottom:1px solid #0f1a2e'>";
+    h+="<span style='color:#3a6a9a;font-size:11px;min-width:130px'>"+esc(par[0])+"</span>";
+    h+="<span style='color:#e8f0ff;font-size:12px;font-weight:600;flex:1'>"+esc(String(par[1]||""))+"</span>";
+    h+="</div>";
+  });
+  // Assinatura
+  if(c.assinatura){
+    h+="<div style='margin-top:14px'><p style='color:#3a6a9a;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:6px'>✍ Assinatura Digital</p>";
+    h+="<img src='"+c.assinatura+"' style='width:100%;border-radius:8px;border:1px solid #1a3a6a;background:#070d1a'/></div>";
+  }
+  // Tipo badge
+  h+="<div style='margin-top:14px;text-align:center'><span style='background:"+tipoCor+"22;color:"+tipoCor+";padding:6px 20px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid "+tipoCor+"44'>"+esc(c.tipo_carga)+"</span></div>";
+  h+="</div>";
+  modal.innerHTML=h;
+  document.body.appendChild(modal);
+  modal.onclick=function(e){if(e.target===this)this.remove();};
+}
+
+function _armSincronizar(){
+  if(typeof SHEETS_URL==="undefined"||!SHEETS_URL){ showToast("Sheets não configurado."); return; }
+  showToast("🔄 Buscando registros...");
+  var cbName="cb_arm_sync_"+Date.now();
+  window[cbName]=function(resp){
+    delete window[cbName];
+    if(resp&&resp.ok&&Array.isArray(resp.dados)){
+      if(!state.cargasArmamento) state.cargasArmamento=[];
+      var novas=0;
+      resp.dados.forEach(function(r){
+        var ex=state.cargasArmamento.find(function(x){return x.protocolo===r.protocolo;});
+        if(!ex){ state.cargasArmamento.push(r); novas++; }
+      });
+      salvarLocal();
+      showToast(novas>0?"✅ "+novas+" novo(s) registro(s) sincronizado(s)!":"✅ Sem novidades.");
+      renderLivroParteArmamento(document.getElementById("main"));
+    } else {
+      showToast("⚠️ Sem resposta do servidor.");
+    }
+  };
+  var script=document.createElement("script");
+  script.src=SHEETS_URL+"?acao=listar&tipo=carga_armamento&token="+encodeURIComponent(typeof BCS_TOKEN!=="undefined"?BCS_TOKEN:"")+"&callback="+cbName;
+  script.onerror=function(){ delete window[cbName]; showToast("❌ Erro ao sincronizar."); };
+  document.head.appendChild(script);
 }
 
 // ══════════════════════════════════════════════════
