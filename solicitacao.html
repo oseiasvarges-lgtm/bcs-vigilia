@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>Termo de Solicitação — 77ª CIPM BCS</title>
+<style>
+*{ box-sizing:border-box; margin:0; padding:0; }
+body{ background:#0a0f1a; color:#e8f0ff; font-family:'Segoe UI',system-ui,sans-serif; min-height:100vh; }
+.topo{ background:linear-gradient(135deg,#0a1628,#0f2040); border-bottom:2px solid #d4a87a44; padding:16px 20px; text-align:center; }
+.topo-icon{ font-size:28px; margin-bottom:4px; }
+.topo-titulo{ color:#d4a87a; font-size:13px; font-weight:700; letter-spacing:2px; text-transform:uppercase; }
+.topo-sub{ color:#5e4636; font-size:11px; margin-top:2px; }
+.card{ background:#0f1a2e; border:2px solid #2a1c10; border-radius:16px; max-width:520px; margin:20px auto; padding:22px; }
+label.campo{ display:block; margin-bottom:14px; }
+label.campo span{ color:#8a6848; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; display:block; margin-bottom:5px; }
+label.campo span em{ color:#ef4444; font-style:normal; }
+input[type=text],input[type=date],select,textarea{
+  width:100%; background:#0a1428; border:1px solid #2a1c10; color:#e8f0ff;
+  padding:10px 12px; border-radius:8px; font-size:14px; font-family:inherit; outline:none;
+  transition:border-color .2s;
+}
+textarea{ resize:vertical; min-height:120px; line-height:1.6; }
+input:focus,select:focus,textarea:focus{ border-color:#d4a87a; }
+.row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.badge-status{ display:none; align-items:center; padding:0 10px; border-radius:8px; font-size:11px; font-weight:700; white-space:nowrap; }
+.info-pol{ display:none; margin-top:5px; background:#070d1a; border:1px solid #2a1c10; border-radius:7px; padding:7px 10px; font-size:11px; color:#d4a87a; }
+.assin-box{ border:2px dashed #2a1c10; border-radius:10px; background:#070d1a; position:relative; overflow:hidden; }
+.assin-box canvas{ display:block; width:100%; touch-action:none; cursor:crosshair; }
+.assin-label{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#2a1c10; font-size:12px; pointer-events:none; text-align:center; white-space:nowrap; transition:opacity .3s; }
+.assin-actions{ display:flex; gap:8px; margin-top:8px; }
+.btn-limpar{ flex:1; background:none; border:1px solid #2a1c10; color:#5e4636; padding:8px; border-radius:7px; font-size:12px; cursor:pointer; }
+.btn-enviar{ width:100%; background:linear-gradient(135deg,#2a1c10,#1a0e00); border:2px solid #d4a87a; color:#d4a87a; padding:14px; border-radius:10px; font-size:15px; font-weight:800; cursor:pointer; margin-top:8px; letter-spacing:.5px; transition:opacity .2s; }
+.btn-enviar:disabled{ opacity:.5; cursor:not-allowed; }
+.sucesso{ text-align:center; padding:40px 16px; display:none; }
+.sucesso .icon{ font-size:60px; margin-bottom:14px; }
+.sucesso h2{ color:#d4a87a; font-size:20px; margin-bottom:8px; }
+.sucesso p{ color:#5e4636; font-size:13px; line-height:1.7; }
+.protocolo-box{ margin-top:16px; background:#070d1a; border:1px solid #2a1c10; border-radius:10px; padding:14px; font-size:13px; color:#d4a87a; font-family:monospace; word-break:break-all; }
+.separador{ border:none; border-top:1px solid #2a1c10; margin:16px 0; }
+.secao-titulo{ color:#8a6848; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.8px; margin-bottom:10px; display:flex; align-items:center; gap:6px; }
+select option{ background:#0f1a2e; }
+@media(max-width:500px){ .card{ margin:10px; padding:16px; } }
+</style>
+</head>
+<body>
+
+<div class="topo">
+  <div class="topo-icon">📄</div>
+  <div class="topo-titulo">77ª CIPM — BCS</div>
+  <div class="topo-sub">Polícia Militar da Bahia · Termo de Solicitação</div>
+</div>
+
+<div class="card" id="card-form">
+  <form id="form-sol" onsubmit="enviarSolicitacao(event)">
+
+    <!-- Identificação do Solicitante -->
+    <div class="secao-titulo">👮 Identificação do Solicitante</div>
+
+    <label class="campo">
+      <span>Matrícula <em>*</em></span>
+      <div style="display:flex;gap:8px">
+        <input type="text" id="f-matricula" placeholder="Ex: 30.484.230-0" required
+               oninput="buscarPolicial(this.value)" style="flex:1"/>
+        <span id="pol-status" class="badge-status"></span>
+      </div>
+      <div id="pol-info" class="info-pol"></div>
+    </label>
+
+    <div class="row2">
+      <label class="campo">
+        <span>Nome / Grau Hierárquico <em>*</em></span>
+        <input type="text" id="f-nome" placeholder="Preenchido automaticamente" required autocomplete="name"/>
+      </label>
+      <label class="campo">
+        <span>Posto / Graduação</span>
+        <input type="text" id="f-posto" placeholder="Ex: CB PM"/>
+      </label>
+    </div>
+
+    <div class="row2">
+      <label class="campo">
+        <span>Telefone / WhatsApp</span>
+        <input type="text" id="f-telefone" placeholder="Ex: (77) 99999-9999"/>
+      </label>
+      <label class="campo">
+        <span>Turno</span>
+        <select id="f-turno">
+          <option value="">— Selecione —</option>
+          <option value="Dia">Dia</option>
+          <option value="Noite">Noite</option>
+          <option value="Administrativo">Administrativo</option>
+          <option value="Folga">Folga</option>
+        </select>
+      </label>
+    </div>
+    <!-- Aviso auto-cadastro (aparece apenas quando matrícula não encontrada) -->
+    <div id="aviso-autocadastro" style="display:none;background:#1a1200;border:1px solid #d4a87a44;border-radius:8px;padding:10px 12px;margin-bottom:6px;font-size:11px;color:#8a6848">
+      📋 <b>Primeira vez?</b> Seus dados serão cadastrados automaticamente ao enviar.
+    </div>
+
+    <hr class="separador"/>
+
+    <!-- Dados da Solicitação -->
+    <div class="secao-titulo">📋 Dados da Solicitação</div>
+
+    <div class="row2">
+      <label class="campo">
+        <span>Data <em>*</em></span>
+        <input type="date" id="f-data" required/>
+      </label>
+      <label class="campo">
+        <span>Destinatário (Para) <em>*</em></span>
+        <input type="text" id="f-destinatario" placeholder="Ex: Cmt 77ª CIPM" required/>
+      </label>
+    </div>
+
+    <label class="campo">
+      <span>Assunto <em>*</em></span>
+      <select id="f-assunto" required onchange="ajustarTexto()">
+        <option value="">Selecione o tipo de solicitação…</option>
+        <option value="Licença Prêmio">Licença Prêmio</option>
+        <option value="Férias">Férias</option>
+        <option value="Folga Compensatória">Folga Compensatória</option>
+        <option value="Dispensa do Serviço">Dispensa do Serviço</option>
+        <option value="Atestado Médico">Atestado Médico</option>
+        <option value="Licença para Tratamento de Saúde">Licença para Tratamento de Saúde</option>
+        <option value="Afastamento Temporário">Afastamento Temporário</option>
+        <option value="Troca de Serviço">Troca de Serviço</option>
+        <option value="Mudança de Escala">Mudança de Escala</option>
+        <option value="Designação de Função">Designação de Função</option>
+        <option value="Adiantamento Salarial">Adiantamento Salarial</option>
+        <option value="Outros">Outros</option>
+      </select>
+    </label>
+
+    <label class="campo">
+      <span>Texto da Solicitação <em>*</em></span>
+      <textarea id="f-texto" placeholder="Solicito a Vossa Senhoria a concessão de…" required></textarea>
+    </label>
+
+    <hr class="separador"/>
+
+    <!-- Assinatura -->
+    <div class="secao-titulo">✍ Assinatura do Solicitante</div>
+    <div class="assin-box" id="assin-box" style="height:140px">
+      <canvas id="assin-canvas"></canvas>
+      <div class="assin-label" id="assin-label">Assine aqui com o dedo ou mouse</div>
+    </div>
+    <div class="assin-actions">
+      <button type="button" class="btn-limpar" onclick="limparAssinatura()">🗑 Limpar</button>
+    </div>
+
+    <hr class="separador"/>
+
+    <button type="submit" class="btn-enviar" id="btn-enviar">📤 Enviar Solicitação</button>
+
+  </form>
+</div>
+
+<!-- Tela de sucesso -->
+<div class="card sucesso" id="card-sucesso">
+  <div class="icon">✅</div>
+  <h2>Solicitação Enviada!</h2>
+  <p>Sua solicitação foi registrada com sucesso.<br>Aguarde o deferimento pelo seu superior.</p>
+  <div class="protocolo-box" id="protocolo-sol"></div>
+  <button onclick="location.reload()" style="margin-top:16px;background:linear-gradient(135deg,#2a1c10,#1a0e00);border:2px solid #d4a87a;color:#d4a87a;padding:12px 28px;border-radius:9px;font-size:14px;font-weight:700;cursor:pointer">Nova Solicitação</button>
+</div>
+
+<script>
+// ── Parâmetros da URL ─────────────────────────────────
+var params     = new URLSearchParams(location.search);
+var SHEETS_URL = params.get("sheets") || "";
+var TOKEN      = params.get("token")  || "";
+
+// ── Data automática ───────────────────────────────────
+(function(){
+  var hoje = new Date();
+  document.getElementById("f-data").value =
+    hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0")+"-"+String(hoje.getDate()).padStart(2,"0");
+  document.getElementById("f-destinatario").value = "Cmt 77ª CIPM";
+})();
+
+// ── Cache de policiais ────────────────────────────────
+var POLICIAIS_CACHE = [];
+
+function carregarPoliciais(){
+  if(!SHEETS_URL) return;
+  var cbName = "cb_pol_sol_"+Date.now();
+  window[cbName] = function(resp){
+    delete window[cbName];
+    if(resp && resp.ok && Array.isArray(resp.dados)){
+      POLICIAIS_CACHE = resp.dados.filter(function(p){ return (p.status||"ativo")==="ativo"; });
+    }
+    var sc = document.getElementById("sc_pol_sol");
+    if(sc) sc.remove();
+  };
+  var sc = document.createElement("script");
+  sc.id  = "sc_pol_sol";
+  sc.src = SHEETS_URL+"?acao=listar&tipo=policiais&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
+  sc.onerror = function(){ delete window[cbName]; sc.remove(); };
+  document.head.appendChild(sc);
+}
+carregarPoliciais();
+
+// ── Busca policial por matrícula ──────────────────────
+var _polTimer    = null;
+var _pmJaCadastrado = false; // flag: true = já existe no sistema
+
+function buscarPolicial(mat){
+  clearTimeout(_polTimer);
+  var statusEl  = document.getElementById("pol-status");
+  var infoEl    = document.getElementById("pol-info");
+  var avisoEl   = document.getElementById("aviso-autocadastro");
+  var nomeEl    = document.getElementById("f-nome");
+  var postoEl   = document.getElementById("f-posto");
+  var telEl     = document.getElementById("f-telefone");
+  var turnoEl   = document.getElementById("f-turno");
+  mat = (mat||"").trim();
+  _pmJaCadastrado = false;
+  if(!mat){ statusEl.style.display="none"; infoEl.style.display="none"; avisoEl.style.display="none"; return; }
+  _polTimer = setTimeout(function(){
+    var pol = POLICIAIS_CACHE.find(function(p){
+      return (p.matricula||"").trim().toLowerCase() === mat.toLowerCase();
+    });
+    if(pol){
+      _pmJaCadastrado = true;
+      statusEl.style.cssText = "display:flex;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;background:#0a2a10;border:1px solid #22c55e;color:#4ade80";
+      statusEl.textContent   = "✅ Encontrado";
+      nomeEl.value  = pol.nome      || "";
+      postoEl.value = pol.posto     || "";
+      telEl.value   = pol.telefone  || "";
+      if(pol.turno) turnoEl.value = pol.turno;
+      infoEl.style.display = "block";
+      infoEl.innerHTML = "📋 Turno: <b>"+(pol.turno||"—")+"</b>  ·  Tel: <b>"+(pol.telefone||"—")+"</b>";
+      avisoEl.style.display = "none";
+    } else {
+      _pmJaCadastrado = false;
+      statusEl.style.cssText = "display:flex;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;background:#1a1200;border:1px solid #d4a87a;color:#d4a87a";
+      statusEl.textContent   = "🆕 Novo";
+      infoEl.style.display   = "none";
+      avisoEl.style.display  = "block";
+    }
+  }, 400);
+}
+
+// ── Texto padrão por assunto ──────────────────────────
+var TEXTOS_PADRAO = {
+  "Licença Prêmio":       "Solicito a Vossa Senhoria a concessão de 01 (um) mês de Licença Prêmio, referente ao período de ___/___/___ a ___/___/___, a ser gozado de ___ a ___ de __________ de ______.",
+  "Férias":               "Solicito a Vossa Senhoria a concessão de férias regulamentares, referentes ao período aquisitivo de ___/___/___ a ___/___/___, a serem gozadas a partir de ___/___/______.",
+  "Folga Compensatória":  "Solicito a Vossa Senhoria a concessão de folga compensatória referente ao serviço extra prestado em ___/___/_____.",
+  "Dispensa do Serviço":  "Solicito a Vossa Senhoria a dispensa do serviço do dia ___/___/_____, pelo seguinte motivo:",
+  "Troca de Serviço":     "Solicito a Vossa Senhoria autorização para realizar troca de serviço com o policial _________________, matrícula _____________, na escala do dia ___/___/_____.",
+  "Mudança de Escala":    "Solicito a Vossa Senhoria a mudança de minha escala de serviço, pelos seguintes motivos:"
+};
+
+function ajustarTexto(){
+  var assunto = document.getElementById("f-assunto").value;
+  var textoEl = document.getElementById("f-texto");
+  if(textoEl.value.trim()==="" && TEXTOS_PADRAO[assunto]){
+    textoEl.value = TEXTOS_PADRAO[assunto];
+  }
+}
+
+// ── Canvas de assinatura ──────────────────────────────
+(function(){
+  var canvas = document.getElementById("assin-canvas");
+  var box    = document.getElementById("assin-box");
+  var label  = document.getElementById("assin-label");
+  canvas.width  = box.offsetWidth  || 460;
+  canvas.height = box.offsetHeight || 140;
+  var ctx = canvas.getContext("2d");
+  var drawing = false;
+  var temAssin = false;
+
+  function pos(e){
+    var r = canvas.getBoundingClientRect();
+    var src = e.touches ? e.touches[0] : e;
+    return { x:(src.clientX-r.left)*(canvas.width/r.width),
+             y:(src.clientY-r.top)*(canvas.height/r.height) };
+  }
+  function startDraw(e){ e.preventDefault(); drawing=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); }
+  function draw(e){ e.preventDefault(); if(!drawing) return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.strokeStyle="#d4a87a"; ctx.lineWidth=2; ctx.lineCap="round"; ctx.stroke(); temAssin=true; label.style.opacity="0"; }
+  function stopDraw(){ drawing=false; }
+
+  canvas.addEventListener("mousedown",  startDraw);
+  canvas.addEventListener("mousemove",  draw);
+  canvas.addEventListener("mouseup",    stopDraw);
+  canvas.addEventListener("mouseleave", stopDraw);
+  canvas.addEventListener("touchstart", startDraw, {passive:false});
+  canvas.addEventListener("touchmove",  draw,       {passive:false});
+  canvas.addEventListener("touchend",   stopDraw);
+
+  window.limparAssinatura = function(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    temAssin=false;
+    label.style.opacity="1";
+  };
+  window.temAssinaturaPreenchida = function(){ return temAssin; };
+  window.getAssinaturaDataURL    = function(){
+    return temAssin ? canvas.toDataURL("image/png") : "";
+  };
+
+  // Redimensionar canvas ao mudar tamanho
+  window.addEventListener("resize", function(){
+    var imgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+    canvas.width  = box.offsetWidth  || 460;
+    canvas.height = box.offsetHeight || 140;
+    ctx.putImageData(imgData,0,0);
+  });
+})();
+
+// ── Enviar ────────────────────────────────────────────
+function enviarSolicitacao(e){
+  e.preventDefault();
+
+  var matricula  = document.getElementById("f-matricula").value.trim();
+  var nome       = document.getElementById("f-nome").value.trim();
+  var posto      = document.getElementById("f-posto").value.trim();
+  var telefone   = document.getElementById("f-telefone").value.trim();
+  var turno      = document.getElementById("f-turno").value;
+  var data       = document.getElementById("f-data").value;
+  var dest       = document.getElementById("f-destinatario").value.trim();
+  var assunto    = document.getElementById("f-assunto").value;
+  var texto      = document.getElementById("f-texto").value.trim();
+  var assinatura = getAssinaturaDataURL();
+
+  if(!matricula||!nome||!data||!dest||!assunto||!texto){
+    alert("Por favor, preencha todos os campos obrigatórios."); return;
+  }
+  if(!assinatura){
+    alert("Por favor, assine o documento antes de enviar."); return;
+  }
+
+  var btn = document.getElementById("btn-enviar");
+  btn.disabled = true;
+  btn.textContent = "Enviando…";
+
+  // Formatar data para exibição
+  var partes = data.split("-");
+  var dataFmt = (partes[2]||"")+"/"+(partes[1]||"")+"/"+(partes[0]||"");
+
+  // Protocolo único
+  var protocolo = "SOL-"+(Date.now()%1000000)+"-"+Math.random().toString(36).slice(2,6).toUpperCase();
+
+  var dados = {
+    protocolo:   protocolo,
+    data:        dataFmt,
+    hora:        (function(){ var n=new Date(); return String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0"); })(),
+    matricula:   matricula,
+    nome:        nome,
+    posto:       posto,
+    telefone:    telefone,
+    turno:       turno,
+    destinatario:dest,
+    assunto:     assunto,
+    texto:       texto,
+    assinatura:  assinatura,
+    status:      "pendente",
+    data_registro: new Date().toISOString(),
+    origem:      "qr_solicitacao"
+  };
+
+  // ── Auto-cadastro: PM não estava no sistema ───────────
+  if(!_pmJaCadastrado && matricula && nome){
+    _autocadastrarPolicial({ matricula:matricula, nome:nome, posto:posto, telefone:telefone, turno:turno });
+  }
+
+  // Salvar local como fallback
+  try{
+    var local = JSON.parse(localStorage.getItem("bcs_solicitacoes")||"[]");
+    local.push(dados);
+    localStorage.setItem("bcs_solicitacoes", JSON.stringify(local));
+  }catch(er){}
+
+  if(!SHEETS_URL || !TOKEN){
+    mostrarSucesso(protocolo, dados);
+    return;
+  }
+
+  // Enviar via JSONP
+  var cbName = "cb_sol_"+Date.now();
+  var timeout = setTimeout(function(){
+    delete window[cbName];
+    var sc = document.getElementById("sc_sol");
+    if(sc) sc.remove();
+    mostrarSucesso(protocolo, dados); // Sucesso offline
+  }, 10000);
+
+  window[cbName] = function(resp){
+    clearTimeout(timeout);
+    delete window[cbName];
+    var sc = document.getElementById("sc_sol");
+    if(sc) sc.remove();
+    mostrarSucesso(protocolo, dados);
+  };
+
+  var payload = encodeURIComponent(JSON.stringify(dados));
+  var sc = document.createElement("script");
+  sc.id  = "sc_sol";
+  sc.src = SHEETS_URL+"?acao=salvar&tipo=solicitacao&token="+encodeURIComponent(TOKEN)+"&dados="+payload+"&callback="+cbName;
+  sc.onerror = function(){
+    clearTimeout(timeout);
+    delete window[cbName];
+    sc.remove();
+    mostrarSucesso(protocolo, dados);
+  };
+  document.head.appendChild(sc);
+}
+
+// ── Auto-cadastro de policial ─────────────────────────
+function _autocadastrarPolicial(pol){
+  var id = "POL-AUTO-"+(Date.now()%1000000)+"-"+Math.random().toString(36).slice(2,5).toUpperCase();
+  var dadosPol = {
+    id:        id,
+    matricula: pol.matricula,
+    posto:     pol.posto     || "",
+    nome:      pol.nome      || "",
+    telefone:  pol.telefone  || "",
+    turno:     pol.turno     || "",
+    status:    "ativo",
+    criadoEm:  new Date().toISOString(),
+    origem:    "auto_solicitacao"
+  };
+
+  // Salvar local
+  try{
+    var local = JSON.parse(localStorage.getItem("bcs_policiais")||"[]");
+    var jaTem = local.some(function(p){ return (p.matricula||"").toLowerCase()===(pol.matricula||"").toLowerCase(); });
+    if(!jaTem){ local.push(dadosPol); localStorage.setItem("bcs_policiais",JSON.stringify(local)); }
+  }catch(er){}
+
+  // Sincronizar com Sheets
+  if(!SHEETS_URL || !TOKEN) return;
+  var cbName = "cb_autopol_"+Date.now();
+  window[cbName] = function(){ delete window[cbName]; var sc=document.getElementById("sc_autopol"); if(sc) sc.remove(); };
+  var payload = encodeURIComponent(JSON.stringify(dadosPol));
+  var sc = document.createElement("script");
+  sc.id  = "sc_autopol";
+  sc.src = SHEETS_URL+"?acao=salvar&tipo=policial&token="+encodeURIComponent(TOKEN)+"&dados="+payload+"&callback="+cbName;
+  sc.onerror = function(){ delete window[cbName]; sc.remove(); };
+  document.head.appendChild(sc);
+}
+
+function mostrarSucesso(protocolo, dados){
+  document.getElementById("card-form").style.display    = "none";
+  document.getElementById("card-sucesso").style.display = "block";
+  document.getElementById("protocolo-sol").innerHTML =
+    "<div style='font-size:10px;color:#5e4636;margin-bottom:4px'>PROTOCOLO</div>"+
+    "<div style='font-size:15px;font-weight:700;color:#d4a87a'>"+protocolo+"</div>"+
+    "<div style='font-size:10px;color:#5e4636;margin-top:8px'>"+dados.assunto+" · "+dados.data+"</div>";
+}
+</script>
+</body>
+</html>
