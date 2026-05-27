@@ -350,12 +350,34 @@ function buscarAdjunto(mat){  _adjTimer = _buscarNaLista(mat,"adj-status","adj-i
 // ── Cache de materiais ────────────────────────────────
 var MATERIAIS_CACHE = [];
 
+// Calcula quais materiais estão com carga ativa (não descarregados ainda)
+function _getCodigosOcupados(){
+  var ocupados = {};
+  try{
+    var cargas = JSON.parse(localStorage.getItem("bcs_cargas_armamento")||"[]");
+    // Ordena por data_registro para pegar o último estado de cada item
+    cargas.sort(function(a,b){ return new Date(a.data_registro||0)-new Date(b.data_registro||0); });
+    cargas.forEach(function(c){
+      (c.itens||[]).forEach(function(it){
+        if(it.codigo) ocupados[it.codigo.toUpperCase()] = (c.tipo_carga||"Carga");
+      });
+    });
+  }catch(e){}
+  return ocupados; // { "ARM-001": "Carga" } → ocupado; "Descarga" → livre
+}
+
 // Fallback: lê materiais do localStorage do app principal
 (function(){
   try{
     var local = JSON.parse(localStorage.getItem("bcs_materiais_patrimonio")||"[]");
+    var deletados = [];
+    try{ deletados = JSON.parse(localStorage.getItem("bcs_mat_excluidos")||"[]"); }catch(e2){}
     if(local.length > 0){
-      MATERIAIS_CACHE = local.filter(function(m){ return (m.status||"ativo").toLowerCase()==="ativo"; });
+      MATERIAIS_CACHE = local.filter(function(m){
+        return (m.status||"ativo").toLowerCase()==="ativo" &&
+               deletados.indexOf(m.id)===-1 &&
+               (m.status||"ativo").toLowerCase()!=="excluido";
+      });
     }
   }catch(e){}
 })();
@@ -392,36 +414,56 @@ function _sugerirMaterial(val){
   val = (val||"").trim();
   if(val.length < 2){ lista.style.display="none"; return; }
   var busca = val.toUpperCase();
+  var ocupados = _getCodigosOcupados();
+  var tipoCarga = (document.getElementById("f-tipo-carga")||{value:"Carga"}).value||"Carga";
+
   var matches = MATERIAIS_CACHE.filter(function(m){
     return (m.codigo||"").toUpperCase().includes(busca) ||
            (m.descricao||"").toUpperCase().includes(busca) ||
            (m.tipo||"").toUpperCase().includes(busca);
   }).slice(0, 10);
+
   if(!matches.length){
-    // Se cache vazio, tenta busca online
     if(MATERIAIS_CACHE.length === 0 && SHEETS_URL){
-      lista.innerHTML = "<div style='padding:10px;color:#6a9ae8;font-size:12px'>⏳ Carregando materiais...</div>";
-      lista.style.display = "block";
+      lista.innerHTML = "<div style='padding:10px;color:#6a9ae8;font-size:12px'>⏳ Carregando materiais…</div>";
     } else {
       lista.innerHTML = "<div style='padding:10px;color:#f59e0b;font-size:12px'>Nenhum material encontrado para \""+esc(val)+"\"</div>";
-      lista.style.display = "block";
     }
+    lista.style.display = "block";
     return;
   }
+
   _sugestaoIdx = -1;
   lista.innerHTML = matches.map(function(m, i){
-    return "<div class='mat-sugestao-item' data-idx='"+i+"' onclick='_selecionarSugestao("+i+")'>" +
+    var cod = (m.codigo||"").toUpperCase();
+    var ultimaOp = ocupados[cod];
+    // Para CARGA: bloqueia se a última operação foi Carga (material fora)
+    // Para DESCARGA: bloqueia se a última operação foi Descarga ou nunca houve carga
+    var bloqueado = false;
+    var motivoBloqueio = "";
+    if(tipoCarga === "Carga" && ultimaOp === "Carga"){
+      bloqueado = true;
+      motivoBloqueio = "⚠️ Em uso — aguardando descarga";
+    } else if(tipoCarga === "Descarga" && (!ultimaOp || ultimaOp === "Descarga")){
+      bloqueado = true;
+      motivoBloqueio = "⚠️ Não há carga ativa para este item";
+    }
+    var onclick = bloqueado ? "" : "onclick='_selecionarSugestao("+i+")'";
+    return "<div class='mat-sugestao-item"+(bloqueado?" bloqueado":"")+"' data-idx='"+i+"' "+onclick+" style='"+(bloqueado?"opacity:.55;cursor:not-allowed;":"")+"'>" +
       "<div style='flex:1'>" +
-        "<div style='font-weight:700;color:#e8f0ff;font-size:13px'>"+esc(m.descricao||m.tipo||"")+"</div>" +
+        "<div style='font-weight:700;color:"+(bloqueado?"#9a7a5a":"#e8f0ff")+";font-size:13px'>"+esc(m.descricao||m.tipo||"")+"</div>" +
         "<div style='font-size:11px;color:#4a7ab8;margin-top:2px'>" +
           "<span class='mat-sugestao-tipo'>"+esc(m.tipo||"")+"</span> " +
           "<span class='mat-sugestao-cod'>"+esc(m.codigo||"")+"</span>" +
           (m.serie?"<span style='color:#5a8a6a;margin-left:6px'>Nº "+esc(m.serie)+"</span>":"") +
+          (bloqueado?"<span style='color:#f59e0b;margin-left:8px;font-weight:700'>"+motivoBloqueio+"</span>":"") +
         "</div>" +
       "</div>" +
     "</div>";
   }).join("");
   lista._matches = matches;
+  lista._ocupados = ocupados;
+  lista._tipoCarga = tipoCarga;
   lista.style.display = "block";
 }
 

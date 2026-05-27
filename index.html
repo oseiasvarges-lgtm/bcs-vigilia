@@ -320,6 +320,8 @@ function salvarLocal() {
     if(state.atividadesEscolares) localStorage.setItem("bcs_atividades_escolares",JSON.stringify(state.atividadesEscolares));
     if(state.agExcluidos) localStorage.setItem("bcs_ag_excluidos",JSON.stringify([...state.agExcluidos]));
     if(state._deletedEvIds) localStorage.setItem("bcs_ev_excluidos",JSON.stringify([...state._deletedEvIds]));
+    if(state._deletedMatIds) localStorage.setItem("bcs_mat_excluidos",JSON.stringify([...state._deletedMatIds]));
+    if(state._deletedPolIds) localStorage.setItem("bcs_pol_excluidos",JSON.stringify([...state._deletedPolIds]));
     if(state._deletedProjIds) localStorage.setItem("bcs_proj_excluidos",JSON.stringify([...state._deletedProjIds]));
     console.log("[BCS] Salvado - OC:",light.ocorrencias.length,"Agendamentos:",light.agendamentos.length,"Visitas:",light.visitas.length);
     agendarSyncSheets();
@@ -352,6 +354,14 @@ function carregarLocal() {
       var prExRaw = localStorage.getItem("bcs_proj_excluidos");
       state._deletedProjIds = prExRaw ? new Set(JSON.parse(prExRaw)) : new Set();
     } catch(e){ state._deletedProjIds = new Set(); }
+    try {
+      var matExRaw = localStorage.getItem("bcs_mat_excluidos");
+      state._deletedMatIds = matExRaw ? new Set(JSON.parse(matExRaw)) : new Set();
+    } catch(e){ state._deletedMatIds = new Set(); }
+    try {
+      var polExRaw = localStorage.getItem("bcs_pol_excluidos");
+      state._deletedPolIds = polExRaw ? new Set(JSON.parse(polExRaw)) : new Set();
+    } catch(e){ state._deletedPolIds = new Set(); }
     // 🔒 Restaurar backup SIGESPOL (imune ao Sheets — chave separada)
     try {
       const spRaw = localStorage.getItem("bcs_sigespol_backup");
@@ -686,21 +696,37 @@ async function carregarDadosAppDoSheets(){
       if(state.tela==="solicitacoes") renderSolicitacoesGestor(document.getElementById("main"));
     });
     _sincSheets("policiais", "id", function(dados){
-      // Merge: mantém locais não enviados ainda + empurra para Sheets
       var local = state.policiais || [];
-      var idsSheets = dados.map(function(d){ return d.id; });
-      var soPLocal = local.filter(function(l){ return idsSheets.indexOf(l.id) === -1; });
-      soPLocal.forEach(function(pol){ _syncPolSheets(pol); }); // migra para Sheets
-      state.policiais = dados.concat(soPLocal);
+      var deletados = state._deletedPolIds || new Set();
+      // Filtra do Sheets itens que o usuário excluiu localmente
+      var dadosFiltrados = dados.filter(function(d){ return !deletados.has(d.id) && (d.status||"ativo")!=="excluido"; });
+      var idsSheets = dadosFiltrados.map(function(d){ return d.id; });
+      // Itens só locais (não excluídos): preferir versão local se status divergir
+      var soPLocal = local.filter(function(l){ return idsSheets.indexOf(l.id)===-1 && !deletados.has(l.id); });
+      soPLocal.forEach(function(pol){ _syncPolSheets(pol); });
+      // Para itens em ambos: usar versão Sheets mas preservar status local se mais recente
+      var merged = dadosFiltrados.map(function(d){
+        var loc = local.find(function(l){ return l.id===d.id; });
+        return (loc && loc.status!==d.status) ? Object.assign({},d,{status:loc.status}) : d;
+      });
+      state.policiais = merged.concat(soPLocal);
       salvarLocal();
     });
     _sincSheets("materiais_patrimonio", "id", function(dados){
-      // Merge: mantém locais não enviados ainda + empurra para Sheets
       var local = state.materiaisPatrimonio || [];
-      var idsSheets = dados.map(function(d){ return d.id; });
-      var soMLocal = local.filter(function(l){ return idsSheets.indexOf(l.id) === -1; });
-      soMLocal.forEach(function(mat){ _syncMatSheets(mat); }); // migra para Sheets
-      state.materiaisPatrimonio = dados.concat(soMLocal);
+      var deletados = state._deletedMatIds || new Set();
+      // Filtra do Sheets itens que o usuário excluiu localmente
+      var dadosFiltrados = dados.filter(function(d){ return !deletados.has(d.id) && (d.status||"ativo")!=="excluido"; });
+      var idsSheets = dadosFiltrados.map(function(d){ return d.id; });
+      // Itens só locais (não excluídos)
+      var soMLocal = local.filter(function(l){ return idsSheets.indexOf(l.id)===-1 && !deletados.has(l.id); });
+      soMLocal.forEach(function(mat){ _syncMatSheets(mat); });
+      // Para itens em ambos: preservar status local se mais recente
+      var merged = dadosFiltrados.map(function(d){
+        var loc = local.find(function(l){ return l.id===d.id; });
+        return (loc && loc.status!==d.status) ? Object.assign({},d,{status:loc.status}) : d;
+      });
+      state.materiaisPatrimonio = merged.concat(soMLocal);
       salvarLocal();
     });
 
@@ -12043,7 +12069,10 @@ function _matExcluir(id){
   if(!m) return;
   if(!confirm("Excluir permanentemente o material "+m.codigo+"?\nEssa ação não pode ser desfeita.")) return;
   state.materiaisPatrimonio=(state.materiaisPatrimonio||[]).filter(function(x){return x.id!==id;});
+  if(!state._deletedMatIds) state._deletedMatIds=new Set();
+  state._deletedMatIds.add(id);
   salvarLocal();
+  _syncMatStatusSheets(id,"excluido"); // avisa o Sheets para não devolver
   showToast("🗑 Material excluído.");
   renderLivroParteArmamento(document.getElementById("main"));
 }
@@ -12180,7 +12209,10 @@ function _polExcluir(id){
   var p=(state.policiais||[]).find(function(x){return x.id===id;});
   if(!p||!confirm("Excluir permanentemente "+p.nome+"?")) return;
   state.policiais=(state.policiais||[]).filter(function(x){return x.id!==id;});
+  if(!state._deletedPolIds) state._deletedPolIds=new Set();
+  state._deletedPolIds.add(id);
   salvarLocal();
+  _syncPolStatusSheets(id,"excluido"); // avisa o Sheets para não devolver
   showToast("🗑 Policial excluído.");
   renderLivroParteArmamento(document.getElementById("main"));
 }
