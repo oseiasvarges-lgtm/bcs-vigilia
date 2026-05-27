@@ -22,8 +22,15 @@ input[type=text],input[type=number],input[type=date],select{
 }
 input:focus,select:focus{ border-color:#3a6ae8; }
 .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.busca-mat{ display:flex; gap:8px; }
+.busca-mat{ display:flex; gap:8px; position:relative; }
 .busca-mat input{ flex:1; }
+.mat-sugestoes{ position:absolute; top:100%; left:0; right:0; background:#0a1428; border:1px solid #3a6ae8; border-top:none; border-radius:0 0 8px 8px; max-height:220px; overflow-y:auto; z-index:999; display:none; }
+.mat-sugestao-item{ padding:9px 12px; cursor:pointer; border-bottom:1px solid #0f2040; font-size:13px; display:flex; align-items:center; gap:8px; }
+.mat-sugestao-item:last-child{ border-bottom:none; }
+.mat-sugestao-item:hover,.mat-sugestao-item.ativo{ background:#1a3a6a; }
+.mat-sugestao-cod{ font-family:monospace; color:#60a5fa; font-weight:700; min-width:80px; }
+.mat-sugestao-desc{ color:#a0c0ff; font-size:12px; }
+.mat-sugestao-tipo{ background:#1a3a6a; color:#6a9ae8; padding:1px 6px; border-radius:3px; font-size:10px; font-weight:700; white-space:nowrap; }
 .btn-buscar{ background:linear-gradient(135deg,#1a3a8a,#0f2a6a); border:1px solid #3a6ae8; color:#a0c0ff; padding:10px 16px; border-radius:8px; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap; }
 .btn-buscar:disabled{ opacity:.5; cursor:not-allowed; }
 .mat-encontrado{ background:#070d1a; border:2px solid #3a6ae8; border-radius:10px; padding:12px; margin-bottom:10px; display:none; }
@@ -116,12 +123,14 @@ select option{ background:#0f1a2e; }
 
     <label class="campo">
       <span>Código do Material <em>*</em></span>
-      <div class="busca-mat">
-        <input type="text" id="f-cod-mat" placeholder="Ex: ARM-001 ou COL-003"
+      <div class="busca-mat" id="busca-mat-wrap">
+        <input type="text" id="f-cod-mat" placeholder="Digite código ou descrição…"
                style="text-transform:uppercase"
-               oninput="this.value=this.value.toUpperCase()"
-               onkeydown="if(event.key==='Enter'){event.preventDefault();buscarMaterial();}"/>
+               oninput="this.value=this.value.toUpperCase();_sugerirMaterial(this.value)"
+               onkeydown="_navSugestao(event)"
+               autocomplete="off"/>
         <button type="button" class="btn-buscar" id="btn-buscar-mat" onclick="buscarMaterial()">Buscar</button>
+        <div class="mat-sugestoes" id="mat-sugestoes"></div>
       </div>
       <div class="loading-dot" id="loading-busca">⏳ Buscando...</div>
       <div class="erro-busca" id="erro-busca"></div>
@@ -350,9 +359,72 @@ function carregarMateriais(tentativa){
 }
 carregarMateriais();
 
-// ── Buscar material ───────────────────────────────────
+// ── Autocomplete de material ──────────────────────────
 var _matAtual = null;
+var _sugestaoIdx = -1;
 
+function _sugerirMaterial(val){
+  var lista = document.getElementById("mat-sugestoes");
+  val = (val||"").trim();
+  if(val.length < 1 || MATERIAIS_CACHE.length === 0){ lista.style.display="none"; return; }
+  var busca = val.toUpperCase();
+  var matches = MATERIAIS_CACHE.filter(function(m){
+    return (m.codigo||"").toUpperCase().includes(busca) ||
+           (m.descricao||"").toUpperCase().includes(busca) ||
+           (m.tipo||"").toUpperCase().includes(busca);
+  }).slice(0, 8);
+  if(!matches.length){ lista.style.display="none"; return; }
+  _sugestaoIdx = -1;
+  lista.innerHTML = matches.map(function(m, i){
+    return "<div class='mat-sugestao-item' data-idx='"+i+"' onclick='_selecionarSugestao("+i+")'>" +
+      "<span class='mat-sugestao-cod'>"+esc(m.codigo||"")+"</span>" +
+      "<span class='mat-sugestao-desc'>"+esc((m.descricao||"").substring(0,40))+"</span>" +
+      "<span class='mat-sugestao-tipo'>"+esc(m.tipo||"")+"</span>" +
+    "</div>";
+  }).join("");
+  lista._matches = matches;
+  lista.style.display = "block";
+}
+
+function _selecionarSugestao(idx){
+  var lista = document.getElementById("mat-sugestoes");
+  var m = lista._matches && lista._matches[idx];
+  if(!m) return;
+  document.getElementById("f-cod-mat").value = m.codigo||"";
+  lista.style.display = "none";
+  mostrarMaterial(m);
+}
+
+function _navSugestao(e){
+  var lista = document.getElementById("mat-sugestoes");
+  var items = lista.querySelectorAll(".mat-sugestao-item");
+  if(!items.length){ if(e.key==="Enter"){ e.preventDefault(); buscarMaterial(); } return; }
+  if(e.key==="ArrowDown"){
+    e.preventDefault();
+    _sugestaoIdx = Math.min(_sugestaoIdx+1, items.length-1);
+  } else if(e.key==="ArrowUp"){
+    e.preventDefault();
+    _sugestaoIdx = Math.max(_sugestaoIdx-1, -1);
+  } else if(e.key==="Enter"){
+    e.preventDefault();
+    if(_sugestaoIdx >= 0){ _selecionarSugestao(_sugestaoIdx); }
+    else { lista.style.display="none"; buscarMaterial(); }
+    return;
+  } else if(e.key==="Escape"){
+    lista.style.display="none"; return;
+  } else { return; }
+  items.forEach(function(el,i){ el.classList.toggle("ativo", i===_sugestaoIdx); });
+  if(_sugestaoIdx >= 0) items[_sugestaoIdx].scrollIntoView({block:"nearest"});
+}
+
+// Fechar sugestões ao clicar fora
+document.addEventListener("click", function(e){
+  if(!document.getElementById("busca-mat-wrap").contains(e.target)){
+    document.getElementById("mat-sugestoes").style.display="none";
+  }
+});
+
+// ── Buscar material ───────────────────────────────────
 function buscarMaterial(){
   var cod = (document.getElementById("f-cod-mat").value || "").trim().toUpperCase();
   document.getElementById("erro-busca").style.display = "none";
@@ -365,9 +437,14 @@ function buscarMaterial(){
     return;
   }
 
-  // Tenta no cache primeiro
+  // Tenta no cache: exato primeiro, depois parcial
   var m = MATERIAIS_CACHE.find(function(x){ return (x.codigo||"").toUpperCase() === cod; });
-  if(m){ mostrarMaterial(m); return; }
+  if(!m) m = MATERIAIS_CACHE.find(function(x){
+    return (x.codigo||"").toUpperCase().includes(cod) ||
+           (x.descricao||"").toUpperCase().includes(cod) ||
+           (x.tipo||"").toUpperCase().includes(cod);
+  });
+  if(m){ document.getElementById("mat-sugestoes").style.display="none"; mostrarMaterial(m); return; }
 
   // Se não achou no cache, busca online
   if(SHEETS_URL){
@@ -388,6 +465,10 @@ function buscarMaterial(){
       if(resp && resp.ok && Array.isArray(resp.dados)){
         MATERIAIS_CACHE = resp.dados.filter(function(x){ return (x.status||"ativo")==="ativo"; });
         var mat = MATERIAIS_CACHE.find(function(x){ return (x.codigo||"").toUpperCase() === cod; });
+        if(!mat) mat = MATERIAIS_CACHE.find(function(x){
+          return (x.codigo||"").toUpperCase().includes(cod) ||
+                 (x.descricao||"").toUpperCase().includes(cod);
+        });
         if(mat){ mostrarMaterial(mat); return; }
       }
       _mostrarEntradaManual(cod);
