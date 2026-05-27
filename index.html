@@ -2974,7 +2974,7 @@ function renderCalendar() {
   }
   // Pre-indexar eventos por data para O(1) lookup no loop (performance mobile)
   var _cancelados = new Set((state.agendamentosCancelados||[]).map(function(x){return x.id;}));
-  var _agByDate = {}, _visByDate = {}, _evAvByDate = {};
+  var _agByDate = {}, _visByDate = {}, _evAvByDate = {}, _escByDate = {}, _chamByDate = {};
   (state.db.agendamentos||[]).forEach(function(a){
     if(_cancelados.has(a.id)) return;
     var d=normData(a.data); if(!d) return;
@@ -2991,9 +2991,21 @@ function renderCalendar() {
     if(!_evAvByDate[e.data]) _evAvByDate[e.data]=[];
     _evAvByDate[e.data].push(e);
   });
+  // Atividades escolares (rondas/visitas a escolas)
+  (state.atividadesEscolares||[]).forEach(function(a){
+    var d=normData(a.data); if(!d) return;
+    if(!_escByDate[d]) _escByDate[d]=[];
+    _escByDate[d].push(a);
+  });
+  // Chamadas de projetos sociais (aulas)
+  (state.chamadas||[]).forEach(function(c){
+    var d=normData(c.data); if(!d) return;
+    if(!_chamByDate[d]) _chamByDate[d]=[];
+    _chamByDate[d].push(c);
+  });
   const getEvs=d=>{
     var ds=dStr(d);
-    return { ags:_agByDate[ds]||[], vis:_visByDate[ds]||[] };
+    return { ags:_agByDate[ds]||[], vis:_visByDate[ds]||[], esc:_escByDate[ds]||[], cham:_chamByDate[ds]||[] };
   };
   const sem=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
 
@@ -3013,13 +3025,15 @@ function renderCalendar() {
   for(let d=1;d<=total;d++){
     const ds=dStr(d), ev=getEvs(d), isHoje=ds===hojeStr, isSel=state.calDia===d;
     const _evAvDia=_evAvByDate[ds]||[];
-    const totalEvDia=ev.ags.length+ev.vis.length+_evAvDia.length;
+    const totalEvDia=ev.ags.length+ev.vis.length+_evAvDia.length+ev.esc.length+ev.cham.length;
     const alertaCls=totalEvDia>=3?" alerta-3":totalEvDia===2?" alerta-2":"";
     const bg=isSel?"background:#3e2c22":isHoje?"background:#42301e":(totalEvDia>=3?"background:#1f0808":"background:#36221a");
     html+=`<div class="cal-day${isHoje?" today":""}${isSel?" selected":""}${alertaCls}" style="${bg}" onclick="calClick(${d})">
       <div class="cal-num" style="color:${totalEvDia?"#f5ede0":"#9a7050"}">${d}</div>`;
     (ev.ags||[]).slice(0,2).forEach(a=>{ html+=`<div class="cal-event" style="background:${COR_VISITA[a.tipo]||"#d4a87a"};color:#000">${normHora(a.hora)} ${(a.vitima_nome||"--").split(" ")[0]}</div>`; });
     (ev.vis||[]).slice(0,1).forEach(v=>{ html+=`<div class="cal-event" style="background:#334155;color:#94a3b8">✓ ${(v.vitima_nome||"--").split(" ")[0]}</div>`; });
+    (ev.esc||[]).slice(0,1).forEach(a=>{ html+=`<div class="cal-event" style="background:#1e3a5f;color:#38bdf8;font-size:9px">🏫 ${(a.escolaNome||"Escola").split(" ")[0]}</div>`; });
+    (ev.cham||[]).slice(0,1).forEach(c=>{ html+=`<div class="cal-event" style="background:#2d1b69;color:#a78bfa;font-size:9px">📚 ${(c.projetoNome||"Aula").substring(0,10)}</div>`; });
     _evAvDia.slice(0,1).forEach(e=>{ html+=`<div class="cal-event" style="background:${e.cor||"#8b5cf6"};color:#fff;font-size:9px">${e.hora||""} ${e.titulo.substring(0,10)}</div>`; });
     html+=`</div>`;
   }
@@ -3029,7 +3043,9 @@ function renderCalendar() {
     const ev=getEvs(state.calDia);
     const diaSel=dStr(state.calDia);
     const evAvulsos=_evAvByDate[diaSel]||[];
-    const totalEvs=ev.ags.length+ev.vis.length+evAvulsos.length;
+    const escDia=_escByDate[diaSel]||[];
+    const chamDia=_chamByDate[diaSel]||[];
+    const totalEvs=ev.ags.length+ev.vis.length+evAvulsos.length+escDia.length+chamDia.length;
     html+=`<div class="card" style="margin-top:14px">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
         <h4 style="color:#f5ede0;font-size:15px;font-weight:700;margin:0">${String(state.calDia).padStart(2,"0")}/${String(mn+1).padStart(2,"0")}/${ano}</h4>
@@ -3038,6 +3054,8 @@ function renderCalendar() {
     if(!totalEvs) html+=`<p style="color:#5e4636;font-size:14px">Nenhum evento neste dia.</p>`;
     ev.ags.forEach(a=>{const c=COR_VISITA[a.tipo]||"#d4a87a";html+=`<div class="cal-ag-item" data-ag-id="${a.id}" style="background:#36221a;border-left:3px solid ${c};border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onmouseover="this.style.background='#3c2818'" onmouseout="this.style.background='#36221a'"><div style="display:flex;justify-content:space-between;margin-bottom:4px">${tag(a.tipo,c)}<span style="color:#a07c58;font-size:12px">${normHora(a.hora)}</span></div><p style="color:#f5ede0;font-size:14px;font-weight:500">${a.vitima_nome}</p>${a.endereco?`<p style="color:#a07c58;font-size:12px">📍 ${a.endereco}</p>`:""}</div>`;});
     ev.vis.forEach(v=>{html+=`<div style="background:#36221a;border-left:3px solid #10b981;border-radius:8px;padding:12px;margin-bottom:8px">${tag("✓ Realizada","#10b981")}<p style="color:#f5ede0;font-size:14px;font-weight:500;margin-top:6px">${v.vitima_nome}</p>${v.resultado?`<p style="color:#a07c58;font-size:12px;margin-top:4px">${v.resultado}</p>`:""}</div>`;});
+    escDia.forEach(a=>{html+=`<div style="background:#0f2035;border-left:3px solid #38bdf8;border-radius:8px;padding:12px;margin-bottom:8px">${tag("🏫 "+esc(a.subtipo||a.tipo||"Visita Escolar"),"#38bdf8")}<p style="color:#f5ede0;font-size:14px;font-weight:500;margin-top:6px">${esc(a.escolaNome||"Escola")}</p>${a.responsavel?`<p style="color:#a07c58;font-size:12px;margin-top:4px">👮 ${esc(a.responsavel)}</p>`:""}${a.tema?`<p style="color:#a07c58;font-size:11px;margin-top:2px">${esc(a.tema)}</p>`:""}</div>`;});
+    chamDia.forEach(c=>{html+=`<div style="background:#1a0a3a;border-left:3px solid #a78bfa;border-radius:8px;padding:12px;margin-bottom:8px">${tag("📚 "+esc(c.projetoNome||"Aula"),"#a78bfa")}<p style="color:#c4b5fd;font-size:12px;margin-top:6px">👨‍🏫 ${esc(c.instrutor||"Instrutor")}</p>${c.presencas?`<p style="color:#a07c58;font-size:11px;margin-top:2px">Presenças: ${Array.isArray(c.presencas)?c.presencas.filter(Boolean).length:c.presencas}</p>`:""}</div>`;});
     evAvulsos.forEach(e=>{html+=`<div class="cal-ev-avulso" data-ev-id="${e.id}" style="background:#36221a;border-left:3px solid ${e.cor||"#8b5cf6"};border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer" onmouseover="this.style.background='#3c2818'" onmouseout="this.style.background='#36221a'">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
         ${tag(e.tipo||"Evento","#8b5cf6")}<span style="color:#a07c58;font-size:12px">${e.hora||""}</span>
