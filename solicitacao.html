@@ -183,14 +183,24 @@ var TOKEN      = params.get("token")  || "";
 
 // ── Cache de policiais ────────────────────────────────
 var POLICIAIS_CACHE = [];
+var _policiaisCarregados = false;
 
-function carregarPoliciais(){
+function carregarPoliciais(tentativa){
   if(!SHEETS_URL) return;
+  tentativa = tentativa || 1;
   var cbName = "cb_pol_sol_"+Date.now();
+  var tmout = setTimeout(function(){
+    delete window[cbName];
+    var sc = document.getElementById("sc_pol_sol");
+    if(sc) sc.remove();
+    if(tentativa < 3) carregarPoliciais(tentativa+1); // retry automático
+  }, 10000);
   window[cbName] = function(resp){
+    clearTimeout(tmout);
     delete window[cbName];
     if(resp && resp.ok && Array.isArray(resp.dados)){
-      POLICIAIS_CACHE = resp.dados.filter(function(p){ return (p.status||"ativo")==="ativo"; });
+      POLICIAIS_CACHE = resp.dados.filter(function(p){ return (p.status||"ativo").toLowerCase()==="ativo"; });
+      _policiaisCarregados = true;
     }
     var sc = document.getElementById("sc_pol_sol");
     if(sc) sc.remove();
@@ -198,7 +208,7 @@ function carregarPoliciais(){
   var sc = document.createElement("script");
   sc.id  = "sc_pol_sol";
   sc.src = SHEETS_URL+"?acao=listar&tipo=policiais&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
-  sc.onerror = function(){ delete window[cbName]; sc.remove(); };
+  sc.onerror = function(){ clearTimeout(tmout); delete window[cbName]; sc.remove(); if(tentativa < 3) carregarPoliciais(tentativa+1); };
   document.head.appendChild(sc);
 }
 carregarPoliciais();
@@ -220,6 +230,13 @@ function buscarPolicial(mat){
   _pmJaCadastrado = false;
   if(!mat){ statusEl.style.display="none"; infoEl.style.display="none"; avisoEl.style.display="none"; return; }
   _polTimer = setTimeout(function(){
+    // Cache ainda carregando?
+    if(!_policiaisCarregados && POLICIAIS_CACHE.length === 0){
+      statusEl.style.cssText = "display:flex;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;background:#3a6ae822;color:#6a9ae8;border:1px solid #3a6ae844";
+      statusEl.textContent   = "⏳ Carregando...";
+      setTimeout(function(){ buscarPolicial(mat); }, 2000); // tenta de novo em 2s
+      return;
+    }
     var pol = POLICIAIS_CACHE.find(function(p){
       return (p.matricula||"").trim().toLowerCase() === mat.toLowerCase();
     });
