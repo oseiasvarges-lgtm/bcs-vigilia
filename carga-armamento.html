@@ -15,7 +15,11 @@ body{ background:#0a0f1a; color:#e8f0ff; font-family:'Segoe UI',system-ui,sans-s
 label.campo{ display:block; margin-bottom:14px; }
 label.campo span{ color:#4a7ab8; font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:.6px; display:block; margin-bottom:5px; }
 label.campo span em{ color:#ef4444; font-style:normal; }
-input[type=text],input[type=number],input[type=date],select{ width:100%; background:#0a1428; border:1px solid #1a3a6a; color:#e8f0ff; padding:10px 12px; border-radius:8px; font-size:14px; font-family:inherit; outline:none; transition:border-color .2s; }
+input[type=text],input[type=number],input[type=date],select{
+  width:100%; background:#0a1428; border:1px solid #1a3a6a; color:#e8f0ff;
+  padding:10px 12px; border-radius:8px; font-size:14px; font-family:inherit; outline:none;
+  transition:border-color .2s;
+}
 input:focus,select:focus{ border-color:#3a6ae8; }
 .row2{ display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .busca-mat{ display:flex; gap:8px; }
@@ -59,29 +63,42 @@ select option{ background:#0f1a2e; }
 </style>
 </head>
 <body>
+
 <div class="topo">
-  <div class="topo-icon">🔫</div>
+  <img src="data:image/jpeg;base64,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" style="height:70px;width:70px;border-radius:50%;object-fit:cover;margin-bottom:6px"/>
   <div class="topo-titulo">77ª CIPM — BCS</div>
   <div class="topo-sub">Polícia Militar da Bahia · Carga de Armamento</div>
 </div>
+
 <div class="card" id="card-form">
   <form id="form-carga" onsubmit="enviarCarga(event)">
+
     <div class="row2">
-      <label class="campo"><span>Data <em>*</em></span><input type="date" id="f-data" required/></label>
-      <label class="campo"><span>Hora <em>*</em></span><input type="text" id="f-hora" placeholder="07:30" required/></label>
+      <label class="campo">
+        <span>Data <em>*</em></span>
+        <input type="date" id="f-data" required/>
+      </label>
+      <label class="campo">
+        <span>Hora <em>*</em></span>
+        <input type="text" id="f-hora" placeholder="07:30" required/>
+      </label>
     </div>
+
     <label class="campo">
       <span>Matrícula <em>*</em></span>
       <div style="display:flex;gap:8px">
-        <input type="text" id="f-matricula" placeholder="Ex: 123456" required oninput="buscarPolicial(this.value)" style="flex:1"/>
+        <input type="text" id="f-matricula" placeholder="Ex: 123456" required
+               oninput="buscarPolicial(this.value)" style="flex:1"/>
         <span id="pol-status" style="display:none;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap"></span>
       </div>
     </label>
+
     <label class="campo">
       <span>Nome completo <em>*</em></span>
       <input type="text" id="f-nome" placeholder="Preenchido automaticamente ou digite" required autocomplete="name"/>
       <div id="pol-info" style="display:none;margin-top:5px;background:#070d1a;border:1px solid #1a3a6a;border-radius:7px;padding:7px 10px;font-size:11px;color:#6a9ae8"></div>
     </label>
+
     <label class="campo">
       <span>Tipo de Carga</span>
       <select id="f-tipo-carga">
@@ -91,17 +108,26 @@ select option{ background:#0f1a2e; }
         <option value="Conferência">🔍 Conferência</option>
       </select>
     </label>
+
     <hr class="separador"/>
+
+    <!-- Busca de material -->
     <div class="secao-titulo">📦 Materiais / Equipamentos</div>
+
     <label class="campo">
       <span>Código do Material <em>*</em></span>
       <div class="busca-mat">
-        <input type="text" id="f-cod-mat" placeholder="Ex: ARM-001 ou COL-003" style="text-transform:uppercase" oninput="this.value=this.value.toUpperCase()" onkeydown="if(event.key==='Enter'){event.preventDefault();buscarMaterial();}"/>
+        <input type="text" id="f-cod-mat" placeholder="Ex: ARM-001 ou COL-003"
+               style="text-transform:uppercase"
+               oninput="this.value=this.value.toUpperCase()"
+               onkeydown="if(event.key==='Enter'){event.preventDefault();buscarMaterial();}"/>
         <button type="button" class="btn-buscar" id="btn-buscar-mat" onclick="buscarMaterial()">Buscar</button>
       </div>
       <div class="loading-dot" id="loading-busca">⏳ Buscando...</div>
       <div class="erro-busca" id="erro-busca"></div>
     </label>
+
+    <!-- Material encontrado -->
     <div class="mat-encontrado" id="mat-encontrado">
       <div style="display:flex;align-items:center;margin-bottom:6px">
         <span class="mat-cod" id="mc-cod"></span>
@@ -109,20 +135,21 @@ select option{ background:#0f1a2e; }
       </div>
       <div class="mat-desc" id="mc-desc"></div>
       <div class="mat-serie" id="mc-serie"></div>
+      <!-- Campos de entrada manual (quando não encontrado no cache) -->
       <div id="mc-tipo-sel" style="display:none;margin-top:8px">
         <label style="color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Tipo <em style="color:#ef4444;font-style:normal">*</em></label>
         <select id="mc-tipo-input" onchange="if(_matAtual)_matAtual.tipo=this.value;_atualizarCamposArma();" style="width:100%;background:#0a1428;border:1px solid #3a6ae8;color:#e8f0ff;padding:8px 10px;border-radius:7px;font-size:13px">
           <option value="">Selecione o tipo…</option>
-          <option value="Arma">Arma</option>
-          <option value="Munição">Munição</option>
-          <option value="Colete Balístico">Colete Balístico</option>
-          <option value="Algemas">Algemas</option>
-          <option value="Rádio">Rádio</option>
-          <option value="Lanterna">Lanterna</option>
-          <option value="Bastão">Bastão</option>
-          <option value="Equipamento Tático">Equipamento Tático</option>
-          <option value="Veículo">Veículo</option>
-          <option value="Outros">Outros</option>
+          <option value="Arma">🔫 Arma</option>
+          <option value="Munição">🔵 Munição</option>
+          <option value="Colete Balístico">🛡 Colete Balístico</option>
+          <option value="Algemas">⛓ Algemas</option>
+          <option value="Rádio">📻 Rádio</option>
+          <option value="Lanterna">🔦 Lanterna</option>
+          <option value="Bastão">🪄 Bastão</option>
+          <option value="Equipamento Tático">⚙ Equipamento Tático</option>
+          <option value="Veículo">🚓 Veículo</option>
+          <option value="Outros">📦 Outros</option>
         </select>
       </div>
       <div id="mc-desc-inp" style="display:none;margin-top:8px">
@@ -133,30 +160,60 @@ select option{ background:#0f1a2e; }
         <label style="color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Nº de Série</label>
         <input type="text" id="mc-serie-input" placeholder="Opcional" oninput="if(_matAtual)_matAtual.serie=this.value" style="width:100%;background:#0a1428;border:1px solid #1a3a6a;color:#e8f0ff;padding:8px 10px;border-radius:7px;font-size:13px"/>
       </div>
+      <!-- Campos de munição — só para armas -->
       <div class="campos-arma row2" id="campos-arma" style="margin-top:10px">
-        <label class="campo" style="margin-bottom:0"><span>Qtd Munição</span><input type="number" id="f-municao" min="0" max="999" placeholder="0"/></label>
-        <label class="campo" style="margin-bottom:0"><span>Qtd Carregadores</span><input type="number" id="f-carregadores" min="0" max="99" placeholder="0"/></label>
+        <label class="campo" style="margin-bottom:0">
+          <span>Qtd Munição</span>
+          <input type="number" id="f-municao" min="0" max="999" placeholder="0"/>
+        </label>
+        <label class="campo" style="margin-bottom:0">
+          <span>Qtd Carregadores</span>
+          <input type="number" id="f-carregadores" min="0" max="99" placeholder="0"/>
+        </label>
       </div>
-      <button type="button" onclick="adicionarItem()" style="margin-top:10px;width:100%;background:#0a1428;border:1px solid #3a6ae8;color:#6a9ae8;padding:9px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">➕ Adicionar à Carga</button>
+      <button type="button" onclick="adicionarItem()"
+              style="margin-top:10px;width:100%;background:#0a1428;border:1px solid #3a6ae8;color:#6a9ae8;padding:9px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
+        ➕ Adicionar à Carga
+      </button>
       <div id="trava-aviso" style="display:none;margin-top:8px;background:#3a0a0a;border:1px solid #ef4444;border-radius:8px;padding:10px 12px;font-size:12px;color:#fca5a5;line-height:1.6"></div>
     </div>
+
+    <!-- Lista de itens -->
     <div class="lista-itens-wrap">
-      <div class="secao-titulo" style="margin-top:4px">✅ Itens Adicionados <span id="qtd-itens" style="background:#1a3a6a;color:#6a9ae8;border-radius:10px;padding:1px 8px;font-size:10px">0</span></div>
+      <div class="secao-titulo" style="margin-top:4px">
+        ✅ Itens Adicionados
+        <span id="qtd-itens" style="background:#1a3a6a;color:#6a9ae8;border-radius:10px;padding:1px 8px;font-size:10px">0</span>
+      </div>
       <div id="lista-itens"></div>
     </div>
     <div class="erro-msg" id="erro-itens">Adicione ao menos 1 material à carga.</div>
+
     <hr class="separador"/>
-    <label class="campo"><span>Observação</span><input type="text" id="f-obs" placeholder="Opcional"/></label>
+
+    <label class="campo">
+      <span>Observação</span>
+      <input type="text" id="f-obs" placeholder="Opcional"/>
+    </label>
+
+    <!-- Assinatura do Policial -->
     <div class="campo">
       <span>✍ Assinatura do Policial <em>*</em></span>
-      <div class="assin-box" id="assin-box"><canvas id="assin-canvas" height="130"></canvas><div class="assin-label" id="assin-label">Assine aqui com o dedo</div></div>
-      <div class="assin-actions"><button type="button" class="btn-limpar" onclick="limparAssinatura('pol')">🗑 Limpar</button></div>
+      <div class="assin-box" id="assin-box">
+        <canvas id="assin-canvas" height="130"></canvas>
+        <div class="assin-label" id="assin-label">Assine aqui com o dedo</div>
+      </div>
+      <div class="assin-actions">
+        <button type="button" class="btn-limpar" onclick="limparAssinatura('pol')">🗑 Limpar</button>
+      </div>
       <div class="erro-msg" id="erro-assin">Assinatura do policial obrigatória</div>
     </div>
+
+    <!-- Adjunto -->
     <label class="campo">
       <span>Matrícula do Adjunto <em>*</em></span>
       <div style="display:flex;gap:8px">
-        <input type="text" id="f-matricula-adj" placeholder="Ex: 123456" required oninput="buscarAdjunto(this.value)" style="flex:1"/>
+        <input type="text" id="f-matricula-adj" placeholder="Ex: 123456" required
+               oninput="buscarAdjunto(this.value)" style="flex:1"/>
         <span id="adj-status" style="display:none;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap"></span>
       </div>
     </label>
@@ -165,14 +222,23 @@ select option{ background:#0f1a2e; }
       <input type="text" id="f-nome-adj" placeholder="Preenchido automaticamente ou digite" required/>
       <div id="adj-info" style="display:none;margin-top:5px;background:#070d1a;border:1px solid #1a3a6a;border-radius:7px;padding:7px 10px;font-size:11px;color:#6a9ae8"></div>
     </label>
+
+    <!-- Assinatura do Adjunto -->
     <div class="campo">
       <span>✍ Assinatura do Adjunto Responsável <em>*</em></span>
-      <div class="assin-box" id="assin-box-adj"><canvas id="assin-canvas-adj" height="130"></canvas><div class="assin-label" id="assin-label-adj">Adjunto assina aqui</div></div>
-      <div class="assin-actions"><button type="button" class="btn-limpar" onclick="limparAssinatura('adj')">🗑 Limpar</button></div>
+      <div class="assin-box" id="assin-box-adj">
+        <canvas id="assin-canvas-adj" height="130"></canvas>
+        <div class="assin-label" id="assin-label-adj">Adjunto assina aqui</div>
+      </div>
+      <div class="assin-actions">
+        <button type="button" class="btn-limpar" onclick="limparAssinatura('adj')">🗑 Limpar</button>
+      </div>
       <div class="erro-msg" id="erro-assin-adj">Assinatura do adjunto obrigatória</div>
     </div>
+
     <button type="submit" class="btn-enviar" id="btn-enviar">✅ Registrar Carga</button>
   </form>
+
   <div class="sucesso" id="bloco-sucesso">
     <div class="icon">✅</div>
     <h2>Carga registrada!</h2>
@@ -180,40 +246,452 @@ select option{ background:#0f1a2e; }
     <div id="protocolo" style="margin-top:16px;background:#070d1a;border:1px solid #1a3a6a;border-radius:10px;padding:14px;font-size:13px;color:#6a9ae8;font-family:monospace;word-break:break-all"></div>
   </div>
 </div>
+
 <script>
-var params=new URLSearchParams(location.search);
-var SHEETS_URL=params.get("sheets")||"https://script.google.com/macros/s/AKfycbxKZVJcjgBSVUK7MXcH1ZuKY8-YhmidlTN-olcmLJ0T4ar9fPE05-iZbqJ4KUfHMgovRA/exec";
-var TOKEN=params.get("token")||"bcs-token-secreto-2025";
-(function(){var h=new Date();document.getElementById("f-data").value=h.getFullYear()+"-"+String(h.getMonth()+1).padStart(2,"0")+"-"+String(h.getDate()).padStart(2,"0");document.getElementById("f-hora").value=String(h.getHours()).padStart(2,"0")+":"+String(h.getMinutes()).padStart(2,"0");})();
-var POLICIAIS_CACHE=[];
-function carregarPoliciais(){if(!SHEETS_URL)return;var n="cb_pol_"+Date.now();window[n]=function(r){delete window[n];if(r&&r.ok&&Array.isArray(r.dados))POLICIAIS_CACHE=r.dados.filter(function(p){return(p.status||"ativo")==="ativo";});};var s=document.createElement("script");s.src=SHEETS_URL+"?acao=listar&tipo=policiais&token="+encodeURIComponent(TOKEN)+"&callback="+n;s.onerror=function(){delete window[n];};document.head.appendChild(s);}
+// ── Parâmetros da URL (com fallback fixo para funcionar sem QR) ──────────────
+var params     = new URLSearchParams(location.search);
+var SHEETS_URL = params.get("sheets") || "https://script.google.com/macros/s/AKfycbxKZVJcjgBSVUK7MXcH1ZuKY8-YhmidlTN-olcmLJ0T4ar9fPE05-iZbqJ4KUfHMgovRA/exec";
+var TOKEN      = params.get("token")  || "bcs-token-secreto-2025";
+
+// ── Data e hora automáticas ───────────────────────────
+(function(){
+  var hoje = new Date();
+  document.getElementById("f-data").value =
+    hoje.getFullYear()+"-"+String(hoje.getMonth()+1).padStart(2,"0")+"-"+String(hoje.getDate()).padStart(2,"0");
+  document.getElementById("f-hora").value =
+    String(hoje.getHours()).padStart(2,"0")+":"+String(hoje.getMinutes()).padStart(2,"0");
+})();
+
+// ── Cache de policiais ────────────────────────────────
+var POLICIAIS_CACHE = [];
+
+function carregarPoliciais(){
+  if(!SHEETS_URL) return;
+  var cbName = "cb_pol_init_"+Date.now();
+  window[cbName] = function(resp){
+    delete window[cbName];
+    if(resp && resp.ok && Array.isArray(resp.dados)){
+      POLICIAIS_CACHE = resp.dados.filter(function(p){ return (p.status||"ativo")==="ativo"; });
+    }
+  };
+  var sc = document.createElement("script");
+  sc.src = SHEETS_URL+"?acao=listar&tipo=policiais&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
+  sc.onerror = function(){ delete window[cbName]; };
+  document.head.appendChild(sc);
+}
 carregarPoliciais();
-function _buscarNaLista(mat,sid,iid,nid,timer){var el=document.getElementById(sid),inf=document.getElementById(iid);el.style.display="none";inf.style.display="none";if(!mat||mat.length<3)return;clearTimeout(timer);return setTimeout(function(){var p=POLICIAIS_CACHE.find(function(x){return x.matricula.toLowerCase()===mat.trim().toLowerCase();});if(p){document.getElementById(nid).value=p.posto?p.posto+" "+p.nome:p.nome;el.style.cssText="display:flex;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44";el.textContent="✅ Encontrado";inf.style.display="block";inf.innerHTML="👮 "+esc(p.posto||"")+" "+esc(p.nome)+(p.turno?" · "+esc(p.turno):"");}else if(POLICIAIS_CACHE.length>0){el.style.cssText="display:flex;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44";el.textContent="⚠️ Não cadastrado";}},400);}
-var _polTimer=null,_adjTimer=null;
-function buscarPolicial(m){_polTimer=_buscarNaLista(m,"pol-status","pol-info","f-nome",_polTimer);}
-function buscarAdjunto(m){_adjTimer=_buscarNaLista(m,"adj-status","adj-info","f-nome-adj",_adjTimer);}
-var MATERIAIS_CACHE=[];
-function carregarMateriais(){if(!SHEETS_URL)return;var n="cb_mat_"+Date.now();window[n]=function(r){delete window[n];if(r&&r.ok&&Array.isArray(r.dados))MATERIAIS_CACHE=r.dados.filter(function(m){return(m.status||"ativo")==="ativo";});};var s=document.createElement("script");s.src=SHEETS_URL+"?acao=listar&tipo=materiais_patrimonio&token="+encodeURIComponent(TOKEN)+"&callback="+n;s.onerror=function(){delete window[n];};document.head.appendChild(s);}
+
+function _buscarNaLista(mat, statusId, infoId, nomeId, timer){
+  var el = document.getElementById(statusId);
+  var inf = document.getElementById(infoId);
+  el.style.display = "none";
+  inf.style.display = "none";
+  if(!mat || mat.length < 3) return;
+  clearTimeout(timer);
+  return setTimeout(function(){
+    var p = POLICIAIS_CACHE.find(function(x){ return x.matricula.toLowerCase() === mat.trim().toLowerCase(); });
+    if(p){
+      document.getElementById(nomeId).value = p.posto ? p.posto+" "+p.nome : p.nome;
+      el.style.cssText = "display:flex;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;background:#22c55e22;color:#22c55e;border:1px solid #22c55e44";
+      el.textContent   = "✅ Encontrado";
+      inf.style.display = "block";
+      inf.innerHTML     = "👮 "+esc(p.posto||"")+" "+esc(p.nome)+(p.turno?" · "+esc(p.turno):"");
+    } else if(POLICIAIS_CACHE.length > 0){
+      el.style.cssText = "display:flex;align-items:center;padding:0 10px;border-radius:8px;font-size:11px;font-weight:700;white-space:nowrap;background:#f59e0b22;color:#f59e0b;border:1px solid #f59e0b44";
+      el.textContent   = "⚠️ Não cadastrado";
+    }
+  }, 400);
+}
+
+var _polTimer = null;
+var _adjTimer = null;
+function buscarPolicial(mat){ _polTimer = _buscarNaLista(mat,"pol-status","pol-info","f-nome",_polTimer); }
+function buscarAdjunto(mat){  _adjTimer = _buscarNaLista(mat,"adj-status","adj-info","f-nome-adj",_adjTimer); }
+
+// ── Cache de materiais (carregado do Sheets) ──────────
+var MATERIAIS_CACHE = [];
+
+function carregarMateriais(){
+  if(!SHEETS_URL) return;
+  var cbName = "cb_mat_init_"+Date.now();
+  window[cbName] = function(resp){
+    delete window[cbName];
+    if(resp && resp.ok && Array.isArray(resp.dados)){
+      MATERIAIS_CACHE = resp.dados.filter(function(m){ return (m.status||"ativo")==="ativo"; });
+    }
+  };
+  var sc = document.createElement("script");
+  sc.src = SHEETS_URL+"?acao=listar&tipo=materiais_patrimonio&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
+  sc.onerror = function(){ delete window[cbName]; };
+  document.head.appendChild(sc);
+}
 carregarMateriais();
-var _matAtual=null;
-function buscarMaterial(){var cod=(document.getElementById("f-cod-mat").value||"").trim().toUpperCase();document.getElementById("erro-busca").style.display="none";document.getElementById("mat-encontrado").style.display="none";_matAtual=null;if(!cod){document.getElementById("erro-busca").textContent="Digite o código.";document.getElementById("erro-busca").style.display="block";return;}var m=MATERIAIS_CACHE.find(function(x){return(x.codigo||"").toUpperCase()===cod;});if(m){mostrarMaterial(m);return;}if(SHEETS_URL){document.getElementById("loading-busca").style.display="block";document.getElementById("btn-buscar-mat").disabled=true;var n="cb_mb_"+Date.now();var t=setTimeout(function(){delete window[n];document.getElementById("loading-busca").style.display="none";document.getElementById("btn-buscar-mat").disabled=false;_mostrarEntradaManual(cod);},8000);window[n]=function(r){clearTimeout(t);delete window[n];document.getElementById("loading-busca").style.display="none";document.getElementById("btn-buscar-mat").disabled=false;if(r&&r.ok&&Array.isArray(r.dados)){MATERIAIS_CACHE=r.dados.filter(function(x){return(x.status||"ativo")==="ativo";});var mat=MATERIAIS_CACHE.find(function(x){return(x.codigo||"").toUpperCase()===cod;});if(mat){mostrarMaterial(mat);return;}}_mostrarEntradaManual(cod);};var sc=document.createElement("script");sc.src=SHEETS_URL+"?acao=listar&tipo=materiais_patrimonio&token="+encodeURIComponent(TOKEN)+"&callback="+n;sc.onerror=function(){clearTimeout(t);delete window[n];document.getElementById("loading-busca").style.display="none";document.getElementById("btn-buscar-mat").disabled=false;_mostrarEntradaManual(cod);};document.head.appendChild(sc);}else{_mostrarEntradaManual(cod);}}
-function _mostrarEntradaManual(cod){mostrarMaterial({codigo:cod,tipo:"",descricao:"",serie:"",_manual:true});document.getElementById("mc-tipo-sel").style.display="block";document.getElementById("mc-desc-inp").style.display="block";document.getElementById("mc-serie-inp").style.display="block";}
-function mostrarMaterial(m){_matAtual=m;document.getElementById("mc-cod").textContent=m.codigo||"";document.getElementById("mc-tipo").textContent=m._manual?"⚠️ Não cadastrado — preencha abaixo":(m.tipo||"");document.getElementById("mc-desc").textContent=m._manual?"":(m.descricao||"");document.getElementById("mc-serie").textContent=m._manual?"":(m.serie?"Série: "+m.serie:"");document.getElementById("mc-tipo-sel").style.display="none";document.getElementById("mc-desc-inp").style.display="none";document.getElementById("mc-serie-inp").style.display="none";_atualizarCamposArma();document.getElementById("mat-encontrado").style.display="block";}
-function _atualizarCamposArma(){if(!_matAtual)return;var e=(_matAtual.tipo||"").toLowerCase().includes("arma");document.getElementById("campos-arma").style.display=e?"grid":"none";if(e){document.getElementById("f-municao").value="";document.getElementById("f-carregadores").value="";}}
-var ITENS=[];
-function _confirmarAdicaoItem(){var e=(_matAtual.tipo||"").toLowerCase().includes("arma");ITENS.push({codigo:_matAtual.codigo,tipo:_matAtual.tipo,descricao:_matAtual.descricao,serie:_matAtual.serie||"",municao:e?(parseInt(document.getElementById("f-municao").value||"0",10)||0):0,carregadores:e?(parseInt(document.getElementById("f-carregadores").value||"0",10)||0):0});document.getElementById("f-cod-mat").value="";document.getElementById("mat-encontrado").style.display="none";document.getElementById("erro-itens").style.display="none";document.getElementById("trava-aviso").style.display="none";_matAtual=null;renderItens();}
-function adicionarItem(){if(!_matAtual)return;if(_matAtual._manual){var ts=(document.getElementById("mc-tipo-input").value||"").trim(),di=(document.getElementById("mc-desc-input").value||"").trim();if(!ts){alert("Selecione o tipo do material.");return;}if(!di){alert("Informe a descrição do material.");return;}_matAtual.tipo=ts;_matAtual.descricao=di;_matAtual.serie=(document.getElementById("mc-serie-input").value||"").trim();}if(ITENS.find(function(x){return x.codigo===_matAtual.codigo;})){alert("Material "+_matAtual.codigo+" já adicionado.");return;}var tc=document.getElementById("f-tipo-carga").value;if(tc!=="Carga"||!SHEETS_URL){_confirmarAdicaoItem();return;}var ba=document.querySelector("#mat-encontrado button[onclick='adicionarItem()']");if(ba){ba.disabled=true;ba.textContent="🔍 Verificando...";}document.getElementById("trava-aviso").style.display="none";var cod=_matAtual.codigo,n="cb_tv_"+Date.now(),t=setTimeout(function(){delete window[n];if(ba){ba.disabled=false;ba.textContent="➕ Adicionar à Carga";}_confirmarAdicaoItem();},7000);window[n]=function(r){clearTimeout(t);delete window[n];if(ba){ba.disabled=false;ba.textContent="➕ Adicionar à Carga";}if(r&&r.ok){if(r.livre){_confirmarAdicaoItem();}else{var av=document.getElementById("trava-aviso");av.innerHTML="⛔ <strong>"+esc(cod)+"</strong> está em Carga desde "+esc(r.ultimo.data)+" às "+esc(r.ultimo.hora)+" com <strong>"+esc(r.ultimo.nome)+"</strong> (Mat. "+esc(r.ultimo.matricula)+").<br>Registre a Descarga antes de nova Carga.";av.style.display="block";}}else{_confirmarAdicaoItem();}};var sc=document.createElement("script");sc.src=SHEETS_URL+"?acao=verificarStatusItem&codigo="+encodeURIComponent(cod)+"&token="+encodeURIComponent(TOKEN)+"&callback="+n;sc.onerror=function(){clearTimeout(t);delete window[n];if(ba){ba.disabled=false;ba.textContent="➕ Adicionar à Carga";}_confirmarAdicaoItem();};document.head.appendChild(sc);}
-function removerItem(i){ITENS.splice(i,1);renderItens();}
-var CORES_TIPO={"Arma":"#60a5fa","Colete Balístico":"#a78bfa","Munição":"#f59e0b","Algemas":"#22c55e","Rádio":"#34d399","Lanterna":"#fbbf24","Bastão":"#f87171","Equipamento Tático":"#60a5fa","Veículo":"#6b7280","Outros":"#9ca3af"};
-function esc(s){return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
-function renderItens(){var c=document.getElementById("lista-itens");document.getElementById("qtd-itens").textContent=ITENS.length;if(!ITENS.length){c.innerHTML="<div class='lista-vazia'>Nenhum material adicionado.<br>Busque pelo código e clique em Adicionar.</div>";return;}c.innerHTML=ITENS.map(function(it,i){var cor=CORES_TIPO[it.tipo]||"#60a5fa",ea=(it.tipo||"").toLowerCase().includes("arma"),h="<div class='item-chip'><button type='button' class='ic-rm' onclick='removerItem("+i+")'>&#x2715;</button><div><span class='ic-cod'>"+esc(it.codigo)+"</span><span class='ic-tipo' style='background:"+cor+"22;color:"+cor+"'>"+esc(it.tipo)+"</span></div><div class='ic-desc'>"+esc(it.descricao)+"</div>";if(it.serie)h+="<div class='ic-extra'>Série: "+esc(it.serie)+"</div>";if(ea){h+="<div class='ic-mun-row'><div style='flex:1'><label style='color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:3px'>Munição</label><input type='number' min='0' max='999' value='"+it.municao+"' oninput="ITENS["+i+"].municao=parseInt(this.value||'0',10)" style='width:100%'/></div><div style='flex:1'><label style='color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:3px'>Carregadores</label><input type='number' min='0' max='99' value='"+it.carregadores+"' oninput="ITENS["+i+"].carregadores=parseInt(this.value||'0',10)" style='width:100%'/></div></div>";}h+="</div>";return h;}).join("");}
+
+// ── Buscar material ───────────────────────────────────
+var _matAtual = null;
+
+function buscarMaterial(){
+  var cod = (document.getElementById("f-cod-mat").value || "").trim().toUpperCase();
+  document.getElementById("erro-busca").style.display = "none";
+  document.getElementById("mat-encontrado").style.display = "none";
+  _matAtual = null;
+
+  if(!cod){
+    document.getElementById("erro-busca").textContent = "Digite o código do material.";
+    document.getElementById("erro-busca").style.display = "block";
+    return;
+  }
+
+  // Tenta no cache primeiro
+  var m = MATERIAIS_CACHE.find(function(x){ return (x.codigo||"").toUpperCase() === cod; });
+  if(m){ mostrarMaterial(m); return; }
+
+  // Se não achou no cache, busca online
+  if(SHEETS_URL){
+    document.getElementById("loading-busca").style.display = "block";
+    document.getElementById("btn-buscar-mat").disabled = true;
+    var cbName = "cb_mat_busca_"+Date.now();
+    var tmout = setTimeout(function(){
+      delete window[cbName];
+      document.getElementById("loading-busca").style.display = "none";
+      document.getElementById("btn-buscar-mat").disabled = false;
+      document.getElementById("erro-busca").textContent = "Material não encontrado. Verifique o código.";
+      document.getElementById("erro-busca").style.display = "block";
+    }, 8000);
+    window[cbName] = function(resp){
+      clearTimeout(tmout); delete window[cbName];
+      document.getElementById("loading-busca").style.display = "none";
+      document.getElementById("btn-buscar-mat").disabled = false;
+      if(resp && resp.ok && Array.isArray(resp.dados)){
+        MATERIAIS_CACHE = resp.dados.filter(function(x){ return (x.status||"ativo")==="ativo"; });
+        var mat = MATERIAIS_CACHE.find(function(x){ return (x.codigo||"").toUpperCase() === cod; });
+        if(mat){ mostrarMaterial(mat); return; }
+      }
+      _mostrarEntradaManual(cod);
+    };
+    var sc = document.createElement("script");
+    sc.src = SHEETS_URL+"?acao=listar&tipo=materiais_patrimonio&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
+    sc.onerror = function(){
+      clearTimeout(tmout); delete window[cbName];
+      document.getElementById("loading-busca").style.display = "none";
+      document.getElementById("btn-buscar-mat").disabled = false;
+      _mostrarEntradaManual(cod);
+    };
+    document.head.appendChild(sc);
+  } else {
+    _mostrarEntradaManual(cod);
+  }
+}
+
+function _mostrarEntradaManual(cod){
+  // Permite cadastrar o material manualmente
+  mostrarMaterial({
+    codigo:    cod,
+    tipo:      "",
+    descricao: "",
+    serie:     "",
+    _manual:   true
+  });
+  document.getElementById("mc-tipo-sel").style.display = "block";
+  document.getElementById("mc-desc-inp").style.display = "block";
+  document.getElementById("mc-serie-inp").style.display = "block";
+}
+
+function mostrarMaterial(m){
+  _matAtual = m;
+  document.getElementById("mc-cod").textContent  = m.codigo  || "";
+  document.getElementById("mc-tipo").textContent = m._manual ? "⚠️ Não cadastrado — preencha abaixo" : (m.tipo || "");
+  document.getElementById("mc-desc").textContent = m._manual ? "" : (m.descricao || "");
+  document.getElementById("mc-serie").textContent = m._manual ? "" : (m.serie ? "Série: "+m.serie : "");
+  // Campos manuais ocultos por padrão
+  document.getElementById("mc-tipo-sel").style.display  = "none";
+  document.getElementById("mc-desc-inp").style.display  = "none";
+  document.getElementById("mc-serie-inp").style.display = "none";
+  _atualizarCamposArma();
+  document.getElementById("mat-encontrado").style.display = "block";
+}
+
+function _atualizarCamposArma(){
+  if(!_matAtual) return;
+  var eArma = (_matAtual.tipo||"").toLowerCase().includes("arma");
+  document.getElementById("campos-arma").style.display = eArma ? "grid" : "none";
+  if(eArma){ document.getElementById("f-municao").value=""; document.getElementById("f-carregadores").value=""; }
+}
+
+// ── Itens da carga ────────────────────────────────────
+var ITENS = [];
+
+function _confirmarAdicaoItem(){
+  var eArma = (_matAtual.tipo||"").toLowerCase().includes("arma");
+  ITENS.push({
+    codigo:       _matAtual.codigo,
+    tipo:         _matAtual.tipo,
+    descricao:    _matAtual.descricao,
+    serie:        _matAtual.serie || "",
+    municao:      eArma ? (parseInt(document.getElementById("f-municao").value||"0",10)||0) : 0,
+    carregadores: eArma ? (parseInt(document.getElementById("f-carregadores").value||"0",10)||0) : 0
+  });
+  document.getElementById("f-cod-mat").value = "";
+  document.getElementById("mat-encontrado").style.display = "none";
+  document.getElementById("erro-itens").style.display  = "none";
+  document.getElementById("trava-aviso").style.display  = "none";
+  _matAtual = null;
+  renderItens();
+}
+
+function adicionarItem(){
+  if(!_matAtual) return;
+  // Se modo manual, copiar campos dos inputs
+  if(_matAtual._manual){
+    var tipoSel = (document.getElementById("mc-tipo-input").value||"").trim();
+    var descInp = (document.getElementById("mc-desc-input").value||"").trim();
+    if(!tipoSel){ alert("Selecione o tipo do material."); return; }
+    if(!descInp){ alert("Informe a descrição do material."); return; }
+    _matAtual.tipo     = tipoSel;
+    _matAtual.descricao= descInp;
+    _matAtual.serie    = (document.getElementById("mc-serie-input").value||"").trim();
+  }
+  if(ITENS.find(function(x){ return x.codigo === _matAtual.codigo; })){
+    alert("Material "+_matAtual.codigo+" já adicionado.");
+    return;
+  }
+  var tipoCarga = document.getElementById("f-tipo-carga").value;
+
+  // Só verifica trava em "Carga" — Descarga/Transferência/Conferência passam direto
+  if(tipoCarga !== "Carga" || !SHEETS_URL){
+    _confirmarAdicaoItem();
+    return;
+  }
+
+  // Verifica se item já está em carga ativa
+  var btnAdd = document.querySelector("#mat-encontrado button[onclick='adicionarItem()']");
+  if(btnAdd){ btnAdd.disabled = true; btnAdd.textContent = "🔍 Verificando..."; }
+  document.getElementById("trava-aviso").style.display = "none";
+
+  var cod = _matAtual.codigo;
+  var cbName = "cb_trava_"+Date.now();
+  var tmout = setTimeout(function(){
+    delete window[cbName];
+    if(btnAdd){ btnAdd.disabled = false; btnAdd.textContent = "➕ Adicionar à Carga"; }
+    // Timeout: permite adicionar mas registra aviso
+    _confirmarAdicaoItem();
+  }, 7000);
+
+  window[cbName] = function(resp){
+    clearTimeout(tmout); delete window[cbName];
+    if(btnAdd){ btnAdd.disabled = false; btnAdd.textContent = "➕ Adicionar à Carga"; }
+    if(resp && resp.ok){
+      if(resp.livre){
+        _confirmarAdicaoItem();
+      } else {
+        // Item está em carga — exibe aviso e bloqueia
+        var av = document.getElementById("trava-aviso");
+        av.innerHTML =
+          "⛔ <strong>"+esc(cod)+"</strong> está em Carga desde "
+          +esc(resp.ultimo.data)+" às "+esc(resp.ultimo.hora)
+          +" com <strong>"+esc(resp.ultimo.nome)+"</strong> (Mat. "+esc(resp.ultimo.matricula)+")."
+          +"<br>Registre a Descarga antes de fazer nova Carga.";
+        av.style.display = "block";
+      }
+    } else {
+      // Erro na consulta: permite mas avisa
+      _confirmarAdicaoItem();
+    }
+  };
+
+  var sc = document.createElement("script");
+  sc.src = SHEETS_URL+"?acao=verificarStatusItem&codigo="+encodeURIComponent(cod)
+           +"&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
+  sc.onerror = function(){
+    clearTimeout(tmout); delete window[cbName];
+    if(btnAdd){ btnAdd.disabled = false; btnAdd.textContent = "➕ Adicionar à Carga"; }
+    _confirmarAdicaoItem(); // offline: deixa passar
+  };
+  document.head.appendChild(sc);
+}
+
+function removerItem(idx){
+  ITENS.splice(idx, 1);
+  renderItens();
+}
+
+var CORES_TIPO = {
+  "Arma":"#60a5fa","Colete Balístico":"#a78bfa","Munição":"#f59e0b",
+  "Algemas":"#22c55e","Rádio":"#34d399","Lanterna":"#fbbf24",
+  "Bastão":"#f87171","Equipamento Tático":"#60a5fa","Veículo":"#6b7280","Outros":"#9ca3af"
+};
+function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
+
+function renderItens(){
+  var cont = document.getElementById("lista-itens");
+  document.getElementById("qtd-itens").textContent = ITENS.length;
+  if(!ITENS.length){
+    cont.innerHTML = "<div class='lista-vazia'>Nenhum material adicionado.<br>Busque pelo código acima e clique em Adicionar.</div>";
+    return;
+  }
+  cont.innerHTML = ITENS.map(function(it, i){
+    var c = CORES_TIPO[it.tipo] || "#60a5fa";
+    var eArma = (it.tipo||"").toLowerCase().includes("arma");
+    var h = "<div class='item-chip'>";
+    h += "<button type='button' class='ic-rm' onclick='removerItem("+i+")'>✕</button>";
+    h += "<div><span class='ic-cod'>"+esc(it.codigo)+"</span>";
+    h += "<span class='ic-tipo' style='background:"+c+"22;color:"+c+"'>"+esc(it.tipo)+"</span></div>";
+    h += "<div class='ic-desc'>"+esc(it.descricao)+"</div>";
+    if(it.serie) h += "<div class='ic-extra'>Série: "+esc(it.serie)+"</div>";
+    if(eArma){
+      h += "<div class='ic-mun-row'>";
+      h += "<div style='flex:1'><label style='color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:3px'>Munição</label>";
+      h += "<input type='number' min='0' max='999' value='"+esc(String(it.municao))+"' oninput=\"ITENS["+i+"].municao=parseInt(this.value||'0',10)\" style='width:100%'/></div>";
+      h += "<div style='flex:1'><label style='color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:3px'>Carregadores</label>";
+      h += "<input type='number' min='0' max='99' value='"+esc(String(it.carregadores))+"' oninput=\"ITENS["+i+"].carregadores=parseInt(this.value||'0',10)\" style='width:100%'/></div>";
+      h += "</div>";
+    }
+    h += "</div>";
+    return h;
+  }).join("");
+}
 renderItens();
-function criarCanvas(ci,bi,li){var cv=document.getElementById(ci),ctx=cv.getContext("2d"),des=false,tem=false;function rd(){var b=document.getElementById(bi),r=window.devicePixelRatio||1;cv.width=b.clientWidth*r;cv.height=130*r;cv.style.height="130px";ctx.scale(r,r);ctx.strokeStyle="#6a9ae8";ctx.lineWidth=2.5;ctx.lineCap="round";ctx.lineJoin="round";}rd();window.addEventListener("resize",rd);function pos(e){var rc=cv.getBoundingClientRect(),s=e.touches?e.touches[0]:e;return{x:s.clientX-rc.left,y:s.clientY-rc.top};}cv.addEventListener("mousedown",function(e){des=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);});cv.addEventListener("mousemove",function(e){if(!des)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();tem=true;document.getElementById(li).style.opacity="0";});cv.addEventListener("mouseup",function(){des=false;});cv.addEventListener("mouseleave",function(){des=false;});cv.addEventListener("touchstart",function(e){e.preventDefault();des=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);},{passive:false});cv.addEventListener("touchmove",function(e){e.preventDefault();if(!des)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();tem=true;document.getElementById(li).style.opacity="0";},{passive:false});cv.addEventListener("touchend",function(){des=false;});return{canvas:cv,temAssin:function(){return tem;},limpar:function(){ctx.clearRect(0,0,cv.width,cv.height);tem=false;document.getElementById(li).style.opacity="1";},toDataURL:function(){return cv.toDataURL("image/png");}};}
-var ASSIN_POL=criarCanvas("assin-canvas","assin-box","assin-label");
-var ASSIN_ADJ=criarCanvas("assin-canvas-adj","assin-box-adj","assin-label-adj");
-var canvas=ASSIN_POL.canvas;
-function limparAssinatura(q){if(q==="adj"){ASSIN_ADJ.limpar();document.getElementById("erro-assin-adj").style.display="none";}else{ASSIN_POL.limpar();document.getElementById("erro-assin").style.display="none";}}
-function enviarCarga(e){e.preventDefault();if(!ITENS.length){document.getElementById("erro-itens").style.display="block";document.getElementById("f-cod-mat").scrollIntoView({behavior:"smooth"});return;}document.getElementById("erro-itens").style.display="none";if(!ASSIN_POL.temAssin()){document.getElementById("erro-assin").style.display="block";document.getElementById("assin-canvas").scrollIntoView({behavior:"smooth"});return;}document.getElementById("erro-assin").style.display="none";if(!ASSIN_ADJ.temAssin()){document.getElementById("erro-assin-adj").style.display="block";document.getElementById("assin-canvas-adj").scrollIntoView({behavior:"smooth"});return;}document.getElementById("erro-assin-adj").style.display="none";var btn=document.getElementById("btn-enviar");btn.disabled=true;btn.textContent="Enviando...";var prot="CA-"+Date.now(),dados={protocolo:prot,tipo:"carga_armamento",data:document.getElementById("f-data").value,hora:document.getElementById("f-hora").value,nome:document.getElementById("f-nome").value.trim(),matricula:document.getElementById("f-matricula").value.trim(),matricula_adjunto:document.getElementById("f-matricula-adj").value.trim(),nome_adjunto:document.getElementById("f-nome-adj").value.trim(),tipo_carga:document.getElementById("f-tipo-carga").value,itens:ITENS,obs:document.getElementById("f-obs").value.trim(),assinatura:ASSIN_POL.toDataURL(),assinatura_adjunto:ASSIN_ADJ.toDataURL(),data_registro:new Date().toISOString(),origem:"qr_armamento"};function ok(){document.getElementById("form-carga").style.display="none";document.getElementById("bloco-sucesso").style.display="block";var n1=dados.nome.split(" ")[0],res=dados.itens.map(function(it){return "🔹 "+it.codigo+" — "+it.tipo+": "+it.descricao+((it.tipo||"").toLowerCase().includes("arma")?" ("+it.municao+" mun.)":"");}).join("<br>");document.getElementById("msg-sucesso").innerHTML="<strong style='color:#a0c0ff'>"+n1+"</strong>, carga registrada!<br><br>📅 "+dados.data+" às "+dados.hora+"<br>"+res+"<br><span style='color:#2a5a3a;font-size:11px'>Tipo: "+dados.tipo_carga+"</span>";document.getElementById("protocolo").textContent="Protocolo: "+prot;}if(SHEETS_URL&&TOKEN){var n="cb_arm_"+Date.now();window[n]=function(){delete window[n];clearTimeout(tm);ok();};var tm=setTimeout(ok,8000);var sc=document.createElement("script");sc.src=SHEETS_URL+"?acao=salvar&tipo=carga_armamento&dados="+encodeURIComponent(JSON.stringify(dados))+"&token="+encodeURIComponent(TOKEN)+"&callback="+n;sc.onerror=function(){clearTimeout(tm);ok();};document.head.appendChild(sc);}else{setTimeout(ok,600);}}
+
+// ── Assinaturas Digitais (Policial + Adjunto) ─────────
+function criarCanvas(canvasId, boxId, labelId){
+  var cv  = document.getElementById(canvasId);
+  var ctx = cv.getContext("2d");
+  var desenhando = false;
+  var temAssin   = false;
+
+  function redim(){
+    var box   = document.getElementById(boxId);
+    var ratio = window.devicePixelRatio || 1;
+    cv.width  = box.clientWidth * ratio;
+    cv.height = 130 * ratio;
+    cv.style.height = "130px";
+    ctx.scale(ratio, ratio);
+    ctx.strokeStyle = "#6a9ae8";
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = "round";
+    ctx.lineJoin    = "round";
+  }
+  redim();
+  window.addEventListener("resize", redim);
+
+  function pos(e){
+    var rect=cv.getBoundingClientRect(), src=e.touches?e.touches[0]:e;
+    return {x:src.clientX-rect.left, y:src.clientY-rect.top};
+  }
+  cv.addEventListener("mousedown",  function(e){ desenhando=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+  cv.addEventListener("mousemove",  function(e){ if(!desenhando)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssin=true; document.getElementById(labelId).style.opacity="0"; });
+  cv.addEventListener("mouseup",    function(){ desenhando=false; });
+  cv.addEventListener("mouseleave", function(){ desenhando=false; });
+  cv.addEventListener("touchstart", function(e){ e.preventDefault(); desenhando=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); },{passive:false});
+  cv.addEventListener("touchmove",  function(e){ e.preventDefault(); if(!desenhando)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssin=true; document.getElementById(labelId).style.opacity="0"; },{passive:false});
+  cv.addEventListener("touchend",   function(){ desenhando=false; });
+
+  return {
+    canvas: cv,
+    temAssin: function(){ return temAssin; },
+    limpar: function(){
+      ctx.clearRect(0,0,cv.width,cv.height);
+      temAssin=false;
+      document.getElementById(labelId).style.opacity="1";
+    },
+    toDataURL: function(){ return cv.toDataURL("image/png"); }
+  };
+}
+
+var ASSIN_POL = criarCanvas("assin-canvas",     "assin-box",     "assin-label");
+var ASSIN_ADJ = criarCanvas("assin-canvas-adj", "assin-box-adj", "assin-label-adj");
+
+// Compat: canvas global ainda necessário em enviarCarga
+var canvas = ASSIN_POL.canvas;
+
+function limparAssinatura(quem){
+  if(quem==="adj"){
+    ASSIN_ADJ.limpar();
+    document.getElementById("erro-assin-adj").style.display="none";
+  } else {
+    ASSIN_POL.limpar();
+    document.getElementById("erro-assin").style.display="none";
+  }
+}
+
+// ── Envio ─────────────────────────────────────────────
+function enviarCarga(e){
+  e.preventDefault();
+  if(!ITENS.length){
+    document.getElementById("erro-itens").style.display = "block";
+    document.getElementById("f-cod-mat").scrollIntoView({behavior:"smooth"});
+    return;
+  }
+  document.getElementById("erro-itens").style.display = "none";
+  if(!ASSIN_POL.temAssin()){
+    document.getElementById("erro-assin").style.display = "block";
+    document.getElementById("assin-canvas").scrollIntoView({behavior:"smooth"});
+    return;
+  }
+  document.getElementById("erro-assin").style.display = "none";
+  if(!ASSIN_ADJ.temAssin()){
+    document.getElementById("erro-assin-adj").style.display = "block";
+    document.getElementById("assin-canvas-adj").scrollIntoView({behavior:"smooth"});
+    return;
+  }
+  document.getElementById("erro-assin-adj").style.display = "none";
+
+  var btn = document.getElementById("btn-enviar");
+  btn.disabled = true;
+  btn.textContent = "Enviando...";
+
+  var protocolo = "CA-"+Date.now();
+  var dados = {
+    protocolo:     protocolo,
+    tipo:          "carga_armamento",
+    data:          document.getElementById("f-data").value,
+    hora:          document.getElementById("f-hora").value,
+    nome:          document.getElementById("f-nome").value.trim(),
+    matricula:          document.getElementById("f-matricula").value.trim(),
+    matricula_adjunto:  document.getElementById("f-matricula-adj").value.trim(),
+    nome_adjunto:       document.getElementById("f-nome-adj").value.trim(),
+    tipo_carga:         document.getElementById("f-tipo-carga").value,
+    itens:         ITENS,
+    obs:           document.getElementById("f-obs").value.trim(),
+    assinatura:          ASSIN_POL.toDataURL(),
+    assinatura_adjunto:  ASSIN_ADJ.toDataURL(),
+    data_registro: new Date().toISOString(),
+    origem:        "qr_armamento"
+  };
+
+  function mostrarSucesso(){
+    document.getElementById("form-carga").style.display = "none";
+    document.getElementById("bloco-sucesso").style.display = "block";
+    var nome1 = dados.nome.split(" ")[0];
+    var resumo = dados.itens.map(function(it){
+      var l = "🔹 "+it.codigo+" — "+it.tipo+": "+it.descricao;
+      if((it.tipo||"").toLowerCase().includes("arma")) l += " ("+it.municao+" mun.)";
+      return l;
+    }).join("<br>");
+    document.getElementById("msg-sucesso").innerHTML =
+      "<strong style='color:#a0c0ff'>"+nome1+"</strong>, carga registrada!<br><br>"+
+      "📅 "+dados.data+" às "+dados.hora+"<br>"+
+      resumo+"<br>"+
+      "<span style='color:#2a5a3a;font-size:11px'>Tipo: "+dados.tipo_carga+"</span>";
+    document.getElementById("protocolo").textContent = "Protocolo: "+protocolo;
+  }
+
+  if(SHEETS_URL && TOKEN){
+    var cbName = "cb_arm_"+Date.now();
+    window[cbName] = function(){ delete window[cbName]; clearTimeout(tmout); mostrarSucesso(); };
+    var tmout = setTimeout(mostrarSucesso, 8000);
+    var script = document.createElement("script");
+    script.src = SHEETS_URL
+      +"?acao=salvar&tipo=carga_armamento"
+      +"&dados="+encodeURIComponent(JSON.stringify(dados))
+      +"&token="+encodeURIComponent(TOKEN)
+      +"&callback="+cbName;
+    script.onerror = function(){ clearTimeout(tmout); mostrarSucesso(); };
+    document.head.appendChild(script);
+  } else {
+    setTimeout(mostrarSucesso, 600);
+  }
+}
 </script>
 </body>
 </html>

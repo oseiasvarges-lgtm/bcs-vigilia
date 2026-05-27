@@ -1,11 +1,10 @@
 // IARA BCS — Service Worker
 // Atualiza o número de versão a cada novo deploy para forçar refresh nos clientes
-const CACHE_NAME = 'iara-bcs-v1';
+const CACHE_NAME = 'iara-bcs-v7';
 
 // Arquivos essenciais para funcionar offline
+// HTMLs não entram no precache — sempre buscados da rede (nunca ficam presos)
 const PRECACHE = [
-  '/index.html',
-  '/inscricao.html',
   '/manifest.json'
 ];
 
@@ -37,19 +36,30 @@ self.addEventListener('activate', function(event) {
   );
 });
 
-// ── Fetch: tenta rede primeiro, cai no cache se offline ─────────────────────
+// ── Fetch: arquivos HTML sempre da rede; resto: rede primeiro, cache fallback ─
 self.addEventListener('fetch', function(event) {
-  // Ignora requisições que não sejam GET (POST para Sheets, etc.)
   if (event.request.method !== 'GET') return;
 
-  // Ignora requisições externas (CDNs, Sheets, QR API)
   var url = new URL(event.request.url);
   if (url.origin !== self.location.origin) return;
 
+  // Arquivos HTML (.html) e o próprio sw.js: NUNCA do cache — sempre rede
+  var pathname = url.pathname;
+  var isHtml = pathname.endsWith('.html') || pathname === '/' || pathname.endsWith('sw.js');
+  if (isHtml) {
+    event.respondWith(
+      fetch(event.request, { cache: 'no-store' })
+        .catch(function() {
+          return caches.match(event.request); // offline: fallback do cache
+        })
+    );
+    return;
+  }
+
+  // Outros assets (manifest, ícones): rede primeiro, atualiza cache
   event.respondWith(
     fetch(event.request)
       .then(function(response) {
-        // Atualiza o cache com a versão nova da rede
         if (response && response.status === 200) {
           var clone = response.clone();
           caches.open(CACHE_NAME).then(function(cache) {
@@ -59,7 +69,6 @@ self.addEventListener('fetch', function(event) {
         return response;
       })
       .catch(function() {
-        // Sem internet — serve do cache
         return caches.match(event.request);
       })
   );
