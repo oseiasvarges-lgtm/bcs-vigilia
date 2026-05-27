@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════
-//  IARA — Backend Google Apps Script  v2.0
+//  IARA — Backend Google Apps Script  v3.3
 //
 //  COMO USAR (só 4 passos):
 //  1. Acesse script.google.com → clique em "Novo projeto"
@@ -87,17 +87,12 @@ function garantirAba(ss, key) { return getAba(ss,key) || criarAba(ss,key); }
 //  SETUP — executa UMA VEZ, cria a planilha e todas as abas
 // ══════════════════════════════════════════════════════════════════
 function setup() {
-  // Cria nova planilha Google
   var ss = SpreadsheetApp.create("IARA — BCS");
   props().setProperty("SHEET_ID", ss.getId());
-
-  // Remove aba padrão "Plan1" / "Sheet1"
   var planPadrao = ss.getSheets()[0];
-
-  // Cria todas as abas de dados
   Object.keys(NOME).forEach(function(key) { criarAba(ss, key); });
 
-  // Cria aba de Log
+  // Aba de Log
   var log = ss.insertSheet("Log");
   log.getRange(1,1,1,4)
      .setValues([["Data/Hora","Ação","Entidade","Detalhe"]])
@@ -106,12 +101,57 @@ function setup() {
      .setFontColor("#ffffff");
   log.setFrozenRows(1);
 
-  // Remove aba padrão (agora que há outras)
+  // Aba Carga de Armamento
+  var arm = ss.insertSheet("carga_armamento");
+  arm.getRange(1,1,1,15).setValues([[
+    "protocolo","data","hora","nome","matricula",
+    "tipo_carga","itens_json","obs","assinatura","assinatura_adjunto",
+    "matricula_adjunto","nome_adjunto","data_registro","origem","qtd_itens"
+  ]]).setFontWeight("bold").setBackground("#0a1628").setFontColor("#6a9ae8");
+  arm.setFrozenRows(1);
+  arm.setColumnWidth(7, 400);  // itens_json
+  arm.setColumnWidth(9, 50);   // assinatura (base64 grande)
+
+  // Aba Policiais
+  var pol = ss.insertSheet("policiais");
+  pol.getRange(1,1,1,8).setValues([[
+    "id","matricula","posto","nome","telefone","turno","status","criadoEm"
+  ]]).setFontWeight("bold").setBackground("#1a1028").setFontColor("#a78bfa");
+  pol.setFrozenRows(1);
+  pol.setColumnWidth(4, 250);
+
+  // Aba Materiais / Patrimônio
+  var mat = ss.insertSheet("materiais_patrimonio");
+  mat.getRange(1,1,1,8).setValues([[
+    "id","codigo","tipo","descricao","serie","obs","status","criadoEm"
+  ]]).setFontWeight("bold").setBackground("#0a2810").setFontColor("#4ade80");
+  mat.setFrozenRows(1);
+  mat.setColumnWidth(4, 300); // descrição
+
+  // Aba Solicitações
+  var sol = ss.insertSheet("solicitacoes");
+  sol.getRange(1,1,1,16).setValues([[
+    "protocolo","data","hora","matricula","posto","nome","destinatario","assunto",
+    "texto","assinatura","status","nome_cmt","assinatura_cmt","obs_cmt",
+    "data_decisao","data_registro"
+  ]]).setFontWeight("bold").setBackground("#1a0e00").setFontColor("#d4a87a");
+  sol.setFrozenRows(1);
+  sol.setColumnWidth(9,  400); // texto
+  sol.setColumnWidth(10,  50); // assinatura
+  sol.setColumnWidth(13,  50); // assinatura_cmt
+
+  // Aba Inscrições de Projetos
+  var insc = ss.insertSheet("inscricoes_projetos");
+  insc.getRange(1,1,1,9).setValues([[
+    "id","projeto_id","projeto_nome","nome","telefone",
+    "cursos","sugestao","data_inscricao","origem"
+  ]]).setFontWeight("bold").setBackground("#1a0a3a").setFontColor("#c89ae8");
+  insc.setFrozenRows(1);
+
   try { ss.deleteSheet(planPadrao); } catch(e) {}
 
   Logger.log("✓ Planilha criada com sucesso!");
   Logger.log("🔗 URL: " + ss.getUrl());
-  Logger.log("Abas criadas: " + Object.values(NOME).join(", ") + ", Log");
 }
 
 // ── Utilitários ────────────────────────────────────────────────────
@@ -134,7 +174,435 @@ function registrarLog(ss, acao, entidade, detalhe) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  SALVAR
+//  CARGA DE ARMAMENTO
+// ══════════════════════════════════════════════════════════════════
+function salvarCargaArmamento(ss, dados) {
+  try {
+    var aba = ss.getSheetByName("carga_armamento");
+    if (!aba) {
+      aba = ss.insertSheet("carga_armamento");
+      aba.getRange(1,1,1,12).setValues([[
+        "protocolo","data","hora","nome","matricula",
+        "tipo_carga","itens_json","obs","assinatura","data_registro","origem","qtd_itens"
+      ]]).setFontWeight("bold").setBackground("#0a1628").setFontColor("#6a9ae8");
+      aba.setFrozenRows(1);
+    }
+
+    // Verifica duplicata por protocolo
+    if (aba.getLastRow() >= 2) {
+      var protos = aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
+      for (var i = 0; i < protos.length; i++) {
+        if (String(protos[i][0]) === String(dados.protocolo)) {
+          return { ok: true, protocolo: dados.protocolo, acao: "ja_existia" };
+        }
+      }
+    }
+
+    var itens = dados.itens || [];
+    var itensJson = JSON.stringify(itens);
+    var resumoLog = itens.map(function(it){ return it.codigo+"("+it.tipo+")"; }).join(", ");
+
+    aba.appendRow([
+      dados.protocolo          || "",
+      dados.data               || "",
+      dados.hora               || "",
+      dados.nome               || "",
+      dados.matricula          || "",
+      dados.tipo_carga         || "Carga",
+      itensJson,                               // itens_json
+      dados.obs                || "",
+      dados.assinatura         || "",          // base64 PNG — policial
+      dados.assinatura_adjunto || "",          // base64 PNG — adjunto
+      dados.matricula_adjunto  || "",
+      dados.nome_adjunto       || "",
+      dados.data_registro      || new Date().toISOString(),
+      dados.origem             || "qr_armamento",
+      itens.length
+    ]);
+
+    registrarLog(ss, "carga_armamento", dados.nome, dados.tipo_carga+" · "+resumoLog);
+    return { ok: true, protocolo: dados.protocolo, acao: "inserido" };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+function verificarStatusItem(ss, codigo) {
+  try {
+    var aba = ss.getSheetByName("carga_armamento");
+    if (!aba || aba.getLastRow() < 2) return { ok: true, livre: true };
+
+    var nCols = Math.max(12, aba.getLastColumn());
+    var rows  = aba.getRange(2, 1, aba.getLastRow()-1, nCols).getValues();
+
+    var registros = [];
+    rows.forEach(function(r){
+      if (!r[0]) return;
+      var itens = [];
+      try { itens = JSON.parse(String(r[6] || "[]")); } catch(ex) {}
+      var temItem = itens.some(function(it){
+        return (it.codigo||"").toUpperCase() === codigo.toUpperCase();
+      });
+      if (temItem) {
+        registros.push({
+          protocolo:  String(r[0]),
+          data:       String(r[1]),
+          hora:       String(r[2]),
+          nome:       String(r[3]),
+          matricula:  String(r[4]),
+          tipo_carga: String(r[5])
+        });
+      }
+    });
+
+    if (!registros.length) return { ok: true, livre: true };
+
+    // Ordena por data+hora decrescente
+    registros.sort(function(a, b){
+      var da = a.data+"T"+(a.hora||"00:00");
+      var db = b.data+"T"+(b.hora||"00:00");
+      return da > db ? -1 : 1;
+    });
+
+    var ultimo = registros[0];
+    if (ultimo.tipo_carga === "Carga") {
+      return { ok: true, livre: false, ultimo: ultimo };
+    }
+    return { ok: true, livre: true, ultimo: ultimo };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+function listarCargasArmamento(ss) {
+  try {
+    var aba = ss.getSheetByName("carga_armamento");
+    if (!aba || aba.getLastRow() < 2) return { ok: true, dados: [] };
+    var nCols = Math.max(12, aba.getLastColumn());
+    var rows = aba.getRange(2, 1, aba.getLastRow()-1, nCols).getValues();
+    var dados = rows
+      .filter(function(r){ return r[0]; })
+      .map(function(r){
+        var obj = {
+          protocolo:          String(r[0] || ""),
+          data:               String(r[1] || ""),
+          hora:               String(r[2] || ""),
+          nome:               String(r[3] || ""),
+          matricula:          String(r[4] || ""),
+          tipo_carga:         String(r[5] || ""),
+          itens:              [],
+          obs:                String(r[7] || ""),
+          assinatura:         String(r[8]  || ""),
+          assinatura_adjunto: String(r[9]  || ""),
+          matricula_adjunto:  String(r[10] || ""),
+          nome_adjunto:       String(r[11] || ""),
+          data_registro:      String(r[12] || ""),
+          origem:             String(r[13] || "")
+        };
+        try { obj.itens = JSON.parse(String(r[6] || "[]")); } catch(ex) {}
+        // Compatibilidade com formato legado (colunas 5-8 antigas)
+        if(!obj.itens.length && r[5] && !["Carga","Descarga","Transferência","Conferência"].includes(String(r[5]))){
+          // Planilha antiga: col5=tipo_arma, col6=serie, col7=municao, col8=carregadores, col9=tipo_carga
+          obj.tipo_carga = String(r[9] || "Carga");
+          obj.tipo_arma  = String(r[5] || "");
+          obj.serie      = String(r[6] || "");
+          obj.municao    = String(r[7] || "");
+          obj.carregadores = String(r[8] || "");
+          obj.obs        = String(r[10] || "");
+          obj.assinatura = String(r[11] || "");
+          obj.data_registro = String(r[12] || "");
+        }
+        return obj;
+      });
+    return { ok: true, dados: dados };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  POLICIAIS
+// ══════════════════════════════════════════════════════════════════
+function salvarPolicial(ss, dados) {
+  try {
+    var aba = ss.getSheetByName("policiais");
+    if (!aba) {
+      aba = ss.insertSheet("policiais");
+      aba.getRange(1,1,1,8).setValues([["id","matricula","posto","nome","telefone","turno","status","criadoEm"]])
+         .setFontWeight("bold").setBackground("#1a1028").setFontColor("#a78bfa");
+      aba.setFrozenRows(1);
+    }
+    if (aba.getLastRow() >= 2) {
+      var linhas = aba.getRange(2,1,aba.getLastRow()-1,2).getValues(); // col A=id, col B=matricula
+      for (var i = 0; i < linhas.length; i++) {
+        if (String(linhas[i][0]) === String(dados.id)) return { ok: true, id: dados.id, acao: "ja_existia" };
+        // Checagem por matrícula (evita duplicatas de auto-cadastro em dispositivos diferentes)
+        if (dados.matricula && String(linhas[i][1]).toLowerCase() === String(dados.matricula).toLowerCase()) {
+          return { ok: true, id: String(linhas[i][0]), acao: "ja_existia_matricula" };
+        }
+      }
+    }
+    aba.appendRow([
+      dados.id       || ("POL-"+Date.now()),
+      dados.matricula|| "",
+      dados.posto    || "",
+      dados.nome     || "",
+      dados.telefone || "",
+      dados.turno    || "",
+      dados.status   || "ativo",
+      dados.criadoEm || new Date().toISOString()
+    ]);
+    registrarLog(ss, "policial", dados.matricula, dados.posto+" "+dados.nome);
+    return { ok: true, id: dados.id, acao: "inserido" };
+  } catch(e) { return { ok: false, erro: e.toString() }; }
+}
+
+function atualizarStatusPolicial(ss, id, status) {
+  try {
+    var aba = ss.getSheetByName("policiais");
+    if (!aba || aba.getLastRow() < 2) return { ok: false, erro: "Aba não encontrada" };
+    var ids = aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(id)) {
+        aba.getRange(i+2, 7).setValue(status);
+        return { ok: true };
+      }
+    }
+    return { ok: false, erro: "ID não encontrado" };
+  } catch(e) { return { ok: false, erro: e.toString() }; }
+}
+
+function listarPoliciais(ss) {
+  try {
+    var aba = ss.getSheetByName("policiais");
+    if (!aba || aba.getLastRow() < 2) return { ok: true, dados: [] };
+    var rows = aba.getRange(2, 1, aba.getLastRow()-1, 8).getValues();
+    var headers = ["id","matricula","posto","nome","telefone","turno","status","criadoEm"];
+    var dados = rows.filter(function(r){ return r[0]; }).map(function(r){
+      var obj = {}; headers.forEach(function(h,i){ obj[h] = String(r[i]||""); }); return obj;
+    });
+    return { ok: true, dados: dados };
+  } catch(e) { return { ok: false, erro: e.toString() }; }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  MATERIAIS / PATRIMÔNIO
+// ══════════════════════════════════════════════════════════════════
+function salvarMaterialPatrimonio(ss, dados) {
+  try {
+    var aba = ss.getSheetByName("materiais_patrimonio");
+    if (!aba) {
+      aba = ss.insertSheet("materiais_patrimonio");
+      aba.getRange(1,1,1,8).setValues([[
+        "id","codigo","tipo","descricao","serie","obs","status","criadoEm"
+      ]]).setFontWeight("bold").setBackground("#0a2810").setFontColor("#4ade80");
+      aba.setFrozenRows(1);
+    }
+    // Verifica duplicata por id
+    if (aba.getLastRow() >= 2) {
+      var ids = aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
+      for (var i = 0; i < ids.length; i++) {
+        if (String(ids[i][0]) === String(dados.id)) {
+          return { ok: true, id: dados.id, acao: "ja_existia" };
+        }
+      }
+    }
+    aba.appendRow([
+      dados.id       || ("MAT-"+Date.now()),
+      (dados.codigo  || "").toUpperCase(),
+      dados.tipo     || "",
+      dados.descricao|| "",
+      (dados.serie   || "").toUpperCase(),
+      dados.obs      || "",
+      dados.status   || "ativo",
+      dados.criadoEm || new Date().toISOString()
+    ]);
+    registrarLog(ss, "material_patrimonio", dados.codigo, dados.tipo+" — "+dados.descricao);
+    return { ok: true, id: dados.id, acao: "inserido" };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+function atualizarStatusMaterial(ss, id, status) {
+  try {
+    var aba = ss.getSheetByName("materiais_patrimonio");
+    if (!aba || aba.getLastRow() < 2) return { ok: false, erro: "Aba não encontrada" };
+    var ids = aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(id)) {
+        aba.getRange(i+2, 7).setValue(status);
+        registrarLog(ss, "material_status", id, status);
+        return { ok: true };
+      }
+    }
+    return { ok: false, erro: "ID não encontrado" };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+function listarMateriaisPatrimonio(ss) {
+  try {
+    var aba = ss.getSheetByName("materiais_patrimonio");
+    if (!aba || aba.getLastRow() < 2) return { ok: true, dados: [] };
+    var rows = aba.getRange(2, 1, aba.getLastRow()-1, 8).getValues();
+    var headers = ["id","codigo","tipo","descricao","serie","obs","status","criadoEm"];
+    var dados = rows
+      .filter(function(r){ return r[0]; })
+      .map(function(r){
+        var obj = {};
+        headers.forEach(function(h, i){ obj[h] = String(r[i] || ""); });
+        return obj;
+      });
+    return { ok: true, dados: dados };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  INSCRIÇÕES DE PROJETOS / CURSOS
+// ══════════════════════════════════════════════════════════════════
+function salvarInscricaoProjeto(ss, dados) {
+  try {
+    var aba = ss.getSheetByName("inscricoes_projetos");
+    if (!aba) {
+      aba = ss.insertSheet("inscricoes_projetos");
+      aba.getRange(1,1,1,9).setValues([[
+        "id","projeto_id","projeto_nome","nome","telefone",
+        "cursos","sugestao","data_inscricao","origem"
+      ]]).setFontWeight("bold").setBackground("#1a0a3a").setFontColor("#c89ae8");
+      aba.setFrozenRows(1);
+    }
+
+    var idRegistro = dados.id || ("INS_"+Date.now());
+
+    aba.appendRow([
+      idRegistro,
+      dados.projeto_id    || "",
+      dados.projeto_nome  || "",
+      dados.nome          || "",
+      dados.telefone      || "",
+      dados.cursos        || "",
+      dados.sugestao      || "",
+      dados.data_inscricao|| new Date().toISOString(),
+      dados.origem        || "qr_card"
+    ]);
+
+    registrarLog(ss, "inscricao_projeto", dados.nome, dados.projeto_nome);
+    return { ok: true, id: idRegistro, acao: "inserido" };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+function listarInscricoesProjeto(ss, projetoId) {
+  try {
+    var aba = ss.getSheetByName("inscricoes_projetos");
+    if (!aba || aba.getLastRow() < 2) return { ok: true, dados: [] };
+    var rows = aba.getRange(2, 1, aba.getLastRow()-1, 9).getValues();
+    var headers = ["id","projeto_id","projeto_nome","nome","telefone",
+                   "cursos","sugestao","data_inscricao","origem"];
+    var dados = rows
+      .filter(function(r){ return r[0] && (!projetoId || String(r[1]) === String(projetoId)); })
+      .map(function(r){
+        var obj = {};
+        headers.forEach(function(h, i){ obj[h] = String(r[i] || ""); });
+        return obj;
+      });
+    return { ok: true, dados: dados };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SOLICITAÇÕES
+// ══════════════════════════════════════════════════════════════════
+function salvarSolicitacao(ss, dados) {
+  try {
+    if (!dados.protocolo) return { ok: false, erro: "Protocolo obrigatório" };
+    var aba = ss.getSheetByName("solicitacoes");
+    if (!aba) {
+      aba = ss.insertSheet("solicitacoes");
+      aba.getRange(1,1,1,16).setValues([[
+        "protocolo","data","hora","matricula","posto","nome","destinatario","assunto",
+        "texto","assinatura","status","nome_cmt","assinatura_cmt","obs_cmt",
+        "data_decisao","data_registro"
+      ]]).setFontWeight("bold");
+      aba.setFrozenRows(1);
+    }
+    aba.appendRow([
+      dados.protocolo    || "",
+      dados.data         || "",
+      dados.hora         || "",
+      dados.matricula    || "",
+      dados.posto        || "",
+      dados.nome         || "",
+      dados.destinatario || "",
+      dados.assunto      || "",
+      dados.texto        || "",
+      dados.assinatura   || "",
+      dados.status       || "pendente",
+      dados.nome_cmt     || "",
+      dados.assinatura_cmt || "",
+      dados.obs_cmt      || "",
+      dados.data_decisao || "",
+      dados.data_registro || new Date().toISOString()
+    ]);
+    return { ok: true, protocolo: dados.protocolo };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+function listarSolicitacoes(ss) {
+  try {
+    var aba = ss.getSheetByName("solicitacoes");
+    if (!aba || aba.getLastRow() < 2) return { ok: true, dados: [] };
+    var rows = aba.getRange(2, 1, aba.getLastRow()-1, 16).getValues();
+    var headers = ["protocolo","data","hora","matricula","posto","nome","destinatario","assunto",
+                   "texto","assinatura","status","nome_cmt","assinatura_cmt","obs_cmt",
+                   "data_decisao","data_registro"];
+    var dados = rows
+      .filter(function(r){ return r[0]; })
+      .map(function(r){
+        var obj = {};
+        headers.forEach(function(h, i){ obj[h] = String(r[i] || ""); });
+        return obj;
+      });
+    return { ok: true, dados: dados };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+function atualizarSolicitacao(ss, dados) {
+  try {
+    if (!dados.protocolo) return { ok: false, erro: "Protocolo obrigatório" };
+    var aba = ss.getSheetByName("solicitacoes");
+    if (!aba || aba.getLastRow() < 2) return { ok: false, erro: "Planilha vazia" };
+    var rows = aba.getRange(2, 1, aba.getLastRow()-1, 16).getValues();
+    for (var i = 0; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(dados.protocolo)) {
+        var row = i + 2; // +1 cabeçalho +1 base-1
+        aba.getRange(row, 11).setValue(dados.status       || "pendente");
+        aba.getRange(row, 12).setValue(dados.nome_cmt     || "");
+        aba.getRange(row, 13).setValue(dados.assinatura_cmt || "");
+        aba.getRange(row, 14).setValue(dados.obs_cmt      || "");
+        aba.getRange(row, 15).setValue(dados.data_decisao || "");
+        return { ok: true, atualizado: dados.protocolo };
+      }
+    }
+    return { ok: false, erro: "Protocolo não encontrado" };
+  } catch(e) {
+    return { ok: false, erro: e.toString() };
+  }
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  SALVAR (tipos originais)
 // ══════════════════════════════════════════════════════════════════
 function salvar(ss, tipo, reg) {
   var key = TIPO_KEY[tipo];
@@ -144,7 +612,6 @@ function salvar(ss, tipo, reg) {
   var aba   = garantirAba(ss, key);
   var agora = Utilities.formatDate(new Date(),"America/Bahia","dd/MM/yyyy HH:mm:ss");
 
-  // Avisos
   if (key==="av") {
     aba.appendRow([reg.id||"", reg.criadoEm||new Date().toISOString(),
       reg.texto||"", reg.expira||"", JSON.stringify(reg.leituras||[]),
@@ -152,40 +619,21 @@ function salvar(ss, tipo, reg) {
     return {ok:true};
   }
 
-  // Ocorrências — 25 colunas fixas
   if (key==="oc") {
     var narrativa = String(reg.descricao_dinamica||reg.texto_original||reg.descricao||"");
     var medidas   = String(reg.medidas||"");
-
     var linha = [
-      reg.id||"",                              // 1
-      agora,                                   // 2
-      reg.numero||"",                          // 3
-      reg.data||"",                            // 4
-      reg.hora||"",                            // 5
-      reg.tipo||"",                            // 6
-      reg.bairro||"",                          // 7
-      reg.municipio||"",                       // 8
-      reg.vitima_nome||"",                     // 9
-      reg.vitima_idade||"",                    // 10
-      reg.vitima_sexo||"",                     // 11
-      reg.vitima_telefone||"",                 // 12
-      reg.vitima_endereco||"",                 // 13
-      reg.vitima_cpf||"",                      // 14
-      reg.suspeito_nome||"",                   // 15
-      reg.suspeito_apelido||"",               // 16
-      reg.suspeito_caracteristicas||"",        // 17
-      reg.veiculo||"",                         // 18
-      reg.medida_protetiva||"Não",             // 19
-      reg.violencia_domestica?"Sim":"Não",     // 20
-      reg.requer_visita?"Sim":"Não",           // 21
-      reg.reincidente?"Sim":"Não",             // 22
-      reg.descricao||"",                       // 23 Descrição (resumo)
-      narrativa,                               // 24 Dinâmica dos fatos
-      medidas                                  // 25 Medidas adotadas
+      reg.id||"", agora, reg.numero||"", reg.data||"", reg.hora||"", reg.tipo||"",
+      reg.bairro||"", reg.municipio||"",
+      reg.vitima_nome||"", reg.vitima_idade||"", reg.vitima_sexo||"",
+      reg.vitima_telefone||"", reg.vitima_endereco||"", reg.vitima_cpf||"",
+      reg.suspeito_nome||"", reg.suspeito_apelido||"", reg.suspeito_caracteristicas||"",
+      reg.veiculo||"", reg.medida_protetiva||"Não",
+      reg.violencia_domestica?"Sim":"Não",
+      reg.requer_visita?"Sim":"Não",
+      reg.reincidente?"Sim":"Não",
+      reg.descricao||"", narrativa, medidas
     ];
-
-    // Atualiza se ID já existe
     if (aba.getLastRow()>=2) {
       var ids = aba.getRange(2,1,aba.getLastRow()-1,1).getValues();
       for (var i=0;i<ids.length;i++) {
@@ -199,8 +647,6 @@ function salvar(ss, tipo, reg) {
         }
       }
     }
-
-    // Insere nova linha
     aba.appendRow(linha);
     var nL = aba.getLastRow();
     aba.getRange(nL,24).setValue(narrativa);
@@ -209,7 +655,6 @@ function salvar(ss, tipo, reg) {
     return {ok:true, id:reg.id, acao:"inserido"};
   }
 
-  // Demais tipos
   var l;
   if (key==="at") l=[reg.id||"",agora,reg.data||"",reg.hora||"",reg.nome||"",reg.telefone||"",reg.tipo||"",reg.descricao||"",reg.encaminhamento||""];
   if (key==="ag") l=[reg.id||"",agora,reg.data||"",reg.hora||"",reg.tipo||"",reg.vitima_nome||"",reg.endereco||"",reg.responsavel||"",reg.objetivo||"",reg.status||""];
@@ -227,9 +672,7 @@ function fmtDataBR(v){
   if(!v) return "";
   if(v instanceof Date) return Utilities.formatDate(v,"America/Bahia","dd/MM/yyyy");
   var s=String(v).trim();
-  // já está em DD/MM/YYYY
   if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
-  // YYYY-MM-DD
   var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if(m) return m[3]+"/"+m[2]+"/"+m[1];
   return s;
@@ -342,9 +785,13 @@ function validarPin(hash,perfil){var g="4cad08c00f2b858677e00573ff398bd3c971d2a8
 function doGet(e) {
   try {
     var t=tok(), cb=(e.parameter&&e.parameter.callback)||"", acao=(e.parameter&&e.parameter.acao)||"";
+    var tipo=(e.parameter&&e.parameter.tipo)||"";
+
     if (acao==="login") return saida(validarPin(e.parameter.hash||"",e.parameter.perfil||""),cb);
     if ((e.parameter&&e.parameter.token)!==t) return saida({ok:false,erro:"Não autorizado"},cb);
+
     var ss=getSS(), pag=parseInt((e.parameter&&e.parameter.pagina)||"0")||0;
+
     if(acao==="ping"){var a=getAba(ss,"oc");return saida({ok:true,total:a?a.getLastRow()-1:0},cb);}
     if(acao==="info"){return saida({ok:true,url:getSS().getUrl(),id:getSS().getId()},cb);}
     if(acao==="salvarDadoApp"){var ch=e.parameter.chave,vl=e.parameter.valor;if(!ch)return saida({ok:false,erro:"chave obrigatória"},cb);props().setProperty("app__"+ch,vl||"");return saida({ok:true},cb);}
@@ -355,9 +802,89 @@ function doGet(e) {
     if(acao==="lerAvisos") return saida({ok:true,avisos:lerAvisos(ss)},cb);
     if(acao==="excluirAviso"){if(e.parameter.id)excluirAviso(ss,e.parameter.id);return saida({ok:true},cb);}
     if(acao==="lerAviso"){var lts=[];try{lts=JSON.parse(e.parameter.leituras||"[]");}catch(ex){}if(e.parameter.id)atualizarLeituraAviso(ss,e.parameter.id,lts);return saida({ok:true},cb);}
-    if(acao==="ler"){var res=lerOcs(ss,pag,1500),dados={ocorrencias:res.dados};if(pag===0){dados.atendimentos=lerAba(ss,"at");dados.agendamentos=lerAba(ss,"ag");dados.visitas=lerAba(ss,"vi");dados.avisos=lerAvisos(ss);dados.frida=lerAba(ss,"fr");}else{dados.atendimentos=[];dados.agendamentos=[];dados.visitas=[];dados.avisos=[];dados.frida=[];}return saida({ok:true,total:res.total,pagina:pag,temMais:res.temMais,dados:dados},cb);}
-    if(e.parameter&&e.parameter.dados){var d=JSON.parse(e.parameter.dados);return saida(salvar(ss,d.tipo,d.registro),cb);}
-    return saida({ok:true,msg:"IARA backend ativo"},cb);
+
+    // ── CARGA DE ARMAMENTO ──────────────────────────────────────────
+    if(acao==="verificarStatusItem"){
+      return saida(verificarStatusItem(ss, e.parameter.codigo||""), cb);
+    }
+    if(acao==="salvar" && tipo==="carga_armamento"){
+      var dados={};
+      try{ dados=JSON.parse(e.parameter.dados||"{}"); }catch(ex){}
+      return saida(salvarCargaArmamento(ss, dados), cb);
+    }
+    if(acao==="listar" && tipo==="carga_armamento"){
+      return saida(listarCargasArmamento(ss), cb);
+    }
+
+    // ── POLICIAIS ───────────────────────────────────────────────────
+    if(acao==="salvar" && tipo==="policial"){
+      var dadosPol={};
+      try{ dadosPol=JSON.parse(e.parameter.dados||"{}"); }catch(ex){}
+      return saida(salvarPolicial(ss, dadosPol), cb);
+    }
+    if(acao==="listar" && tipo==="policiais"){
+      return saida(listarPoliciais(ss), cb);
+    }
+    if(acao==="atualizarStatusPolicial"){
+      return saida(atualizarStatusPolicial(ss, e.parameter.id||"", e.parameter.status||"inativo"), cb);
+    }
+
+    // ── MATERIAIS / PATRIMÔNIO ──────────────────────────────────────
+    if(acao==="salvar" && tipo==="material_patrimonio"){
+      var dadosMat={};
+      try{ dadosMat=JSON.parse(e.parameter.dados||"{}"); }catch(ex){}
+      return saida(salvarMaterialPatrimonio(ss, dadosMat), cb);
+    }
+    if(acao==="listar" && tipo==="materiais_patrimonio"){
+      return saida(listarMateriaisPatrimonio(ss), cb);
+    }
+    if(acao==="atualizarStatusMaterial"){
+      return saida(atualizarStatusMaterial(ss, e.parameter.id||"", e.parameter.status||"inativo"), cb);
+    }
+
+    // ── INSCRIÇÕES DE PROJETOS/CURSOS ───────────────────────────────
+    if(acao==="salvar" && tipo==="inscricoes_projetos"){
+      var dadosInsc={};
+      try{ dadosInsc=JSON.parse(e.parameter.dados||"{}"); }catch(ex){}
+      return saida(salvarInscricaoProjeto(ss, dadosInsc), cb);
+    }
+    if(acao==="listarInscricoes"){
+      var projId=e.parameter.projeto_id||"";
+      return saida(listarInscricoesProjeto(ss, projId), cb);
+    }
+    if(acao==="listar" && tipo==="inscricoes_projetos"){
+      var projId2=e.parameter.projeto_id||"";
+      return saida(listarInscricoesProjeto(ss, projId2), cb);
+    }
+
+    // ── SOLICITAÇÕES ─────────────────────────────────────────────────
+    if(acao==="salvar" && tipo==="solicitacao"){
+      var dados2=JSON.parse(e.parameter.dados||"{}");
+      return saida(salvarSolicitacao(ss, dados2), cb);
+    }
+    if(acao==="listar" && tipo==="solicitacoes"){
+      return saida(listarSolicitacoes(ss), cb);
+    }
+    if(acao==="atualizarSolicitacao"){
+      var sol2=JSON.parse(e.parameter.dados||"{}");
+      return saida(atualizarSolicitacao(ss, sol2), cb);
+    }
+
+    // ── LER DADOS GERAIS ────────────────────────────────────────────
+    if(acao==="ler"){
+      var res=lerOcs(ss,pag,1500),dados={ocorrencias:res.dados};
+      if(pag===0){dados.atendimentos=lerAba(ss,"at");dados.agendamentos=lerAba(ss,"ag");dados.visitas=lerAba(ss,"vi");dados.avisos=lerAvisos(ss);dados.frida=lerAba(ss,"fr");}
+      else{dados.atendimentos=[];dados.agendamentos=[];dados.visitas=[];dados.avisos=[];dados.frida=[];}
+      return saida({ok:true,total:res.total,pagina:pag,temMais:res.temMais,dados:dados},cb);
+    }
+
+    // ── FALLBACK: formato antigo {tipo, registro} ───────────────────
+    if(e.parameter&&e.parameter.dados){
+      var d=JSON.parse(e.parameter.dados);
+      return saida(salvar(ss,d.tipo,d.registro),cb);
+    }
+
+    return saida({ok:true,msg:"IARA backend v3.3 ativo"},cb);
   } catch(err){ return saida({ok:false,erro:err.toString()},(e&&e.parameter&&e.parameter.callback)||""); }
 }
 
@@ -386,7 +913,7 @@ function doPost(e) {
 }
 
 // ══════════════════════════════════════════════════════════════════
-//  PROXY IA — Claude via Apps Script (chave fica nas Properties)
+//  PROXY IA — Claude via Apps Script
 // ══════════════════════════════════════════════════════════════════
 function chamarIA(system, messages) {
   var chave = props().getProperty("ANTHROPIC_KEY");
@@ -415,13 +942,46 @@ function chamarIA(system, messages) {
   }
 }
 
-// ── Como configurar a chave IA ─────────────────────────────────────
-// 1. Substitua SUA_CHAVE_AQUI pela sua chave da Anthropic (começa com sk-ant-...)
-// 2. Salve o script (Ctrl+S)
-// 3. Selecione a função "definirChaveIA" no menu e clique ▶ Executar
-// 4. Após executar UMA VEZ, pode apagar a chave desta função (ela fica salva nas Properties)
+// ── Cria abas novas (executar uma vez após atualizar o script) ───────────────
+function setupNovasAbas() {
+  var ss = getSS();
+  var abas = ss.getSheets().map(function(s){ return s.getName(); });
+  Logger.log("Abas existentes: " + abas.join(", "));
+
+  // solicitacoes
+  if(abas.indexOf("solicitacoes") === -1){
+    var sol = ss.insertSheet("solicitacoes");
+    sol.getRange(1,1,1,16).setValues([[
+      "protocolo","data","hora","matricula","posto","nome","destinatario","assunto",
+      "texto","assinatura","status","nome_cmt","assinatura_cmt","obs_cmt",
+      "data_decisao","data_registro"
+    ]]).setFontWeight("bold").setBackground("#1a0e00").setFontColor("#d4a87a");
+    Logger.log("✓ Aba 'solicitacoes' criada");
+  } else { Logger.log("- 'solicitacoes' já existe"); }
+
+  // policiais
+  if(abas.indexOf("policiais") === -1){
+    var pol = ss.insertSheet("policiais");
+    pol.getRange(1,1,1,10).setValues([[
+      "id","matricula","posto","nome","turno","telefone","status","data_registro","data_atualizacao","obs"
+    ]]).setFontWeight("bold").setBackground("#1a0e00").setFontColor("#d4a87a");
+    Logger.log("✓ Aba 'policiais' criada");
+  } else { Logger.log("- 'policiais' já existe"); }
+
+  // materiais_patrimonio
+  if(abas.indexOf("materiais_patrimonio") === -1){
+    var mat = ss.insertSheet("materiais_patrimonio");
+    mat.getRange(1,1,1,10).setValues([[
+      "id","tipo","descricao","numero_serie","status","responsavel","data_registro","data_atualizacao","obs","foto"
+    ]]).setFontWeight("bold").setBackground("#1a0e00").setFontColor("#d4a87a");
+    Logger.log("✓ Aba 'materiais_patrimonio' criada");
+  } else { Logger.log("- 'materiais_patrimonio' já existe"); }
+
+  Logger.log("✅ setupNovasAbas concluído!");
+}
+
 function definirChaveIA() {
-  var chave = "SUA_CHAVE_AQUI"; // ← substitua aqui (sk-ant-api03-...)
+  var chave = "SUA_CHAVE_AQUI";
   if (!chave || chave === "SUA_CHAVE_AQUI") {
     Logger.log("❌ ERRO: substitua SUA_CHAVE_AQUI pela sua chave real antes de executar.");
     return;
@@ -430,7 +990,6 @@ function definirChaveIA() {
   Logger.log("✓ Chave IA salva com sucesso nas Script Properties!");
 }
 
-// Para verificar se a chave está salva:
 function verificarChaveIA() {
   var chave = props().getProperty("ANTHROPIC_KEY");
   if (chave) {
