@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"/>
@@ -678,9 +678,44 @@ async function carregarDadosAppDoSheets(){
     _salvarModulos(); // garante bcs_oc_modulos local atualizado
     render();
     console.log("[BCS] Dados app Sheets — projetos:"+(state.projetos||[]).length+" agendamentos:"+(state.db.agendamentos||[]).length);
+
+    // Sincronizar solicitações, policiais e materiais em background
+    _sincSheets("solicitacoes", "protocolo", function(dados){
+      state.solicitacoes = dados;
+      salvarLocal();
+      if(state.tela==="solicitacoes") renderSolicitacoesGestor(document.getElementById("main"));
+    });
+    _sincSheets("policiais", "id", function(dados){
+      state.policiais = dados;
+      salvarLocal();
+    });
+    _sincSheets("materiais_patrimonio", "id", function(dados){
+      state.materiaisPatrimonio = dados;
+      salvarLocal();
+    });
+
   } catch(e){
     console.log("[BCS] Erro ao carregar dados app do Sheets:", e);
   }
+}
+
+// Sync genérico via JSONP para uma aba do Sheets
+function _sincSheets(tipo, chave, callback){
+  if(!SHEETS_URL) return;
+  var cbName = "cb_sinc_"+tipo+"_"+Date.now();
+  window[cbName] = function(resp){
+    delete window[cbName];
+    var sc = document.getElementById("sc_sinc_"+tipo);
+    if(sc) sc.remove();
+    if(resp && resp.ok && Array.isArray(resp.dados) && resp.dados.length > 0){
+      callback(resp.dados);
+    }
+  };
+  var sc = document.createElement("script");
+  sc.id  = "sc_sinc_"+tipo;
+  sc.src = SHEETS_URL+"?acao=listar&tipo="+tipo+"&token="+encodeURIComponent(BCS_TOKEN)+"&callback="+cbName;
+  sc.onerror = function(){ delete window[cbName]; sc.remove(); };
+  document.head.appendChild(sc);
 }
 
 let _carregando = false;
