@@ -122,17 +122,15 @@ select option{ background:#0f1a2e; }
     <div class="secao-titulo">📦 Materiais / Equipamentos</div>
 
     <label class="campo">
-      <span>Código do Material <em>*</em></span>
+      <span>Material / Equipamento <em>*</em></span>
       <div class="busca-mat" id="busca-mat-wrap">
-        <input type="text" id="f-cod-mat" placeholder="Digite código ou descrição…"
-               style="text-transform:uppercase"
-               oninput="this.value=this.value.toUpperCase();_sugerirMaterial(this.value)"
+        <input type="text" id="f-cod-mat" placeholder="🔍 Digite: pistola, colete, algemas, ARM-001…"
+               oninput="_sugerirMaterial(this.value)"
                onkeydown="_navSugestao(event)"
-               autocomplete="off"/>
-        <button type="button" class="btn-buscar" id="btn-buscar-mat" onclick="buscarMaterial()">Buscar</button>
+               autocomplete="off" style="font-size:14px"/>
         <div class="mat-sugestoes" id="mat-sugestoes"></div>
       </div>
-      <div class="loading-dot" id="loading-busca">⏳ Buscando...</div>
+      <div class="loading-dot" id="loading-busca" style="display:none">⏳ Buscando online...</div>
       <div class="erro-busca" id="erro-busca"></div>
     </label>
 
@@ -275,18 +273,32 @@ var TOKEN      = params.get("token")  || "bcs-token-secreto-2025";
 var POLICIAIS_CACHE = [];
 var _policiaisCarregados = false;
 
+// Fallback: lê policiais do localStorage do app principal
+(function(){
+  try{
+    var local = JSON.parse(localStorage.getItem("bcs_policiais")||"[]");
+    if(local.length > 0){
+      POLICIAIS_CACHE = local.filter(function(p){ return (p.status||"ativo").toLowerCase()==="ativo"; });
+      _policiaisCarregados = true;
+    }
+  }catch(e){}
+})();
+
 function carregarPoliciais(tentativa){
   if(!SHEETS_URL) return;
   tentativa = tentativa || 1;
   var cbName = "cb_pol_init_"+Date.now();
   var tmout = setTimeout(function(){
     delete window[cbName];
-    if(tentativa < 3) carregarPoliciais(tentativa+1); // retry automático
+    if(tentativa < 3) carregarPoliciais(tentativa+1);
   }, 10000);
   window[cbName] = function(resp){
     clearTimeout(tmout); delete window[cbName];
-    if(resp && resp.ok && Array.isArray(resp.dados)){
-      POLICIAIS_CACHE = resp.dados.filter(function(p){ return (p.status||"ativo").toLowerCase()==="ativo"; });
+    if(resp && resp.ok && Array.isArray(resp.dados) && resp.dados.length > 0){
+      // Merge: Sheets tem prioridade, mas mantém locais não enviados
+      var ids = resp.dados.map(function(p){ return p.id; });
+      var soLocal = POLICIAIS_CACHE.filter(function(p){ return ids.indexOf(p.id)===-1; });
+      POLICIAIS_CACHE = resp.dados.filter(function(p){ return (p.status||"ativo").toLowerCase()==="ativo"; }).concat(soLocal);
       _policiaisCarregados = true;
     }
   };
@@ -335,8 +347,18 @@ var _adjTimer = null;
 function buscarPolicial(mat){ _polTimer = _buscarNaLista(mat,"pol-status","pol-info","f-nome",_polTimer); }
 function buscarAdjunto(mat){  _adjTimer = _buscarNaLista(mat,"adj-status","adj-info","f-nome-adj",_adjTimer); }
 
-// ── Cache de materiais (carregado do Sheets) ──────────
+// ── Cache de materiais ────────────────────────────────
 var MATERIAIS_CACHE = [];
+
+// Fallback: lê materiais do localStorage do app principal
+(function(){
+  try{
+    var local = JSON.parse(localStorage.getItem("bcs_materiais_patrimonio")||"[]");
+    if(local.length > 0){
+      MATERIAIS_CACHE = local.filter(function(m){ return (m.status||"ativo").toLowerCase()==="ativo"; });
+    }
+  }catch(e){}
+})();
 
 function carregarMateriais(tentativa){
   if(!SHEETS_URL) return;
@@ -344,12 +366,14 @@ function carregarMateriais(tentativa){
   var cbName = "cb_mat_init_"+Date.now();
   var tmout = setTimeout(function(){
     delete window[cbName];
-    if(tentativa < 3) carregarMateriais(tentativa+1); // retry automático
+    if(tentativa < 3) carregarMateriais(tentativa+1);
   }, 10000);
   window[cbName] = function(resp){
     clearTimeout(tmout); delete window[cbName];
-    if(resp && resp.ok && Array.isArray(resp.dados)){
-      MATERIAIS_CACHE = resp.dados.filter(function(m){ return (m.status||"ativo").toLowerCase()==="ativo"; });
+    if(resp && resp.ok && Array.isArray(resp.dados) && resp.dados.length > 0){
+      var ids = resp.dados.map(function(m){ return m.id; });
+      var soLocal = MATERIAIS_CACHE.filter(function(m){ return ids.indexOf(m.id)===-1; });
+      MATERIAIS_CACHE = resp.dados.filter(function(m){ return (m.status||"ativo").toLowerCase()==="ativo"; }).concat(soLocal);
     }
   };
   var sc = document.createElement("script");
@@ -366,20 +390,35 @@ var _sugestaoIdx = -1;
 function _sugerirMaterial(val){
   var lista = document.getElementById("mat-sugestoes");
   val = (val||"").trim();
-  if(val.length < 1 || MATERIAIS_CACHE.length === 0){ lista.style.display="none"; return; }
+  if(val.length < 2){ lista.style.display="none"; return; }
   var busca = val.toUpperCase();
   var matches = MATERIAIS_CACHE.filter(function(m){
     return (m.codigo||"").toUpperCase().includes(busca) ||
            (m.descricao||"").toUpperCase().includes(busca) ||
            (m.tipo||"").toUpperCase().includes(busca);
-  }).slice(0, 8);
-  if(!matches.length){ lista.style.display="none"; return; }
+  }).slice(0, 10);
+  if(!matches.length){
+    // Se cache vazio, tenta busca online
+    if(MATERIAIS_CACHE.length === 0 && SHEETS_URL){
+      lista.innerHTML = "<div style='padding:10px;color:#6a9ae8;font-size:12px'>⏳ Carregando materiais...</div>";
+      lista.style.display = "block";
+    } else {
+      lista.innerHTML = "<div style='padding:10px;color:#f59e0b;font-size:12px'>Nenhum material encontrado para \""+esc(val)+"\"</div>";
+      lista.style.display = "block";
+    }
+    return;
+  }
   _sugestaoIdx = -1;
   lista.innerHTML = matches.map(function(m, i){
     return "<div class='mat-sugestao-item' data-idx='"+i+"' onclick='_selecionarSugestao("+i+")'>" +
-      "<span class='mat-sugestao-cod'>"+esc(m.codigo||"")+"</span>" +
-      "<span class='mat-sugestao-desc'>"+esc((m.descricao||"").substring(0,40))+"</span>" +
-      "<span class='mat-sugestao-tipo'>"+esc(m.tipo||"")+"</span>" +
+      "<div style='flex:1'>" +
+        "<div style='font-weight:700;color:#e8f0ff;font-size:13px'>"+esc(m.descricao||m.tipo||"")+"</div>" +
+        "<div style='font-size:11px;color:#4a7ab8;margin-top:2px'>" +
+          "<span class='mat-sugestao-tipo'>"+esc(m.tipo||"")+"</span> " +
+          "<span class='mat-sugestao-cod'>"+esc(m.codigo||"")+"</span>" +
+          (m.serie?"<span style='color:#5a8a6a;margin-left:6px'>Nº "+esc(m.serie)+"</span>":"") +
+        "</div>" +
+      "</div>" +
     "</div>";
   }).join("");
   lista._matches = matches;
@@ -390,7 +429,8 @@ function _selecionarSugestao(idx){
   var lista = document.getElementById("mat-sugestoes");
   var m = lista._matches && lista._matches[idx];
   if(!m) return;
-  document.getElementById("f-cod-mat").value = m.codigo||"";
+  document.getElementById("f-cod-mat").value = "";
+  document.getElementById("f-cod-mat").placeholder = "🔍 Digite: pistola, colete, algemas, ARM-001…";
   lista.style.display = "none";
   mostrarMaterial(m);
 }
@@ -398,7 +438,7 @@ function _selecionarSugestao(idx){
 function _navSugestao(e){
   var lista = document.getElementById("mat-sugestoes");
   var items = lista.querySelectorAll(".mat-sugestao-item");
-  if(!items.length){ if(e.key==="Enter"){ e.preventDefault(); buscarMaterial(); } return; }
+  if(!items.length){ if(e.key==="Enter"){ e.preventDefault(); } return; }
   if(e.key==="ArrowDown"){
     e.preventDefault();
     _sugestaoIdx = Math.min(_sugestaoIdx+1, items.length-1);
@@ -424,67 +464,50 @@ document.addEventListener("click", function(e){
   }
 });
 
-// ── Buscar material ───────────────────────────────────
+// ── Buscar material online (fallback quando cache vazio) ──────────
 function buscarMaterial(){
-  var cod = (document.getElementById("f-cod-mat").value || "").trim().toUpperCase();
+  var val = (document.getElementById("f-cod-mat").value || "").trim().toUpperCase();
   document.getElementById("erro-busca").style.display = "none";
-  document.getElementById("mat-encontrado").style.display = "none";
-  _matAtual = null;
 
-  if(!cod){
-    document.getElementById("erro-busca").textContent = "Digite o código do material.";
+  if(!val){
+    document.getElementById("erro-busca").textContent = "Digite o nome ou código do material.";
     document.getElementById("erro-busca").style.display = "block";
     return;
   }
 
-  // Tenta no cache: exato primeiro, depois parcial
-  var m = MATERIAIS_CACHE.find(function(x){ return (x.codigo||"").toUpperCase() === cod; });
+  // Tenta no cache primeiro
+  var m = MATERIAIS_CACHE.find(function(x){ return (x.codigo||"").toUpperCase() === val; });
   if(!m) m = MATERIAIS_CACHE.find(function(x){
-    return (x.codigo||"").toUpperCase().includes(cod) ||
-           (x.descricao||"").toUpperCase().includes(cod) ||
-           (x.tipo||"").toUpperCase().includes(cod);
+    return (x.codigo||"").toUpperCase().includes(val) ||
+           (x.descricao||"").toUpperCase().includes(val) ||
+           (x.tipo||"").toUpperCase().includes(val);
   });
   if(m){ document.getElementById("mat-sugestoes").style.display="none"; mostrarMaterial(m); return; }
 
-  // Se não achou no cache, busca online
-  if(SHEETS_URL){
-    document.getElementById("loading-busca").style.display = "block";
-    document.getElementById("btn-buscar-mat").disabled = true;
-    var cbName = "cb_mat_busca_"+Date.now();
-    var tmout = setTimeout(function(){
-      delete window[cbName];
-      document.getElementById("loading-busca").style.display = "none";
-      document.getElementById("btn-buscar-mat").disabled = false;
-      document.getElementById("erro-busca").textContent = "Material não encontrado. Verifique o código.";
-      document.getElementById("erro-busca").style.display = "block";
-    }, 8000);
-    window[cbName] = function(resp){
-      clearTimeout(tmout); delete window[cbName];
-      document.getElementById("loading-busca").style.display = "none";
-      document.getElementById("btn-buscar-mat").disabled = false;
-      if(resp && resp.ok && Array.isArray(resp.dados)){
-        MATERIAIS_CACHE = resp.dados.filter(function(x){ return (x.status||"ativo")==="ativo"; });
-        var mat = MATERIAIS_CACHE.find(function(x){ return (x.codigo||"").toUpperCase() === cod; });
-        if(!mat) mat = MATERIAIS_CACHE.find(function(x){
-          return (x.codigo||"").toUpperCase().includes(cod) ||
-                 (x.descricao||"").toUpperCase().includes(cod);
-        });
-        if(mat){ mostrarMaterial(mat); return; }
-      }
-      _mostrarEntradaManual(cod);
-    };
-    var sc = document.createElement("script");
-    sc.src = SHEETS_URL+"?acao=listar&tipo=materiais_patrimonio&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
-    sc.onerror = function(){
-      clearTimeout(tmout); delete window[cbName];
-      document.getElementById("loading-busca").style.display = "none";
-      document.getElementById("btn-buscar-mat").disabled = false;
-      _mostrarEntradaManual(cod);
-    };
-    document.head.appendChild(sc);
-  } else {
-    _mostrarEntradaManual(cod);
-  }
+  // Não achou — busca online e atualiza cache
+  if(!SHEETS_URL){ _mostrarEntradaManual(val); return; }
+  document.getElementById("loading-busca").style.display = "block";
+  var cbName = "cb_mat_busca_"+Date.now();
+  var tmout = setTimeout(function(){
+    delete window[cbName];
+    document.getElementById("loading-busca").style.display = "none";
+    _mostrarEntradaManual(val);
+  }, 8000);
+  window[cbName] = function(resp){
+    clearTimeout(tmout); delete window[cbName];
+    document.getElementById("loading-busca").style.display = "none";
+    if(resp && resp.ok && Array.isArray(resp.dados) && resp.dados.length > 0){
+      MATERIAIS_CACHE = resp.dados.filter(function(x){ return (x.status||"ativo").toLowerCase()==="ativo"; });
+      // tenta novamente após atualizar cache
+      _sugerirMaterial(val);
+    } else {
+      _mostrarEntradaManual(val);
+    }
+  };
+  var sc = document.createElement("script");
+  sc.src = SHEETS_URL+"?acao=listar&tipo=materiais_patrimonio&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
+  sc.onerror = function(){ clearTimeout(tmout); delete window[cbName]; document.getElementById("loading-busca").style.display="none"; _mostrarEntradaManual(val); };
+  document.head.appendChild(sc);
 }
 
 function _mostrarEntradaManual(cod){
@@ -780,14 +803,29 @@ function enviarCarga(e){
     document.getElementById("protocolo").textContent = "Protocolo: "+protocolo;
   }
 
+  // Sempre salva completo (com assinaturas) em localStorage
+  try{
+    var _chave = "bcs_cargas_armamento";
+    var _local = JSON.parse(localStorage.getItem(_chave)||"[]");
+    _local.push(dados);
+    localStorage.setItem(_chave, JSON.stringify(_local));
+  }catch(er){}
+
   if(SHEETS_URL && TOKEN){
+    // Envia para Sheets SEM assinaturas (base64 excede limite de URL em GET/JSONP)
+    var dadosSheets = {};
+    Object.keys(dados).forEach(function(k){
+      if(k!=="assinatura" && k!=="assinatura_adjunto") dadosSheets[k]=dados[k];
+    });
+    dadosSheets.tem_assinatura = true; // marca que assinatura existe localmente
+
     var cbName = "cb_arm_"+Date.now();
     window[cbName] = function(){ delete window[cbName]; clearTimeout(tmout); mostrarSucesso(); };
     var tmout = setTimeout(mostrarSucesso, 8000);
     var script = document.createElement("script");
     script.src = SHEETS_URL
       +"?acao=salvar&tipo=carga_armamento"
-      +"&dados="+encodeURIComponent(JSON.stringify(dados))
+      +"&dados="+encodeURIComponent(JSON.stringify(dadosSheets))
       +"&token="+encodeURIComponent(TOKEN)
       +"&callback="+cbName;
     script.onerror = function(){ clearTimeout(tmout); mostrarSucesso(); };
