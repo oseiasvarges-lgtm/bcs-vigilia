@@ -107,8 +107,8 @@ select option{ background:#0f1a2e; }
     </label>
 
     <label class="campo">
-      <span>Tipo de Carga</span>
-      <select id="f-tipo-carga">
+      <span id="lbl-tipo-op">Tipo de Operação</span>
+      <select id="f-tipo-carga" onchange="adaptarFormTipo(this.value)">
         <option value="Carga">🔫 Carga (saída para serviço)</option>
         <option value="Descarga">📦 Descarga (retorno)</option>
         <option value="Transferência">🔄 Transferência</option>
@@ -178,7 +178,7 @@ select option{ background:#0f1a2e; }
           <input type="number" id="f-carregadores" min="0" max="99" placeholder="0"/>
         </label>
       </div>
-      <button type="button" onclick="adicionarItem()"
+      <button type="button" id="btn-adicionar-item" onclick="adicionarItem()"
               style="margin-top:10px;width:100%;background:#0a1428;border:1px solid #3a6ae8;color:#6a9ae8;padding:9px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
         ➕ Adicionar à Carga
       </button>
@@ -204,7 +204,7 @@ select option{ background:#0f1a2e; }
 
     <!-- Assinatura do Policial -->
     <div class="campo">
-      <span>✍ Assinatura do Policial <em>*</em></span>
+      <span id="lbl-assin-pol">✍ Assinatura do Policial <em>*</em></span>
       <div class="assin-box" id="assin-box">
         <canvas id="assin-canvas" height="130"></canvas>
         <div class="assin-label" id="assin-label">Assine aqui com o dedo</div>
@@ -215,9 +215,9 @@ select option{ background:#0f1a2e; }
       <div class="erro-msg" id="erro-assin">Assinatura do policial obrigatória</div>
     </div>
 
-    <!-- Adjunto -->
+    <!-- Adjunto / Recebedor -->
     <label class="campo">
-      <span>Matrícula do Adjunto <em>*</em></span>
+      <span id="lbl-mat-adj">Matrícula do Adjunto <em>*</em></span>
       <div style="display:flex;gap:8px">
         <input type="text" id="f-matricula-adj" placeholder="Ex: 123456" required
                oninput="buscarAdjunto(this.value)" style="flex:1"/>
@@ -225,14 +225,14 @@ select option{ background:#0f1a2e; }
       </div>
     </label>
     <label class="campo">
-      <span>Nome do Adjunto <em>*</em></span>
+      <span id="lbl-nome-adj">Nome do Adjunto <em>*</em></span>
       <input type="text" id="f-nome-adj" placeholder="Preenchido automaticamente ou digite" required/>
       <div id="adj-info" style="display:none;margin-top:5px;background:#070d1a;border:1px solid #1a3a6a;border-radius:7px;padding:7px 10px;font-size:11px;color:#6a9ae8"></div>
     </label>
 
-    <!-- Assinatura do Adjunto -->
+    <!-- Assinatura do Adjunto / Recebedor -->
     <div class="campo">
-      <span>✍ Assinatura do Adjunto Responsável <em>*</em></span>
+      <span id="lbl-assin-adj">✍ Assinatura do Adjunto Responsável <em>*</em></span>
       <div class="assin-box" id="assin-box-adj">
         <canvas id="assin-canvas-adj" height="130"></canvas>
         <div class="assin-label" id="assin-label-adj">Adjunto assina aqui</div>
@@ -346,6 +346,61 @@ var _polTimer = null;
 var _adjTimer = null;
 function buscarPolicial(mat){ _polTimer = _buscarNaLista(mat,"pol-status","pol-info","f-nome",_polTimer); }
 function buscarAdjunto(mat){  _adjTimer = _buscarNaLista(mat,"adj-status","adj-info","f-nome-adj",_adjTimer); }
+
+// ── Adapta labels conforme tipo de operação ──────────
+var _LABELS_TIPO = {
+  Carga: {
+    polAssin: "✍ Assinatura do Policial",
+    matAdj:   "Matrícula do Adjunto",
+    nomeAdj:  "Nome do Adjunto",
+    adjAssin: "✍ Assinatura do Adjunto Responsável",
+    btnAdc:   "➕ Adicionar à Carga",
+    btnEnviar:"✅ Registrar Carga",
+    adjLabel: "Adjunto assina aqui"
+  },
+  Descarga: {
+    polAssin: "✍ Assinatura do Policial Devolvendo",
+    matAdj:   "Matrícula do Recebedor/Conferente",
+    nomeAdj:  "Nome do Recebedor/Conferente",
+    adjAssin: "✍ Assinatura do Recebedor/Conferente",
+    btnAdc:   "➕ Adicionar à Descarga",
+    btnEnviar:"✅ Registrar Descarga",
+    adjLabel: "Recebedor assina aqui"
+  },
+  "Transferência": {
+    polAssin: "✍ Assinatura do Policial Transferindo",
+    matAdj:   "Matrícula do Responsável pelo Recebimento",
+    nomeAdj:  "Nome do Responsável pelo Recebimento",
+    adjAssin: "✍ Assinatura do Responsável Receptor",
+    btnAdc:   "➕ Adicionar à Transferência",
+    btnEnviar:"✅ Registrar Transferência",
+    adjLabel: "Receptor assina aqui"
+  },
+  "Conferência": {
+    polAssin: "✍ Assinatura do Policial Conferido",
+    matAdj:   "Matrícula do Conferente",
+    nomeAdj:  "Nome do Conferente",
+    adjAssin: "✍ Assinatura do Conferente",
+    btnAdc:   "➕ Adicionar à Conferência",
+    btnEnviar:"✅ Registrar Conferência",
+    adjLabel: "Conferente assina aqui"
+  }
+};
+function adaptarFormTipo(tipo){
+  var L = _LABELS_TIPO[tipo] || _LABELS_TIPO["Carga"];
+  var em = "<em>*</em>";
+  var set = function(id, html){ var el=document.getElementById(id); if(el) el.innerHTML=html; };
+  set("lbl-assin-pol",   L.polAssin+" "+em);
+  set("lbl-mat-adj",     L.matAdj+" "+em);
+  set("lbl-nome-adj",    L.nomeAdj+" "+em);
+  set("lbl-assin-adj",   L.adjAssin+" "+em);
+  var btnAdc = document.getElementById("btn-adicionar-item");
+  if(btnAdc) btnAdc.innerHTML = L.btnAdc;
+  var btnEnv = document.getElementById("btn-enviar");
+  if(btnEnv) btnEnv.innerHTML = L.btnEnviar;
+  var adjLabel = document.getElementById("assin-label-adj");
+  if(adjLabel) adjLabel.textContent = L.adjLabel;
+}
 
 // ── Cache de materiais ────────────────────────────────
 var MATERIAIS_CACHE = [];

@@ -726,7 +726,16 @@ async function carregarDadosAppDoSheets(){
         var loc = local.find(function(l){ return l.id===d.id; });
         return (loc && loc.status!==d.status) ? Object.assign({},d,{status:loc.status}) : d;
       });
-      state.materiaisPatrimonio = merged.concat(soMLocal);
+      var combinado = merged.concat(soMLocal);
+      // Deduplicar por codigo+serie — evita repetições de sincronizações anteriores
+      var vistos = {};
+      state.materiaisPatrimonio = combinado.filter(function(m){
+        var key = ((m.codigo||"")+"||"+(m.serie||"")).toUpperCase().trim();
+        if(!key || key==="||") return true;
+        if(vistos[key]) return false;
+        vistos[key] = true;
+        return true;
+      });
       salvarLocal();
     });
 
@@ -11565,6 +11574,8 @@ function _expandirInstrutor(id){
 // MÓDULO LIVRO DE PARTE — ARMAMENTO
 // ══════════════════════════════════════════════════
 function renderLivroParteArmamento(main){
+  // Re-lê localStorage para capturar registros salvos em carga-armamento.html
+  try{ state.cargasArmamento=JSON.parse(localStorage.getItem("bcs_cargas_armamento")||"[]"); }catch(e){}
   if(!state._armTab) state._armTab="registros";
   var tab=state._armTab;
   var IS="width:100%;background:#070d1a;border:1px solid #1a3a6a;color:#a0c0ff;padding:8px 10px;border-radius:7px;font-size:12px;outline:none;box-sizing:border-box";
@@ -12068,12 +12079,22 @@ function _matExcluir(id){
   var m=(state.materiaisPatrimonio||[]).find(function(x){return x.id===id;});
   if(!m) return;
   if(!confirm("Excluir permanentemente o material "+m.codigo+"?\nEssa ação não pode ser desfeita.")) return;
-  state.materiaisPatrimonio=(state.materiaisPatrimonio||[]).filter(function(x){return x.id!==id;});
+  // Remove TODAS as cópias com o mesmo código (elimina duplicatas de uma vez)
+  var codigoAlvo = (m.codigo||"").toUpperCase().trim();
+  var serieAlvo  = (m.serie||"").toUpperCase().trim();
   if(!state._deletedMatIds) state._deletedMatIds=new Set();
-  state._deletedMatIds.add(id);
+  var excluidos = (state.materiaisPatrimonio||[]).filter(function(x){
+    var mesmoCod = (x.codigo||"").toUpperCase().trim()===codigoAlvo;
+    var mesmaSerie = !codigoAlvo || (x.serie||"").toUpperCase().trim()===serieAlvo;
+    return mesmoCod && mesmaSerie;
+  });
+  excluidos.forEach(function(x){
+    state._deletedMatIds.add(x.id);
+    _syncMatStatusSheets(x.id,"excluido");
+  });
+  state.materiaisPatrimonio=(state.materiaisPatrimonio||[]).filter(function(x){return !state._deletedMatIds.has(x.id);});
   salvarLocal();
-  _syncMatStatusSheets(id,"excluido"); // avisa o Sheets para não devolver
-  showToast("🗑 Material excluído.");
+  showToast("🗑 Material excluído"+(excluidos.length>1?" ("+excluidos.length+" cópias removidas)":"")+".");
   renderLivroParteArmamento(document.getElementById("main"));
 }
 
