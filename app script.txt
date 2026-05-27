@@ -84,6 +84,65 @@ function criarAba(ss, key) {
 function garantirAba(ss, key) { return getAba(ss,key) || criarAba(ss,key); }
 
 // ══════════════════════════════════════════════════════════════════
+//  CRIAR ABAS QUE FALTAM — execute se alguma aba não aparece na planilha
+// ══════════════════════════════════════════════════════════════════
+function criarAbasFaltantes() {
+  var ss = getSS();
+
+  // ── carga_armamento ─────────────────────────────────────────────
+  if (!ss.getSheetByName("carga_armamento")) {
+    var arm = ss.insertSheet("carga_armamento");
+    arm.getRange(1,1,1,15).setValues([[
+      "protocolo","data","hora","nome","matricula",
+      "tipo_carga","itens_json","obs","assinatura","assinatura_adjunto",
+      "matricula_adjunto","nome_adjunto","data_registro","origem","qtd_itens"
+    ]]).setFontWeight("bold").setBackground("#0a1628").setFontColor("#6a9ae8");
+    arm.setFrozenRows(1);
+    arm.setColumnWidth(7, 400);
+    Logger.log("Aba 'carga_armamento' criada.");
+  } else {
+    Logger.log("Aba 'carga_armamento' já existe.");
+  }
+
+  // ── policiais ───────────────────────────────────────────────────
+  if (!ss.getSheetByName("policiais")) {
+    var pol = ss.insertSheet("policiais");
+    pol.getRange(1,1,1,8).setValues([["id","matricula","posto","nome","telefone","turno","status","criadoEm"]])
+       .setFontWeight("bold").setBackground("#1a1028").setFontColor("#a78bfa");
+    pol.setFrozenRows(1);
+    Logger.log("Aba 'policiais' criada.");
+  } else {
+    Logger.log("Aba 'policiais' já existe.");
+  }
+
+  // ── materiais_patrimonio ────────────────────────────────────────
+  if (!ss.getSheetByName("materiais_patrimonio")) {
+    var mat = ss.insertSheet("materiais_patrimonio");
+    mat.getRange(1,1,1,8).setValues([["id","codigo","tipo","descricao","serie","obs","status","criadoEm"]])
+       .setFontWeight("bold").setBackground("#0a1628").setFontColor("#60a5fa");
+    mat.setFrozenRows(1);
+    Logger.log("Aba 'materiais_patrimonio' criada.");
+  } else {
+    Logger.log("Aba 'materiais_patrimonio' já existe.");
+  }
+
+  // ── solicitacoes ────────────────────────────────────────────────
+  if (!ss.getSheetByName("solicitacoes")) {
+    var sol = ss.insertSheet("solicitacoes");
+    sol.getRange(1,1,1,13).setValues([[
+      "protocolo","data","hora","matricula","nome","posto","telefone","turno",
+      "destinatario","assunto","texto","status","data_registro"
+    ]]).setFontWeight("bold").setBackground("#1a1028").setFontColor("#d4a87a");
+    sol.setFrozenRows(1);
+    Logger.log("Aba 'solicitacoes' criada.");
+  } else {
+    Logger.log("Aba 'solicitacoes' já existe.");
+  }
+
+  Logger.log("Concluído. Verifique o painel de execução para detalhes.");
+}
+
+// ══════════════════════════════════════════════════════════════════
 //  SETUP — executa UMA VEZ, cria a planilha e todas as abas
 // ══════════════════════════════════════════════════════════════════
 function setup() {
