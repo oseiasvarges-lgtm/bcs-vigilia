@@ -11664,6 +11664,193 @@ function _renderRegistrosCarga(h,IS){
   }
 }
 
+// ── Ver registro de carga/descarga + PDF ──────────────
+function _armVerRegistro(protocolo){
+  var c=(state.cargasArmamento||[]).find(function(x){return x.protocolo===protocolo;});
+  if(!c){showToast("Registro não encontrado.");return;}
+  var tipoCor={Carga:"#22c55e",Descarga:"#f59e0b","Transferência":"#60a5fa","Conferência":"#a78bfa"}[c.tipo_carga]||"#6b7280";
+
+  var overlay=document.createElement("div");
+  overlay.style.cssText="position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px";
+  overlay.onclick=function(e){if(e.target===this)this.remove();};
+
+  var itensRows=(c.itens||[]).map(function(it){
+    var extras="";
+    if(it.municao) extras+=" · "+it.municao+" mun.";
+    if(it.carregadores) extras+=" · "+it.carregadores+" carr.";
+    return "<tr style='border-top:1px solid #1a3a6a'>" +
+      "<td style='padding:6px 10px;font-family:monospace;color:#60a5fa;font-weight:700'>"+esc(it.codigo||"")+"</td>" +
+      "<td style='padding:6px 10px;color:#a0c0ff'>"+esc(it.tipo||"")+"</td>" +
+      "<td style='padding:6px 10px;color:#e8f0ff'>"+esc(it.descricao||"")+"</td>" +
+      "<td style='padding:6px 10px;color:#7a9ab8;font-family:monospace'>"+esc(it.serie||"—")+"</td>" +
+      "<td style='padding:6px 10px;color:#a0c0ff;text-align:center'>"+esc(String(extras).trim()||"—")+"</td>" +
+    "</tr>";
+  }).join("");
+
+  overlay.innerHTML="<div style='background:#0a1428;border:2px solid #1a3a6a;border-radius:16px;max-width:640px;width:100%;max-height:90vh;overflow-y:auto;padding:24px'>"+
+    "<div style='display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px'>"+
+      "<div>"+
+        "<p style='color:#3a6a9a;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 4px'>77ª CIPM — BCS · Armamento</p>"+
+        "<h2 style='color:#a0c0ff;font-size:17px;font-weight:800;margin:0'>"+
+          "<span style='background:"+tipoCor+"22;color:"+tipoCor+";padding:2px 10px;border-radius:5px;font-size:12px;margin-right:8px'>"+esc(c.tipo_carga||"")+"</span>"+
+          esc(c.nome||"")+"</h2>"+
+        "<p style='color:#3a6a9a;font-size:12px;margin:4px 0 0'>"+esc(c.data||"")+" às "+esc(c.hora||"")+" · "+esc(c.protocolo||"")+"</p>"+
+      "</div>"+
+      "<button onclick='this.closest(\"div[style*=inset]\").remove()' style='background:none;border:none;color:#3a5a8a;font-size:22px;cursor:pointer;padding:0 4px'>✕</button>"+
+    "</div>"+
+
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px'>"+
+      "<div style='background:#070d1a;border:1px solid #1a3a6a;border-radius:8px;padding:12px'>"+
+        "<p style='color:#3a6a9a;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 6px'>👮 Policial</p>"+
+        "<p style='color:#e8f0ff;font-weight:600;margin:0'>"+esc(c.nome||"—")+"</p>"+
+        "<p style='color:#6a9ae8;font-family:monospace;font-size:12px;margin:2px 0 0'>"+esc(c.matricula||"")+"</p>"+
+      "</div>"+
+      "<div style='background:#070d1a;border:1px solid #1a3a6a;border-radius:8px;padding:12px'>"+
+        "<p style='color:#3a6a9a;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 6px'>🎖 Adjunto</p>"+
+        "<p style='color:#e8f0ff;font-weight:600;margin:0'>"+esc(c.nome_adjunto||"—")+"</p>"+
+        "<p style='color:#6a9ae8;font-family:monospace;font-size:12px;margin:2px 0 0'>"+esc(c.matricula_adjunto||"")+"</p>"+
+      "</div>"+
+    "</div>"+
+
+    "<div style='background:#070d1a;border:1px solid #1a3a6a;border-radius:8px;margin-bottom:16px;overflow:hidden'>"+
+      "<table style='width:100%;border-collapse:collapse;font-size:12px'>"+
+        "<thead><tr style='background:#0a1428'>"+
+          "<th style='padding:8px 10px;color:#3a6a9a;font-size:10px;text-transform:uppercase;text-align:left'>Código</th>"+
+          "<th style='padding:8px 10px;color:#3a6a9a;font-size:10px;text-transform:uppercase;text-align:left'>Tipo</th>"+
+          "<th style='padding:8px 10px;color:#3a6a9a;font-size:10px;text-transform:uppercase;text-align:left'>Descrição</th>"+
+          "<th style='padding:8px 10px;color:#3a6a9a;font-size:10px;text-transform:uppercase;text-align:left'>Série</th>"+
+          "<th style='padding:8px 10px;color:#3a6a9a;font-size:10px;text-transform:uppercase;text-align:left'>Extras</th>"+
+        "</tr></thead><tbody>"+itensRows+"</tbody>"+
+      "</table>"+
+    "</div>"+
+
+    (c.obs?"<div style='background:#070d1a;border:1px solid #1a3a6a;border-radius:8px;padding:12px;margin-bottom:16px'><p style='color:#3a6a9a;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 4px'>Observações</p><p style='color:#a0c0ff;font-size:13px;margin:0'>"+esc(c.obs)+"</p></div>":"")+
+
+    "<div style='display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px'>"+
+      "<div style='text-align:center'>"+
+        "<p style='color:#3a6a9a;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 6px'>Assinatura Policial</p>"+
+        (c.assinatura?"<img src='"+c.assinatura+"' style='max-width:100%;border:1px solid #1a3a6a;border-radius:6px;background:#070d1a'/>":"<div style='border:1px dashed #1a3a6a;border-radius:6px;padding:20px;color:#1a3a5a;font-size:12px'>Não disponível</div>")+
+      "</div>"+
+      "<div style='text-align:center'>"+
+        "<p style='color:#3a6a9a;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 6px'>Assinatura Adjunto</p>"+
+        (c.assinatura_adjunto?"<img src='"+c.assinatura_adjunto+"' style='max-width:100%;border:1px solid #1a3a6a;border-radius:6px;background:#070d1a'/>":"<div style='border:1px dashed #1a3a6a;border-radius:6px;padding:20px;color:#1a3a5a;font-size:12px'>Não disponível</div>")+
+      "</div>"+
+    "</div>"+
+
+    "<button onclick='_armGerarPDF(\""+esc(protocolo)+"\")' style='width:100%;background:linear-gradient(135deg,#0f2a6a,#1a3a8a);border:2px solid #3a6ae8;color:#a0c0ff;padding:13px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.5px'>📄 Gerar PDF / Imprimir</button>"+
+  "</div>";
+
+  document.body.appendChild(overlay);
+}
+
+function _armGerarPDF(protocolo){
+  var c=(state.cargasArmamento||[]).find(function(x){return x.protocolo===protocolo;});
+  if(!c){showToast("Registro não encontrado.");return;}
+
+  var itensRows=(c.itens||[]).map(function(it,i){
+    return "<tr>"+(i%2===0?"":"")+" "+
+      "<td>"+esc(it.codigo||"")+"</td>"+
+      "<td>"+esc(it.tipo||"")+"</td>"+
+      "<td>"+esc(it.descricao||"")+"</td>"+
+      "<td>"+esc(it.serie||"—")+"</td>"+
+      "<td style='text-align:center'>"+esc(it.municao!=null?String(it.municao):"")+"</td>"+
+      "<td style='text-align:center'>"+esc(it.carregadores!=null?String(it.carregadores):"")+"</td>"+
+    "</tr>";
+  }).join("");
+
+  var html="<!DOCTYPE html><html lang='pt-BR'><head><meta charset='UTF-8'>"+
+  "<title>"+c.tipo_carga+" — "+c.protocolo+"</title>"+
+  "<style>"+
+    "*{box-sizing:border-box;margin:0;padding:0;}"+
+    "body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#111;background:#fff;padding:24px;}"+
+    "@media print{body{padding:8px;}@page{size:A4;margin:16mm 14mm;}}"+
+    ".header{display:flex;align-items:center;gap:16px;border-bottom:3px solid #1a3a6a;padding-bottom:12px;margin-bottom:16px;}"+
+    ".header-text h1{font-size:15px;color:#0f2040;font-weight:800;margin:0;}"+
+    ".header-text p{font-size:11px;color:#3a5a8a;margin:2px 0 0;}"+
+    ".titulo{text-align:center;font-size:17px;font-weight:900;color:#0f2040;text-transform:uppercase;letter-spacing:1px;margin:14px 0;border:2px solid #1a3a6a;padding:8px;border-radius:6px;}"+
+    ".row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;}"+
+    ".box{border:1px solid #ccd6e8;border-radius:6px;padding:10px;}"+
+    ".label{font-size:9px;font-weight:700;color:#3a5a8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px;}"+
+    ".value{font-size:13px;font-weight:600;color:#0f1a2e;}"+
+    ".value-mono{font-family:monospace;font-size:12px;color:#1a3a6a;}"+
+    "table{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11px;}"+
+    "thead tr{background:#1a3a6a;color:#fff;}"+
+    "th{padding:7px 8px;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.4px;}"+
+    "td{padding:6px 8px;border-bottom:1px solid #e8eef8;}"+
+    "tr:nth-child(even) td{background:#f5f8ff;}"+
+    ".assin-section{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:16px;padding-top:14px;border-top:2px solid #1a3a6a;}"+
+    ".assin-box{text-align:center;}"+
+    ".assin-box .label{margin-bottom:8px;}"+
+    ".assin-box img{max-width:100%;max-height:90px;border:1px solid #ccd6e8;border-radius:4px;background:#f5f5f5;}"+
+    ".assin-linha{border-top:1px solid #333;margin:30px auto 4px;width:80%;}"+
+    ".footer{margin-top:18px;text-align:center;font-size:10px;color:#6a7a9a;border-top:1px solid #ccd6e8;padding-top:8px;}"+
+    ".badge{display:inline-block;padding:2px 10px;border-radius:4px;font-size:11px;font-weight:700;}"+
+    ".badge-carga{background:#e6f9ee;color:#16873a;}"+
+    ".badge-desc{background:#fff8e6;color:#8a5a00;}"+
+    ".badge-trans{background:#e6f0ff;color:#1a3a8a;}"+
+    ".obs-box{background:#f5f8ff;border:1px solid #ccd6e8;border-radius:6px;padding:10px;margin-bottom:14px;}"+
+  "</style></head><body>"+
+  "<div class='header'>"+
+    "<div class='header-text'>"+
+      "<h1>Polícia Militar da Bahia — 77ª CIPM · Base Comunitária de Segurança Nova Cidade</h1>"+
+      "<p>Sistema IARA · Controle de Armamento</p>"+
+    "</div>"+
+  "</div>"+
+  "<div class='titulo'>Termo de "+esc(c.tipo_carga||"Carga")+" de Armamento</div>"+
+
+  "<div class='row2'>"+
+    "<div class='box'><div class='label'>Protocolo</div><div class='value-mono'>"+esc(c.protocolo||"")+"</div></div>"+
+    "<div class='box' style='display:grid;grid-template-columns:1fr 1fr;gap:8px'>"+
+      "<div><div class='label'>Data</div><div class='value'>"+esc(c.data||"")+"</div></div>"+
+      "<div><div class='label'>Hora</div><div class='value'>"+esc(c.hora||"")+"</div></div>"+
+    "</div>"+
+  "</div>"+
+
+  "<div class='row2'>"+
+    "<div class='box'>"+
+      "<div class='label'>👮 Policial Solicitante</div>"+
+      "<div class='value'>"+esc(c.nome||"—")+"</div>"+
+      "<div class='value-mono' style='margin-top:3px'>Matrícula: "+esc(c.matricula||"")+"</div>"+
+    "</div>"+
+    "<div class='box'>"+
+      "<div class='label'>🎖 Policial Adjunto</div>"+
+      "<div class='value'>"+esc(c.nome_adjunto||"—")+"</div>"+
+      "<div class='value-mono' style='margin-top:3px'>Matrícula: "+esc(c.matricula_adjunto||"")+"</div>"+
+    "</div>"+
+  "</div>"+
+
+  "<table>"+
+    "<thead><tr><th>Código</th><th>Tipo</th><th>Descrição</th><th>Nº Série</th><th>Munição</th><th>Carregadores</th></tr></thead>"+
+    "<tbody>"+itensRows+"</tbody>"+
+  "</table>"+
+
+  (c.obs?"<div class='obs-box'><div class='label'>Observações</div><div style='margin-top:4px'>"+esc(c.obs)+"</div></div>":"")+
+
+  "<div class='assin-section'>"+
+    "<div class='assin-box'>"+
+      "<div class='label'>Assinatura do Policial Solicitante</div>"+
+      (c.assinatura?"<img src='"+c.assinatura+"'/>":"<div class='assin-linha'></div>")+
+      "<p style='font-size:11px;margin-top:6px;color:#333'>"+esc(c.nome||"")+"</p>"+
+      "<p style='font-size:10px;color:#555'>Matr.: "+esc(c.matricula||"")+"</p>"+
+    "</div>"+
+    "<div class='assin-box'>"+
+      "<div class='label'>Assinatura do Adjunto</div>"+
+      (c.assinatura_adjunto?"<img src='"+c.assinatura_adjunto+"'/>":"<div class='assin-linha'></div>")+
+      "<p style='font-size:11px;margin-top:6px;color:#333'>"+esc(c.nome_adjunto||"")+"</p>"+
+      "<p style='font-size:10px;color:#555'>Matr.: "+esc(c.matricula_adjunto||"")+"</p>"+
+    "</div>"+
+  "</div>"+
+
+  "<div class='footer'>Documento gerado pelo Sistema IARA · 77ª CIPM BCS · "+new Date().toLocaleString("pt-BR")+"</div>"+
+  "</body></html>";
+
+  var win=window.open("","_blank","width=800,height=900");
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(function(){ win.print(); },600);
+}
+
 function _renderPatrimonioCadastro(h,IS){
   var mats=(state.materiaisPatrimonio||[]).slice().reverse();
   var busca=(state._matBusca||"").toLowerCase().trim();
