@@ -11763,13 +11763,13 @@ function _armVerRegistro(protocolo){
       "</div>"+
     "</div>"+
 
-    "<button onclick='_armGerarPDF(\""+esc(protocolo)+"\")' style='width:100%;background:linear-gradient(135deg,#0f2a6a,#1a3a8a);border:2px solid #3a6ae8;color:#a0c0ff;padding:13px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.5px'>📄 Gerar PDF / Imprimir</button>"+
+    "<button onclick='_armGerarPDFRegistro(\""+esc(protocolo)+"\")' style='width:100%;background:linear-gradient(135deg,#0f2a6a,#1a3a8a);border:2px solid #3a6ae8;color:#a0c0ff;padding:13px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.5px'>📄 Gerar PDF / Imprimir</button>"+
   "</div>";
 
   document.body.appendChild(overlay);
 }
 
-function _armGerarPDF(protocolo){
+function _armGerarPDFRegistro(protocolo){
   var c=(state.cargasArmamento||[]).find(function(x){return x.protocolo===protocolo;});
   if(!c){showToast("Registro não encontrado.");return;}
 
@@ -12495,6 +12495,8 @@ function _armVerRegistro(protocolo){
   }
   // Tipo badge
   h+="<div style='margin-top:14px;text-align:center'><span style='background:"+tipoCor+"22;color:"+tipoCor+";padding:6px 20px;border-radius:8px;font-size:13px;font-weight:700;border:1px solid "+tipoCor+"44'>"+esc(c.tipo_carga)+"</span></div>";
+  // Botão PDF
+  h+="<button onclick='_armGerarPDFRegistro(\""+esc(protocolo)+"\")' style='width:100%;margin-top:14px;background:linear-gradient(135deg,#0f2a6a,#1a3a8a);border:2px solid #3a6ae8;color:#a0c0ff;padding:13px;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.5px'>📄 Gerar PDF / Imprimir</button>";
   h+="</div>";
   modal.innerHTML=h;
   document.body.appendChild(modal);
