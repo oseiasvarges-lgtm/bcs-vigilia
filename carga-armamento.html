@@ -66,6 +66,18 @@ input:focus,select:focus{ border-color:#3a6ae8; }
 .erro-busca{ color:#f87171; font-size:11px; margin-top:6px; display:none; }
 .loading-dot{ display:none; color:#3a6a9a; font-size:12px; margin-top:6px; }
 select option{ background:#0f1a2e; }
+/* ── Cards de seleção de material ── */
+.mat-card{ background:#070d1a;border:2px solid #1a3a6a;border-radius:12px;padding:14px 12px;cursor:pointer;transition:border-color .2s,background .2s;user-select:none;-webkit-tap-highlight-color:transparent; }
+.mat-card:active{ transform:scale(.97); }
+.mat-card.selecionado{ border-color:#22c55e;background:#071a0f; }
+.mat-card.indisponivel{ border-color:#1a2a1a;opacity:.45;cursor:not-allowed; }
+.mat-card-icon{ font-size:26px;margin-bottom:6px;display:block;text-align:center; }
+.mat-card-desc{ color:#e8f0ff;font-size:12px;font-weight:700;text-align:center;margin-bottom:3px;line-height:1.3; }
+.mat-card-cod{ color:#3a6a9a;font-size:10px;font-family:monospace;text-align:center;display:block; }
+.mat-card-status{ font-size:10px;font-weight:700;text-align:center;margin-top:5px;padding:2px 8px;border-radius:4px;display:inline-block; }
+.mat-card-mun{ margin-top:10px;display:none;grid-template-columns:1fr 1fr;gap:8px; }
+.mat-card-mun input{ background:#0a1428;border:1px solid #1a3a6a;color:#e8f0ff;padding:6px 8px;border-radius:7px;font-size:13px;width:100%;text-align:center; }
+.mat-card-mun label{ color:#4a7ab8;font-size:9px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:3px;text-align:center; }
 @media(max-width:500px){ .card{ margin:10px; padding:16px; } }
 </style>
 </head>
@@ -118,82 +130,13 @@ select option{ background:#0f1a2e; }
 
     <hr class="separador"/>
 
-    <!-- Busca de material -->
-    <div class="secao-titulo">📦 Materiais / Equipamentos</div>
-
-    <label class="campo">
-      <span>Material / Equipamento <em>*</em></span>
-      <div class="busca-mat" id="busca-mat-wrap">
-        <input type="text" id="f-cod-mat" placeholder="🔍 Digite: pistola, colete, algemas, ARM-001…"
-               oninput="_sugerirMaterial(this.value)"
-               onkeydown="_navSugestao(event)"
-               autocomplete="off" style="font-size:14px"/>
-        <div class="mat-sugestoes" id="mat-sugestoes"></div>
-      </div>
-      <div class="loading-dot" id="loading-busca" style="display:none">⏳ Buscando online...</div>
-      <div class="erro-busca" id="erro-busca"></div>
-    </label>
-
-    <!-- Material encontrado -->
-    <div class="mat-encontrado" id="mat-encontrado">
-      <div style="display:flex;align-items:center;margin-bottom:6px">
-        <span class="mat-cod" id="mc-cod"></span>
-        <span class="mat-tipo" id="mc-tipo"></span>
-      </div>
-      <div class="mat-desc" id="mc-desc"></div>
-      <div class="mat-serie" id="mc-serie"></div>
-      <!-- Campos de entrada manual (quando não encontrado no cache) -->
-      <div id="mc-tipo-sel" style="display:none;margin-top:8px">
-        <label style="color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Tipo <em style="color:#ef4444;font-style:normal">*</em></label>
-        <select id="mc-tipo-input" onchange="if(_matAtual)_matAtual.tipo=this.value;_atualizarCamposArma();" style="width:100%;background:#0a1428;border:1px solid #3a6ae8;color:#e8f0ff;padding:8px 10px;border-radius:7px;font-size:13px">
-          <option value="">Selecione o tipo…</option>
-          <option value="Arma">🔫 Arma</option>
-          <option value="Munição">🔵 Munição</option>
-          <option value="Colete Balístico">🛡 Colete Balístico</option>
-          <option value="Algemas">⛓ Algemas</option>
-          <option value="Rádio">📻 Rádio</option>
-          <option value="Lanterna">🔦 Lanterna</option>
-          <option value="Bastão">🪄 Bastão</option>
-          <option value="Equipamento Tático">⚙ Equipamento Tático</option>
-          <option value="Veículo">🚓 Veículo</option>
-          <option value="Outros">📦 Outros</option>
-        </select>
-      </div>
-      <div id="mc-desc-inp" style="display:none;margin-top:8px">
-        <label style="color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Descrição <em style="color:#ef4444;font-style:normal">*</em></label>
-        <input type="text" id="mc-desc-input" placeholder="Ex: Pistola Taurus PT100 .40" oninput="if(_matAtual)_matAtual.descricao=this.value" style="width:100%;background:#0a1428;border:1px solid #3a6ae8;color:#e8f0ff;padding:8px 10px;border-radius:7px;font-size:13px"/>
-      </div>
-      <div id="mc-serie-inp" style="display:none;margin-top:8px">
-        <label style="color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px">Nº de Série</label>
-        <input type="text" id="mc-serie-input" placeholder="Opcional" oninput="if(_matAtual)_matAtual.serie=this.value" style="width:100%;background:#0a1428;border:1px solid #1a3a6a;color:#e8f0ff;padding:8px 10px;border-radius:7px;font-size:13px"/>
-      </div>
-      <!-- Campos de munição — só para armas -->
-      <div class="campos-arma row2" id="campos-arma" style="margin-top:10px">
-        <label class="campo" style="margin-bottom:0">
-          <span>Qtd Munição</span>
-          <input type="number" id="f-municao" min="0" max="999" placeholder="0"/>
-        </label>
-        <label class="campo" style="margin-bottom:0">
-          <span>Qtd Carregadores</span>
-          <input type="number" id="f-carregadores" min="0" max="99" placeholder="0"/>
-        </label>
-      </div>
-      <button type="button" id="btn-adicionar-item" onclick="adicionarItem()"
-              style="margin-top:10px;width:100%;background:#0a1428;border:1px solid #3a6ae8;color:#6a9ae8;padding:9px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer">
-        ➕ Adicionar à Carga
-      </button>
-      <div id="trava-aviso" style="display:none;margin-top:8px;background:#3a0a0a;border:1px solid #ef4444;border-radius:8px;padding:10px 12px;font-size:12px;color:#fca5a5;line-height:1.6"></div>
+    <!-- Seleção de materiais por cards -->
+    <div class="secao-titulo" id="secao-titulo-mat">📦 Selecione os Materiais</div>
+    <div id="grid-materiais" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px"></div>
+    <div id="aviso-sem-mat" style="display:none;text-align:center;padding:20px;background:#070d1a;border:1px dashed #1a3a4a;border-radius:10px;color:#2a5a7a;font-size:12px;margin-bottom:10px">
+      ⏳ Carregando materiais…
     </div>
-
-    <!-- Lista de itens -->
-    <div class="lista-itens-wrap">
-      <div class="secao-titulo" style="margin-top:4px">
-        ✅ Itens Adicionados
-        <span id="qtd-itens" style="background:#1a3a6a;color:#6a9ae8;border-radius:10px;padding:1px 8px;font-size:10px">0</span>
-      </div>
-      <div id="lista-itens"></div>
-    </div>
-    <div class="erro-msg" id="erro-itens">Adicione ao menos 1 material à carga.</div>
+    <div class="erro-msg" id="erro-itens">Selecione ao menos 1 material.</div>
 
     <hr class="separador"/>
 
@@ -394,12 +337,19 @@ function adaptarFormTipo(tipo){
   set("lbl-mat-adj",     L.matAdj+" "+em);
   set("lbl-nome-adj",    L.nomeAdj+" "+em);
   set("lbl-assin-adj",   L.adjAssin+" "+em);
-  var btnAdc = document.getElementById("btn-adicionar-item");
-  if(btnAdc) btnAdc.innerHTML = L.btnAdc;
+  // Título da seção de materiais
+  var tit = document.getElementById("secao-titulo-mat");
+  if(tit) tit.textContent = tipo==="Descarga" ? "📦 Materiais a Devolver" :
+                            tipo==="Transferência" ? "📦 Materiais a Transferir" :
+                            tipo==="Conferência"   ? "📦 Materiais a Conferir"  :
+                                                     "📦 Selecione os Materiais";
   var btnEnv = document.getElementById("btn-enviar");
   if(btnEnv) btnEnv.innerHTML = L.btnEnviar;
   var adjLabel = document.getElementById("assin-label-adj");
   if(adjLabel) adjLabel.textContent = L.adjLabel;
+  // Zera seleção e re-renderiza cards
+  ITENS = [];
+  _renderizarMateriais();
 }
 
 // ── Cache de materiais ────────────────────────────────
@@ -452,6 +402,7 @@ function carregarMateriais(tentativa){
       var soLocal = MATERIAIS_CACHE.filter(function(m){ return ids.indexOf(m.id)===-1; });
       MATERIAIS_CACHE = resp.dados.filter(function(m){ return (m.status||"ativo").toLowerCase()==="ativo"; }).concat(soLocal);
     }
+    _renderizarMateriais(); // atualiza cards após receber do Sheets
   };
   var sc = document.createElement("script");
   sc.src = SHEETS_URL+"?acao=listar&tipo=materiais_patrimonio&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
@@ -459,6 +410,8 @@ function carregarMateriais(tentativa){
   document.head.appendChild(sc);
 }
 carregarMateriais();
+// Renderiza imediatamente com cache local (enquanto Sheets carrega)
+_renderizarMateriais();
 
 // ── Sincroniza cargas do Sheets → localStorage ao abrir ──
 // Garante que disponibilidade reflita outros dispositivos
@@ -476,7 +429,10 @@ function _sincCargas(){
         resp.dados.forEach(function(r){
           if(r.protocolo&&!prots[r.protocolo]){ local.push(r); novas++; }
         });
-        if(novas>0) localStorage.setItem("bcs_cargas_armamento",JSON.stringify(local));
+        if(novas>0){
+          localStorage.setItem("bcs_cargas_armamento",JSON.stringify(local));
+          _renderizarMateriais(); // atualiza disponibilidade após sync
+        }
       }catch(e){}
     }
   };
@@ -487,10 +443,94 @@ function _sincCargas(){
 }
 _sincCargas();
 
-// ── Autocomplete de material ──────────────────────────
-var _matAtual = null;
-var _sugestaoIdx = -1;
+// ── Cards de seleção de material ─────────────────────
+var ITENS = []; // cada item: {id, codigo, tipo, descricao, serie, municao, carregadores}
 
+var ICONES_TIPO = {
+  "Arma":"🔫","Colete Balístico":"🛡","Munição":"🔵",
+  "Algemas":"⛓","Rádio":"📻","Lanterna":"🔦",
+  "Bastão":"🪄","Equipamento Tático":"⚙","Veículo":"🚓","Outros":"📦"
+};
+var CORES_TIPO = {
+  "Arma":"#60a5fa","Colete Balístico":"#a78bfa","Munição":"#f59e0b",
+  "Algemas":"#22c55e","Rádio":"#34d399","Lanterna":"#fbbf24",
+  "Bastão":"#f87171","Equipamento Tático":"#60a5fa","Veículo":"#6b7280","Outros":"#9ca3af"
+};
+
+function _renderizarMateriais(){
+  var grid = document.getElementById("grid-materiais");
+  var aviso = document.getElementById("aviso-sem-mat");
+  if(!grid) return;
+  var tipoCarga = (document.getElementById("f-tipo-carga")||{value:"Carga"}).value||"Carga";
+  var ocupados  = _getCodigosOcupados();
+
+  // Filtra conforme tipo:
+  // Carga → mostra disponíveis (ultima op != Carga)
+  // Descarga → mostra somente os que têm carga ativa (ultima op == Carga)
+  var lista = (MATERIAIS_CACHE||[]).filter(function(m){
+    var cod = (m.codigo||"").toUpperCase();
+    var op  = ocupados[cod];
+    if(tipoCarga==="Descarga")      return op==="Carga";
+    if(tipoCarga==="Carga")         return op!=="Carga";
+    return true; // Transferência/Conferência mostra todos
+  });
+
+  if(!lista.length){
+    grid.innerHTML="";
+    aviso.style.display="block";
+    aviso.innerHTML = MATERIAIS_CACHE.length===0
+      ? "⏳ Carregando materiais…"
+      : (tipoCarga==="Descarga"
+          ? "✅ Nenhum material com carga ativa para devolver."
+          : "✅ Nenhum material disponível para carga no momento.");
+    return;
+  }
+  aviso.style.display="none";
+
+  grid.innerHTML = lista.map(function(m){
+    var id  = "mc_"+m.id;
+    var sel = ITENS.find(function(x){return x.id===m.id;});
+    var cor = CORES_TIPO[m.tipo]||"#6a9ae8";
+    var ico = ICONES_TIPO[m.tipo]||"📦";
+    var eArma = (m.tipo||"").toLowerCase().includes("arma");
+    var munVal= sel?(sel.municao||0):0, carVal=(sel?(sel.carregadores||0):0);
+    return "<div class='mat-card"+(sel?" selecionado":"")+"' id='"+id+"' onclick='_toggleMaterial(\""+m.id+"\")'>"
+      +"<span class='mat-card-icon'>"+ico+"</span>"
+      +"<div class='mat-card-desc'>"+esc(m.descricao||m.tipo||"")+"</div>"
+      +"<span class='mat-card-cod'>"+esc(m.codigo||"")+(m.serie?" · "+esc(m.serie):"")+"</span>"
+      +(sel
+        ? "<span class='mat-card-status' style='background:"+cor+"22;color:"+cor+";border:1px solid "+cor+"44'>✅ Selecionado</span>"
+        : "<span class='mat-card-status' style='background:#1a2a4a;color:#4a7ab8'>Toque para selecionar</span>")
+      // Campos de munição inline (só para arma selecionada)
+      +(eArma && sel
+        ? "<div class='mat-card-mun' id='mun_"+m.id+"' style='display:grid' onclick='event.stopPropagation()'>"
+            +"<div><label>Munição</label><input type='number' min='0' max='999' value='"+munVal+"' oninput='_setMun(\""+m.id+"\",\"municao\",this.value)'/></div>"
+            +"<div><label>Carregadores</label><input type='number' min='0' max='99' value='"+carVal+"' oninput='_setMun(\""+m.id+"\",\"carregadores\",this.value)'/></div>"
+          +"</div>"
+        : "")
+      +"</div>";
+  }).join("");
+}
+
+function _toggleMaterial(id){
+  var m = (MATERIAIS_CACHE||[]).find(function(x){return x.id===id;});
+  if(!m) return;
+  var idx = ITENS.findIndex(function(x){return x.id===id;});
+  if(idx>=0){
+    ITENS.splice(idx,1);
+  } else {
+    ITENS.push({id:m.id, codigo:m.codigo, tipo:m.tipo, descricao:m.descricao, serie:m.serie||"", municao:0, carregadores:0});
+  }
+  document.getElementById("erro-itens").style.display="none";
+  _renderizarMateriais();
+}
+
+function _setMun(id, campo, val){
+  var it = ITENS.find(function(x){return x.id===id;});
+  if(it) it[campo] = parseInt(val||"0",10)||0;
+}
+
+// ── Stub da função legada (mantém compatibilidade) ───
 function _sugerirMaterial(val){
   var lista = document.getElementById("mat-sugestoes");
   val = (val||"").trim();
@@ -648,160 +688,8 @@ function _mostrarEntradaManual(cod){
   document.getElementById("mc-serie-inp").style.display = "block";
 }
 
-function mostrarMaterial(m){
-  _matAtual = m;
-  document.getElementById("mc-cod").textContent  = m.codigo  || "";
-  document.getElementById("mc-tipo").textContent = m._manual ? "⚠️ Não cadastrado — preencha abaixo" : (m.tipo || "");
-  document.getElementById("mc-desc").textContent = m._manual ? "" : (m.descricao || "");
-  document.getElementById("mc-serie").textContent = m._manual ? "" : (m.serie ? "Série: "+m.serie : "");
-  // Campos manuais ocultos por padrão
-  document.getElementById("mc-tipo-sel").style.display  = "none";
-  document.getElementById("mc-desc-inp").style.display  = "none";
-  document.getElementById("mc-serie-inp").style.display = "none";
-  _atualizarCamposArma();
-  document.getElementById("mat-encontrado").style.display = "block";
-}
-
-function _atualizarCamposArma(){
-  if(!_matAtual) return;
-  var eArma = (_matAtual.tipo||"").toLowerCase().includes("arma");
-  document.getElementById("campos-arma").style.display = eArma ? "grid" : "none";
-  if(eArma){ document.getElementById("f-municao").value=""; document.getElementById("f-carregadores").value=""; }
-}
-
-// ── Itens da carga ────────────────────────────────────
-var ITENS = [];
-
-function _confirmarAdicaoItem(){
-  var eArma = (_matAtual.tipo||"").toLowerCase().includes("arma");
-  ITENS.push({
-    codigo:       _matAtual.codigo,
-    tipo:         _matAtual.tipo,
-    descricao:    _matAtual.descricao,
-    serie:        _matAtual.serie || "",
-    municao:      eArma ? (parseInt(document.getElementById("f-municao").value||"0",10)||0) : 0,
-    carregadores: eArma ? (parseInt(document.getElementById("f-carregadores").value||"0",10)||0) : 0
-  });
-  document.getElementById("f-cod-mat").value = "";
-  document.getElementById("mat-encontrado").style.display = "none";
-  document.getElementById("erro-itens").style.display  = "none";
-  document.getElementById("trava-aviso").style.display  = "none";
-  _matAtual = null;
-  renderItens();
-}
-
-function adicionarItem(){
-  if(!_matAtual) return;
-  // Se modo manual, copiar campos dos inputs
-  if(_matAtual._manual){
-    var tipoSel = (document.getElementById("mc-tipo-input").value||"").trim();
-    var descInp = (document.getElementById("mc-desc-input").value||"").trim();
-    if(!tipoSel){ alert("Selecione o tipo do material."); return; }
-    if(!descInp){ alert("Informe a descrição do material."); return; }
-    _matAtual.tipo     = tipoSel;
-    _matAtual.descricao= descInp;
-    _matAtual.serie    = (document.getElementById("mc-serie-input").value||"").trim();
-  }
-  if(ITENS.find(function(x){ return x.codigo === _matAtual.codigo; })){
-    alert("Material "+_matAtual.codigo+" já adicionado.");
-    return;
-  }
-  var tipoCarga = document.getElementById("f-tipo-carga").value;
-
-  // Só verifica trava em "Carga" — Descarga/Transferência/Conferência passam direto
-  if(tipoCarga !== "Carga" || !SHEETS_URL){
-    _confirmarAdicaoItem();
-    return;
-  }
-
-  // Verifica se item já está em carga ativa
-  var btnAdd = document.querySelector("#mat-encontrado button[onclick='adicionarItem()']");
-  if(btnAdd){ btnAdd.disabled = true; btnAdd.textContent = "🔍 Verificando..."; }
-  document.getElementById("trava-aviso").style.display = "none";
-
-  var cod = _matAtual.codigo;
-  var cbName = "cb_trava_"+Date.now();
-  var tmout = setTimeout(function(){
-    delete window[cbName];
-    if(btnAdd){ btnAdd.disabled = false; btnAdd.textContent = "➕ Adicionar à Carga"; }
-    // Timeout: permite adicionar mas registra aviso
-    _confirmarAdicaoItem();
-  }, 7000);
-
-  window[cbName] = function(resp){
-    clearTimeout(tmout); delete window[cbName];
-    if(btnAdd){ btnAdd.disabled = false; btnAdd.textContent = "➕ Adicionar à Carga"; }
-    if(resp && resp.ok){
-      if(resp.livre){
-        _confirmarAdicaoItem();
-      } else {
-        // Item está em carga — exibe aviso e bloqueia
-        var av = document.getElementById("trava-aviso");
-        av.innerHTML =
-          "⛔ <strong>"+esc(cod)+"</strong> está em Carga desde "
-          +esc(resp.ultimo.data)+" às "+esc(resp.ultimo.hora)
-          +" com <strong>"+esc(resp.ultimo.nome)+"</strong> (Mat. "+esc(resp.ultimo.matricula)+")."
-          +"<br>Registre a Descarga antes de fazer nova Carga.";
-        av.style.display = "block";
-      }
-    } else {
-      // Erro na consulta: permite mas avisa
-      _confirmarAdicaoItem();
-    }
-  };
-
-  var sc = document.createElement("script");
-  sc.src = SHEETS_URL+"?acao=verificarStatusItem&codigo="+encodeURIComponent(cod)
-           +"&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
-  sc.onerror = function(){
-    clearTimeout(tmout); delete window[cbName];
-    if(btnAdd){ btnAdd.disabled = false; btnAdd.textContent = "➕ Adicionar à Carga"; }
-    _confirmarAdicaoItem(); // offline: deixa passar
-  };
-  document.head.appendChild(sc);
-}
-
-function removerItem(idx){
-  ITENS.splice(idx, 1);
-  renderItens();
-}
-
-var CORES_TIPO = {
-  "Arma":"#60a5fa","Colete Balístico":"#a78bfa","Munição":"#f59e0b",
-  "Algemas":"#22c55e","Rádio":"#34d399","Lanterna":"#fbbf24",
-  "Bastão":"#f87171","Equipamento Tático":"#60a5fa","Veículo":"#6b7280","Outros":"#9ca3af"
-};
 function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;"); }
 
-function renderItens(){
-  var cont = document.getElementById("lista-itens");
-  document.getElementById("qtd-itens").textContent = ITENS.length;
-  if(!ITENS.length){
-    cont.innerHTML = "<div class='lista-vazia'>Nenhum material adicionado.<br>Busque pelo código acima e clique em Adicionar.</div>";
-    return;
-  }
-  cont.innerHTML = ITENS.map(function(it, i){
-    var c = CORES_TIPO[it.tipo] || "#60a5fa";
-    var eArma = (it.tipo||"").toLowerCase().includes("arma");
-    var h = "<div class='item-chip'>";
-    h += "<button type='button' class='ic-rm' onclick='removerItem("+i+")'>✕</button>";
-    h += "<div><span class='ic-cod'>"+esc(it.codigo)+"</span>";
-    h += "<span class='ic-tipo' style='background:"+c+"22;color:"+c+"'>"+esc(it.tipo)+"</span></div>";
-    h += "<div class='ic-desc'>"+esc(it.descricao)+"</div>";
-    if(it.serie) h += "<div class='ic-extra'>Série: "+esc(it.serie)+"</div>";
-    if(eArma){
-      h += "<div class='ic-mun-row'>";
-      h += "<div style='flex:1'><label style='color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:3px'>Munição</label>";
-      h += "<input type='number' min='0' max='999' value='"+esc(String(it.municao))+"' oninput=\"ITENS["+i+"].municao=parseInt(this.value||'0',10)\" style='width:100%'/></div>";
-      h += "<div style='flex:1'><label style='color:#4a7ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:3px'>Carregadores</label>";
-      h += "<input type='number' min='0' max='99' value='"+esc(String(it.carregadores))+"' oninput=\"ITENS["+i+"].carregadores=parseInt(this.value||'0',10)\" style='width:100%'/></div>";
-      h += "</div>";
-    }
-    h += "</div>";
-    return h;
-  }).join("");
-}
-renderItens();
 
 // ── Assinaturas Digitais (Policial + Adjunto) ─────────
 function criarCanvas(canvasId, boxId, labelId){
@@ -870,7 +758,7 @@ function enviarCarga(e){
   e.preventDefault();
   if(!ITENS.length){
     document.getElementById("erro-itens").style.display = "block";
-    document.getElementById("f-cod-mat").scrollIntoView({behavior:"smooth"});
+    document.getElementById("grid-materiais").scrollIntoView({behavior:"smooth"});
     return;
   }
   document.getElementById("erro-itens").style.display = "none";
