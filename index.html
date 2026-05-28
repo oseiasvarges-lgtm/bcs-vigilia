@@ -10588,6 +10588,109 @@ function renderTela() {
   } // fim if filtro
   } // fim if operador
 
+  // LANÇAR OCORRÊNCIA — acessível também pelo gestor (via botão em Analisar Ocorrências)
+  if(tela==="lancar" && state.perfil==="gestor"){
+    var h=[];
+    var tiposOcG=["Abordagem","Acidente de Trânsito","Ameaça","Apreensão de Drogas","Apreensão de Veículo",
+      "Arrombamento","Assalto / Roubo","Atropelamento","Averiguação","Crime Ambiental",
+      "Desaparecimento","Disparo de Arma de Fogo","Estupro","Flagrante","Furto",
+      "Homicídio","Lesão Corporal","Maria da Penha","Ocorrência Escolar","Perturbação do Sossego",
+      "Prisão em Flagrante","Recuperação de Veículo","Roubo","Tentativa de Homicídio",
+      "Tráfico de Drogas","Vandalismo","Violência Doméstica","Vias de Fato","Outro"];
+    var gradsG=["Sd","Cb","3°Sgt","2°Sgt","1°Sgt","SubTen","Asp","2°Ten","1°Ten","Cap","Maj","TC","Cel"];
+    var ISg="width:100%;background:#0b1628;border:1px solid #1e3d6a;color:#c5daf5;padding:9px 11px;border-radius:5px;font-size:12px;outline:none;box-sizing:border-box";
+    var LSg="color:#4a9fd4;font-size:10px;text-transform:uppercase;font-weight:700;letter-spacing:.6px;display:block;margin-bottom:5px";
+    var SCg="background:#060d1c;border:1px solid #1a3358;border-radius:8px;padding:15px;margin-bottom:13px";
+    h.push("<div style='max-width:740px;margin:0 auto;padding:16px'>");
+    h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'>");
+    h.push("<div><h2 style='color:#4ade80;font-size:18px;font-weight:800;margin:0'>📝 Lançar Ocorrência Manual</h2><p style='color:#3a6a3a;font-size:11px;margin:2px 0 0'>SIGESPOL · 77ª CIPM / BCS</p></div>");
+    h.push("<button id='btn-cancelar-lancar' style='background:#070e1c;border:1px solid #1a3358;color:#4a6a8a;padding:9px 16px;border-radius:6px;font-size:13px;font-weight:700;cursor:pointer'>← Voltar</button>");
+    h.push("</div>");
+    // Classificação
+    var classifs=[{v:"Ocorrência",ic:"🚔"},{v:"Visita Solidária",ic:"🤝"},{v:"Acompanhamento VCM",ic:"💜"},{v:"Ronda Escolar",ic:"🏫"},{v:"Visita Comunitária",ic:"🏘️"},{v:"Projeto Social",ic:"🌱"}];
+    h.push("<div style='background:#0d1c0a;border:2px solid #4a8a30;border-radius:7px;padding:12px 14px;margin-bottom:11px'>");
+    h.push("<label style='color:#7ec850;font-size:9px;text-transform:uppercase;font-weight:700;letter-spacing:.8px;display:flex;align-items:center;gap:6px;margin-bottom:8px'>🏷️ Classificação da Atividade</label>");
+    h.push("<div id='classif-btns-g' style='display:grid;grid-template-columns:repeat(3,1fr);gap:7px'>");
+    classifs.forEach(function(c){
+      h.push("<button type='button' data-classif='"+c.v+"' onclick='_gClassif(this)' style='background:#0a1808;border:1px solid #2a4a18;color:#6a9a50;padding:8px 6px;border-radius:5px;font-size:10px;font-weight:600;cursor:pointer;text-align:center'>"+c.ic+" "+c.v+"</button>");
+    });
+    h.push("</div>");
+    h.push("<input type='hidden' id='oc-classificacao-g' value=''>");
+    h.push("</div>");
+    // Identificação
+    h.push("<div style='"+SCg+"'>");
+    h.push("<div style='display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:8px;margin-bottom:8px'>");
+    h.push("<div><label style='"+LSg+"'>Tipo *</label><input id='g-tipo' list='g-tipos-list' placeholder='Tipo da ocorrência' style='"+ISg+"'><datalist id='g-tipos-list'>"+tiposOcG.map(function(t){return "<option>"+t+"</option>";}).join("")+"</datalist></div>");
+    h.push("<div><label style='"+LSg+"'>Data</label><input id='g-data' type='date' value='"+hoje()+"' style='"+ISg+"'></div>");
+    h.push("<div><label style='"+LSg+"'>Hora</label><input id='g-hora' type='time' value='"+new Date().toTimeString().slice(0,5)+"' style='"+ISg+"'></div>");
+    h.push("<div><label style='"+LSg+"'>Nº Ocorrência</label><input id='g-numero' placeholder='Nº SIGESPOL' style='"+ISg+"'></div>");
+    h.push("</div>");
+    h.push("<div style='display:grid;grid-template-columns:3fr 1fr;gap:8px'>");
+    h.push("<div><label style='"+LSg+"'>Local</label><input id='g-local' placeholder='Endereço / local' style='"+ISg+"'></div>");
+    h.push("<div><label style='"+LSg+"'>Bairro</label><input id='g-bairro' placeholder='Bairro' style='"+ISg+"'></div>");
+    h.push("</div></div>");
+    // Narrativa
+    h.push("<div style='"+SCg+"'>");
+    h.push("<label style='"+LSg+"'>Narrativa / Dinâmica *</label>");
+    h.push("<textarea id='g-texto' rows='5' placeholder='Descreva o ocorrido...' style='width:100%;background:#0b1628;border:1px solid #1e3d6a;color:#c5daf5;padding:9px 11px;border-radius:5px;font-size:12px;resize:vertical;box-sizing:border-box;outline:none'></textarea>");
+    h.push("</div>");
+    // Policial responsável
+    h.push("<div style='"+SCg+"'>");
+    h.push("<div style='display:grid;grid-template-columns:100px 2fr 140px;gap:8px'>");
+    h.push("<div><label style='"+LSg+"'>Graduação</label><select id='g-grad' style='"+ISg+"'>"+gradsG.map(function(g){return "<option>"+g+"</option>";}).join("")+"</select></div>");
+    h.push("<div><label style='"+LSg+"'>Nome do Policial</label><input id='g-policial' placeholder='Nome completo' style='"+ISg+"'></div>");
+    h.push("<div><label style='"+LSg+"'>Matrícula</label><input id='g-matricula' placeholder='Nº matrícula' style='"+ISg+"'></div>");
+    h.push("</div></div>");
+    // Botões
+    h.push("<div style='display:flex;gap:10px;justify-content:flex-end;padding-bottom:40px'>");
+    h.push("<button id='btn-salvar-lancar-g' style='background:linear-gradient(135deg,#1a4a1a,#0a2a0a);border:2px solid #22c55e;color:#4ade80;padding:12px 28px;border-radius:7px;font-size:14px;font-weight:800;cursor:pointer'>✓ Lançar Ocorrência</button>");
+    h.push("</div>");
+    h.push("</div>");
+    main.innerHTML=h.join("");
+    document.getElementById("btn-cancelar-lancar").onclick=function(){ state._lancarRetornoGestor=false; state.tela="ocorrencias"; render(); };
+    document.getElementById("btn-salvar-lancar-g").onclick=function(){
+      var classif=(document.getElementById("oc-classificacao-g")||{value:""}).value.trim()||"Ocorrência";
+      var tipo=(document.getElementById("g-tipo")||{value:""}).value.trim();
+      var texto=(document.getElementById("g-texto")||{value:""}).value.trim();
+      if(!tipo){ showToast("Informe o tipo da ocorrência","error"); return; }
+      if(!texto){ showToast("Preencha a narrativa","error"); return; }
+      var grad=(document.getElementById("g-grad")||{value:"Sd"}).value;
+      var polNome=(document.getElementById("g-policial")||{value:""}).value.trim();
+      var mat=(document.getElementById("g-matricula")||{value:""}).value.trim();
+      var oc={
+        id:"oc_"+Date.now(), criadoEm:new Date().toISOString(),
+        numero:(document.getElementById("g-numero")||{value:""}).value.trim(),
+        tipo:tipo, classificacao:classif,
+        data:(document.getElementById("g-data")||{value:hoje()}).value||hoje(),
+        hora:(document.getElementById("g-hora")||{value:""}).value||new Date().toTimeString().slice(0,5),
+        local:(document.getElementById("g-local")||{value:""}).value.trim(),
+        bairro:(document.getElementById("g-bairro")||{value:""}).value.trim(),
+        texto_original:texto, dinamica:texto,
+        policiais_texto:grad+" "+polNome+(mat?" ("+mat+")":""),
+        policiais:[{grad:grad,nome:polNome,matricula:mat}],
+        vitimas:[], autores:[], solicitante:{},
+        violencia_domestica:/maria da penha|violência doméstica|violencia domestica|\bvd\b/i.test(texto),
+        zona:"Urbana", municipio:"Vitória da Conquista", origem:"manual_gestor"
+      };
+      if(!state.db.ocorrencias) state.db.ocorrencias=[];
+      state.db.ocorrencias.push(oc);
+      enviarSheets("ocorrencias",oc);
+      salvarLocal();
+      showToast("✓ Ocorrência lançada com sucesso!");
+      state._lancarRetornoGestor=false;
+      state.tela="ocorrencias";
+      render();
+    };
+    window._gClassif=function(btn){
+      document.querySelectorAll("#classif-btns-g button").forEach(function(b){
+        b.style.background="#0a1808"; b.style.borderColor="#2a4a18"; b.style.color="#6a9a50"; b.style.fontWeight="600";
+      });
+      btn.style.background="#1a4a0a"; btn.style.borderColor="#7ec850"; btn.style.color="#c8f090"; btn.style.fontWeight="700";
+      document.getElementById("oc-classificacao-g").value=btn.dataset.classif;
+    };
+    return;
+  }
+
   // OCORRÊNCIAS (GESTOR)
   if(tela==="ocorrencias"){
     renderOcorrenciasGestor(main, perfil);
