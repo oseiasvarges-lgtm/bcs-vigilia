@@ -202,7 +202,7 @@ button{cursor:pointer;}
 // ══════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════
-const SHEETS_URL = "https://script.google.com/macros/s/AKfycbxKZVJcjgBSVUK7MXcH1ZuKY8-YhmidlTN-olcmLJ0T4ar9fPE05-iZbqJ4KUfHMgovRA/exec";
+var SHEETS_URL = localStorage.getItem("bcs_sheets_url") || "https://script.google.com/macros/s/AKfycbxKZVJcjgBSVUK7MXcH1ZuKY8-YhmidlTN-olcmLJ0T4ar9fPE05-iZbqJ4KUfHMgovRA/exec";
 // Token compartilhado com o Apps Script (defina o mesmo valor lá)
 const BCS_TOKEN = "bcs-token-secreto-2025"; // TROQUE antes de publicar
 const CONSELHO_PIN = "conselho77"; // PIN de acesso ao módulo do Conselho Comunitário
@@ -8456,6 +8456,17 @@ function renderConfiguracoes(main){
   h.push("<span style='margin-left:auto;background:"+(temSheetsUrl?"#0a3c18":"#3c1808")+";color:"+(temSheetsUrl?"#6adf90":"#f87171")+";padding:3px 10px;border-radius:5px;font-size:10px;font-weight:700'>"+(temSheetsUrl?"✓ Conectado":"✗ Não configurado")+"</span>");
   h.push("</div>");
 
+  // Campo URL do Apps Script
+  var urlAtual = localStorage.getItem("bcs_sheets_url") || SHEETS_URL || "";
+  h.push("<div style='margin-bottom:14px'>");
+  h.push("<label style='color:#4ade80;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;display:block;margin-bottom:6px'>🔗 URL do Apps Script (API)</label>");
+  h.push("<div style='display:flex;gap:8px'>");
+  h.push("<input id='cfg-sheets-url' type='text' value='"+esc(urlAtual)+"' placeholder='https://script.google.com/macros/s/...' style='flex:1;background:#060d0c;border:1px solid #1a3a1a;color:#c8f0c0;padding:9px 12px;border-radius:7px;font-size:11px;outline:none;font-family:monospace'/>");
+  h.push("<button onclick='_salvarSheetsUrl()' style='background:linear-gradient(135deg,#0a3a1a,#1a5a2a);border:1px solid #22c55e;color:#4ade80;padding:9px 18px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap'>💾 Salvar</button>");
+  h.push("</div>");
+  h.push("<p style='color:#2a5a2a;font-size:10px;margin:6px 0 0'>Cole a nova URL do Web App ao republicar o Apps Script. A página será recarregada para aplicar.</p>");
+  h.push("</div>");
+
   // Botões de ação
   var btnS = "display:flex;align-items:center;gap:8px;width:100%;background:transparent;border:1px solid #2a4a2a;color:#5a9a5a;padding:10px 14px;border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;margin-bottom:8px;text-align:left";
   // Backup
@@ -8496,6 +8507,16 @@ function renderConfiguracoes(main){
   var inp = document.getElementById("cfg-ia-key");
   if(inp && !temIaKey) setTimeout(function(){ inp.focus(); }, 100);
 }
+
+window._salvarSheetsUrl = function(){
+  var inp = document.getElementById("cfg-sheets-url");
+  var v = inp ? inp.value.trim() : "";
+  if(!v || !v.startsWith("https://")){ showToast("URL inválida. Deve começar com https://", "error"); return; }
+  localStorage.setItem("bcs_sheets_url", v);
+  SHEETS_URL = v;
+  showToast("✓ URL salva! Recarregando...");
+  setTimeout(function(){ location.reload(); }, 1200);
+};
 
 window._salvarCfgIAKey = function(){
   var inp = document.getElementById("cfg-ia-key");
