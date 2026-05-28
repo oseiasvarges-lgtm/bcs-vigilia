@@ -1107,6 +1107,100 @@ function doGet(e) {
       return saida(listarEventosAvulsos(ss), cb);
     }
 
+    // ── PROJETOS SOCIAIS ────────────────────────────────────────────
+    if(acao==="salvar" && tipo==="projeto_social"){
+      var dPS={}; try{dPS=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarProjetoSocial(ss,dPS),cb);
+    }
+    if(acao==="listar" && tipo==="projetos_sociais"){
+      return saida(listarProjetosSociais(ss),cb);
+    }
+    if(acao==="deletar" && tipo==="projeto_social"){
+      return saida(deletarProjetoSocial(ss,e.parameter.id||""),cb);
+    }
+
+    // ── GESTÃO DE PROJETOS (KANBAN/COMANDO) ─────────────────────────
+    if(acao==="salvar" && tipo==="projeto_gestor"){
+      var dPG={}; try{dPG=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarProjetoGestor(ss,dPG),cb);
+    }
+    if(acao==="listar" && tipo==="projetos_gestor"){
+      return saida(listarProjetosGestor(ss),cb);
+    }
+    if(acao==="deletar" && tipo==="projeto_gestor"){
+      return saida(deletarProjetoGestor(ss,e.parameter.id||""),cb);
+    }
+
+    // ── ESCOLAS ─────────────────────────────────────────────────────
+    if(acao==="salvar" && tipo==="escola"){
+      var dESC={}; try{dESC=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarEscola(ss,dESC),cb);
+    }
+    if(acao==="listar" && tipo==="escolas"){
+      return saida(listarEscolas(ss),cb);
+    }
+
+    // ── CONSELHO COMUNITÁRIO ────────────────────────────────────────
+    if(acao==="salvar" && tipo==="conselho_ata"){
+      var dCA={}; try{dCA=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarConselhoAta(ss,dCA),cb);
+    }
+    if(acao==="listar" && tipo==="conselho_atas"){
+      return saida(listarConselhoAtas(ss),cb);
+    }
+    if(acao==="deletar" && tipo==="conselho_ata"){
+      return saida(deletarConselhoAta(ss,e.parameter.id||""),cb);
+    }
+    if(acao==="salvar" && tipo==="conselho_associado"){
+      var dCASS={}; try{dCASS=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarConselhoAssociado(ss,dCASS),cb);
+    }
+    if(acao==="listar" && tipo==="conselho_associados"){
+      return saida(listarConselhoAssociados(ss),cb);
+    }
+    if(acao==="salvar" && tipo==="conselho_diretoria"){
+      var dCDIR={}; try{dCDIR=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarConselhoDiretoria(ss,dCDIR),cb);
+    }
+    if(acao==="listar" && tipo==="conselho_diretoria"){
+      return saida(listarConselhoDiretoria(ss),cb);
+    }
+
+    // ── DEVOLUTIVAS CRAV ────────────────────────────────────────────
+    if(acao==="salvar" && tipo==="devolutiva_crav"){
+      var dDC={}; try{dDC=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarDevolutivaCrav(ss,dDC),cb);
+    }
+    if(acao==="listar" && tipo==="devolutivas_crav"){
+      return saida(listarDevolutivasCrav(ss),cb);
+    }
+
+    // ── INVENTÁRIO ──────────────────────────────────────────────────
+    if(acao==="salvar" && tipo==="inv_item"){
+      var dINV={}; try{dINV=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarInvItem(ss,dINV),cb);
+    }
+    if(acao==="listar" && tipo==="inv_itens"){
+      return saida(listarInvItens(ss),cb);
+    }
+    if(acao==="deletar" && tipo==="inv_item"){
+      return saida(deletarInvItem(ss,e.parameter.id||""),cb);
+    }
+    if(acao==="salvar" && tipo==="inv_movimentacao"){
+      var dMOV={}; try{dMOV=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarInvMovimentacao(ss,dMOV),cb);
+    }
+    if(acao==="listar" && tipo==="inv_movimentacoes"){
+      return saida(listarInvMovimentacoes(ss),cb);
+    }
+    if(acao==="salvar" && tipo==="inv_conferencia"){
+      var dCONF={}; try{dCONF=JSON.parse(e.parameter.dados||"{}");}catch(ex){}
+      return saida(salvarInvConferencia(ss,dCONF),cb);
+    }
+    if(acao==="listar" && tipo==="inv_conferencias"){
+      return saida(listarInvConferencias(ss),cb);
+    }
+
     // ── INSCRIÇÕES DE PROJETOS/CURSOS ───────────────────────────────
     if(acao==="salvar" && tipo==="inscricoes_projetos"){
       var dadosInsc={};
@@ -1263,3 +1357,218 @@ function verificarChaveIA() {
     Logger.log("❌ Chave NÃO configurada. Execute definirChaveIA() primeiro.");
   }
 }
+
+// ══════════════════════════════════════════════════════════════════
+//  UTILITÁRIO: salvar/ler JSON por ID em qualquer aba
+//  Usado pelos módulos novos (projetos, inventário, conselho, etc.)
+// ══════════════════════════════════════════════════════════════════
+function _garantirAbaJson(ss, nome, corFundo, corTexto) {
+  var aba = ss.getSheetByName(nome);
+  if (!aba) {
+    aba = ss.insertSheet(nome);
+    aba.getRange(1,1,1,3).setValues([["id","criadoEm","dados_json"]])
+       .setFontWeight("bold").setBackground(corFundo||"#1a1a2e").setFontColor(corTexto||"#ffffff");
+    aba.setFrozenRows(1);
+    aba.setColumnWidth(3, 600);
+  }
+  return aba;
+}
+
+function _salvarJson(ss, abaName, corFundo, corTexto, dados) {
+  if (!dados || !dados.id) return { ok: false, erro: "id obrigatório" };
+  var aba = _garantirAbaJson(ss, abaName, corFundo, corTexto);
+  var nRows = aba.getLastRow() - 1;
+  if (nRows > 0) {
+    var ids = aba.getRange(2, 1, nRows, 1).getValues();
+    for (var i = 0; i < ids.length; i++) {
+      if (String(ids[i][0]) === String(dados.id)) {
+        aba.getRange(i+2, 2).setValue(dados.criadoEm || new Date().toISOString());
+        aba.getRange(i+2, 3).setValue(JSON.stringify(dados));
+        return { ok: true, id: dados.id, acao: "atualizado" };
+      }
+    }
+  }
+  aba.appendRow([dados.id, dados.criadoEm || new Date().toISOString(), JSON.stringify(dados)]);
+  return { ok: true, id: dados.id, acao: "inserido" };
+}
+
+function _listarJson(ss, abaName) {
+  var aba = ss.getSheetByName(abaName);
+  if (!aba || aba.getLastRow() < 2) return [];
+  var rows = aba.getRange(2, 1, aba.getLastRow()-1, 3).getValues();
+  var out = [];
+  rows.forEach(function(r) {
+    if (!r[0]) return;
+    try { out.push(JSON.parse(String(r[2]))); } catch(e) { out.push({ id: String(r[0]) }); }
+  });
+  return out;
+}
+
+function _deletarJson(ss, abaName, id) {
+  var aba = ss.getSheetByName(abaName);
+  if (!aba || aba.getLastRow() < 2) return { ok: true };
+  var ids = aba.getRange(2, 1, aba.getLastRow()-1, 1).getValues();
+  for (var i = ids.length-1; i >= 0; i--) {
+    if (String(ids[i][0]) === String(id)) { aba.deleteRow(i+2); return { ok: true }; }
+  }
+  return { ok: true };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  PROJETOS SOCIAIS (módulo Projetos Sociais / Cursos)
+// ══════════════════════════════════════════════════════════════════
+function salvarProjetoSocial(ss, dados) {
+  return _salvarJson(ss, "projetos_sociais", "#1a0a3a", "#c89ae8", dados);
+}
+function listarProjetosSociais(ss) {
+  return { ok: true, dados: _listarJson(ss, "projetos_sociais") };
+}
+function deletarProjetoSocial(ss, id) {
+  return _deletarJson(ss, "projetos_sociais", id);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  GESTÃO DE PROJETOS (Painel do Comando / Kanban)
+// ══════════════════════════════════════════════════════════════════
+function salvarProjetoGestor(ss, dados) {
+  return _salvarJson(ss, "projetos_gestor", "#1a1a0a", "#d4a87a", dados);
+}
+function listarProjetosGestor(ss) {
+  return { ok: true, dados: _listarJson(ss, "projetos_gestor") };
+}
+function deletarProjetoGestor(ss, id) {
+  return _deletarJson(ss, "projetos_gestor", id);
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  ESCOLAS
+// ══════════════════════════════════════════════════════════════════
+function salvarEscola(ss, dados) {
+  return _salvarJson(ss, "escolas", "#0f2035", "#38bdf8", dados);
+}
+function listarEscolas(ss) {
+  return { ok: true, dados: _listarJson(ss, "escolas") };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CONSELHO COMUNITÁRIO
+// ══════════════════════════════════════════════════════════════════
+function salvarConselhoAta(ss, dados) {
+  return _salvarJson(ss, "conselho_atas", "#061a0e", "#22c55e", dados);
+}
+function listarConselhoAtas(ss) {
+  return { ok: true, dados: _listarJson(ss, "conselho_atas") };
+}
+function deletarConselhoAta(ss, id) {
+  return _deletarJson(ss, "conselho_atas", id);
+}
+
+function salvarConselhoAssociado(ss, dados) {
+  return _salvarJson(ss, "conselho_associados", "#061a0e", "#4ade80", dados);
+}
+function listarConselhoAssociados(ss) {
+  return { ok: true, dados: _listarJson(ss, "conselho_associados") };
+}
+
+function salvarConselhoDiretoria(ss, dados) {
+  return _salvarJson(ss, "conselho_diretoria", "#061a0e", "#86efac", dados);
+}
+function listarConselhoDiretoria(ss) {
+  return { ok: true, dados: _listarJson(ss, "conselho_diretoria") };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  DEVOLUTIVAS CRAV
+// ══════════════════════════════════════════════════════════════════
+function salvarDevolutivaCrav(ss, dados) {
+  return _salvarJson(ss, "devolutivas_crav", "#1a0a2e", "#a78bfa", dados);
+}
+function listarDevolutivasCrav(ss) {
+  return { ok: true, dados: _listarJson(ss, "devolutivas_crav") };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  INVENTÁRIO
+// ══════════════════════════════════════════════════════════════════
+function salvarInvItem(ss, dados) {
+  // Remove foto (base64 grande) antes de salvar no Sheets para não exceder limites
+  var copia = Object.assign({}, dados);
+  if (copia.foto && copia.foto.length > 5000) copia.foto = "[foto_local]";
+  if (copia.carga_assinatura && copia.carga_assinatura.length > 2000) copia.carga_assinatura = "[assin_local]";
+  return _salvarJson(ss, "inv_itens", "#0a1a0a", "#10b981", copia);
+}
+function listarInvItens(ss) {
+  return { ok: true, dados: _listarJson(ss, "inv_itens") };
+}
+function deletarInvItem(ss, id) {
+  return _deletarJson(ss, "inv_itens", id);
+}
+
+function salvarInvMovimentacao(ss, dados) {
+  var copia = Object.assign({}, dados);
+  if (copia.assinatura && copia.assinatura.length > 2000) copia.assinatura = "[assin_local]";
+  return _salvarJson(ss, "inv_movimentacoes", "#0a1a12", "#34d399", copia);
+}
+function listarInvMovimentacoes(ss) {
+  return { ok: true, dados: _listarJson(ss, "inv_movimentacoes") };
+}
+
+function salvarInvConferencia(ss, dados) {
+  var copia = Object.assign({}, dados);
+  if (copia.assin1 && copia.assin1.length > 2000) copia.assin1 = "[assin_local]";
+  if (copia.assin2 && copia.assin2.length > 2000) copia.assin2 = "[assin_local]";
+  return _salvarJson(ss, "inv_conferencias", "#0a1a10", "#6ee7b7", copia);
+}
+function listarInvConferencias(ss) {
+  return { ok: true, dados: _listarJson(ss, "inv_conferencias") };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  ALERTAS CRESCIMENTO (Painel do Comando)
+// ══════════════════════════════════════════════════════════════════
+function salvarAlertaCrescimento(ss, dados) {
+  return _salvarJson(ss, "alertas_crescimento", "#1a0808", "#ef4444", dados);
+}
+function listarAlertasCrescimento(ss) {
+  return { ok: true, dados: _listarJson(ss, "alertas_crescimento") };
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  CRIAR TODAS AS ABAS NOVAS (execute após colar este script)
+// ══════════════════════════════════════════════════════════════════
+function criarTodasAbasNovas() {
+  var ss = getSS();
+  var abas = ss.getSheets().map(function(s){ return s.getName(); });
+
+  var novas = [
+    { nome: "projetos_sociais",   cor: "#1a0a3a", txt: "#c89ae8" },
+    { nome: "projetos_gestor",    cor: "#1a1a0a", txt: "#d4a87a" },
+    { nome: "escolas",            cor: "#0f2035", txt: "#38bdf8" },
+    { nome: "conselho_atas",      cor: "#061a0e", txt: "#22c55e" },
+    { nome: "conselho_associados",cor: "#061a0e", txt: "#4ade80" },
+    { nome: "conselho_diretoria", cor: "#061a0e", txt: "#86efac" },
+    { nome: "devolutivas_crav",   cor: "#1a0a2e", txt: "#a78bfa" },
+    { nome: "inv_itens",          cor: "#0a1a0a", txt: "#10b981" },
+    { nome: "inv_movimentacoes",  cor: "#0a1a12", txt: "#34d399" },
+    { nome: "inv_conferencias",   cor: "#0a1a10", txt: "#6ee7b7" },
+    { nome: "alertas_crescimento",cor: "#1a0808", txt: "#ef4444" }
+  ];
+
+  novas.forEach(function(cfg) {
+    if (abas.indexOf(cfg.nome) === -1) {
+      _garantirAbaJson(ss, cfg.nome, cfg.cor, cfg.txt);
+      Logger.log("✓ Aba '" + cfg.nome + "' criada.");
+    } else {
+      Logger.log("- '" + cfg.nome + "' já existe.");
+    }
+  });
+
+  // Abas legadas que podem estar faltando
+  criarAbasFaltantes();
+
+  Logger.log("✅ Todas as abas verificadas/criadas!");
+}
+
+// Adicionar rotas ao doGet — cole ANTES do "FALLBACK" em doGet:
+// (as rotas já são tratadas pelo bloco abaixo via doGet atualizado)
+// Para ativar, substitua o doGet existente por este ou adicione as rotas manualmente.
