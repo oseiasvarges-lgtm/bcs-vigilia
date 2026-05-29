@@ -369,6 +369,27 @@ function verificarStatusItem(ss, codigo) {
   }
 }
 
+function _fmtDataSheets(v){
+  if(!v) return "";
+  if(v instanceof Date){
+    var d=Utilities.formatDate(v,"America/Bahia","dd/MM/yyyy");
+    return d;
+  }
+  var s=String(v).trim();
+  var m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(m) return m[3]+"/"+m[2]+"/"+m[1];
+  return s;
+}
+function _fmtHoraSheets(v){
+  if(!v) return "";
+  if(v instanceof Date){
+    return Utilities.formatDate(v,"America/Bahia","HH:mm");
+  }
+  var s=String(v).trim();
+  if(/^\d{1,2}:\d{2}/.test(s)) return s.substring(0,5);
+  return s;
+}
+
 function listarCargasArmamento(ss) {
   try {
     var aba = ss.getSheetByName("carga_armamento");
@@ -380,8 +401,8 @@ function listarCargasArmamento(ss) {
       .map(function(r){
         var obj = {
           protocolo:          String(r[0] || ""),
-          data:               String(r[1] || ""),
-          hora:               String(r[2] || ""),
+          data:               _fmtDataSheets(r[1]),
+          hora:               _fmtHoraSheets(r[2]),
           nome:               String(r[3] || ""),
           matricula:          String(r[4] || ""),
           tipo_carga:         String(r[5] || ""),

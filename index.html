@@ -12044,6 +12044,34 @@ function _armVerRegistro(protocolo){
   document.body.appendChild(overlay);
 }
 
+function _armFmtDataPDF(v){
+  if(!v) return "—";
+  var s=String(v).trim();
+  // Formato ISO: 2026-05-28
+  var mISO=s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if(mISO) return mISO[3]+"/"+mISO[2]+"/"+mISO[1];
+  // Formato BR já ok
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)) return s;
+  // Vem como objeto Date do Sheets (string longa)
+  if(s.length>15){
+    var d=new Date(s);
+    if(!isNaN(d)) return ("0"+d.getDate()).slice(-2)+"/"+("0"+(d.getMonth()+1)).slice(-2)+"/"+d.getFullYear();
+  }
+  return s;
+}
+function _armFmtHoraPDF(v){
+  if(!v) return "—";
+  var s=String(v).trim();
+  // HH:MM já ok
+  if(/^\d{1,2}:\d{2}/.test(s)) return s.substring(0,5);
+  // Vem como Date do Sheets (epoch 1899-12-30 + hora)
+  if(s.length>10){
+    var d=new Date(s);
+    if(!isNaN(d)) return ("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2);
+  }
+  return s;
+}
+
 function _armGerarPDFRegistro(protocolo){
   var c=(state.cargasArmamento||[]).find(function(x){return x.protocolo===protocolo;});
   if(!c){showToast("Registro não encontrado.");return;}
@@ -12102,8 +12130,8 @@ function _armGerarPDFRegistro(protocolo){
   "<div class='row2'>"+
     "<div class='box'><div class='label'>Protocolo</div><div class='value-mono'>"+esc(c.protocolo||"")+"</div></div>"+
     "<div class='box' style='display:grid;grid-template-columns:1fr 1fr;gap:8px'>"+
-      "<div><div class='label'>Data</div><div class='value'>"+esc(c.data||"")+"</div></div>"+
-      "<div><div class='label'>Hora</div><div class='value'>"+esc(c.hora||"")+"</div></div>"+
+      "<div><div class='label'>Data</div><div class='value'>"+_armFmtDataPDF(c.data)+"</div></div>"+
+      "<div><div class='label'>Hora</div><div class='value'>"+_armFmtHoraPDF(c.hora)+"</div></div>"+
     "</div>"+
   "</div>"+
 
