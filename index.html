@@ -3567,6 +3567,50 @@ function renderDashboardVCM(main){
   h+=_htmlFiltrosBairro("renderDashboardVCM(document.getElementById('main-content'))","#ff69b4");
   h+="<p style='color:#5a4040;font-size:11px;margin:0 0 14px'>"+ativas.length+" vítimas ativas em acompanhamento · "+vitimas.filter(function(v){return v.encerrado;}).length+" encerradas</p>";
 
+  // ══ FILA DE AÇÕES DO DIA ══════════════════════════════════════════
+  var fila=ativas.filter(function(v){return v.proximaAcao;}).sort(function(a,b){return _vcmPrioridade(a)-_vcmPrioridade(b);});
+  var vencidas=fila.filter(function(v){return v.proximaAcao.vencida;});
+  var venceHoje=fila.filter(function(v){return !v.proximaAcao.vencida&&v.proximaAcao.dias===0;});
+  var filaShow=vencidas.concat(venceHoje).concat(fila.filter(function(v){return !v.proximaAcao.vencida&&v.proximaAcao.dias>0;}));
+  h+="<div style='background:#0e0808;border:1px solid #5a1a1a;border-radius:12px;margin-bottom:18px;overflow:hidden'>";
+  h+="<div style='background:linear-gradient(135deg,#3a0a18,#5a1020);padding:12px 16px;display:flex;align-items:center;justify-content:space-between'>";
+  h+="<div style='display:flex;align-items:center;gap:8px'><span style='font-size:16px'>📋</span><span style='color:#ffb3c8;font-size:13px;font-weight:700'>Fila de Ações — o que fazer agora</span></div>";
+  h+="<div style='display:flex;gap:6px'>";
+  if(vencidas.length) h+="<span style='background:#ef444433;color:#ff6b6b;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700'>🔴 "+vencidas.length+" vencida(s)</span>";
+  if(venceHoje.length) h+="<span style='background:#f59e0b33;color:#fbbf24;padding:3px 10px;border-radius:12px;font-size:11px;font-weight:700'>⏰ "+venceHoje.length+" hoje</span>";
+  h+="</div></div>";
+  if(!filaShow.length){
+    h+="<p style='color:#5a4040;font-size:12px;text-align:center;padding:24px'>✓ Nenhuma ação pendente no momento.</p>";
+  } else {
+    h+="<div style='max-height:280px;overflow-y:auto'>";
+    filaShow.slice(0,20).forEach(function(v){
+      var pa=v.proximaAcao, fase=VCM_FASES[v.fase]||VCM_FASES.acompanhamento;
+      var nivel=(v.fridaRecente&&v.fridaRecente.nivel)||"";
+      var nc={B:"#10b981",M:"#d4a87a",E:"#ef4444"}[nivel]||"#8a6a4a";
+      var statusTxt,statusCor;
+      if(pa.vencida){ statusTxt="Vencida há "+Math.abs(pa.dias)+"d"; statusCor="#ef4444"; }
+      else if(pa.dias===0){ statusTxt="Vence hoje"; statusCor="#f59e0b"; }
+      else { statusTxt="Em "+pa.dias+"d"; statusCor="#7a9a5a"; }
+      var acaoLabel = v.fase==="triagem" ? "Avaliar risco (FRIDA)" : (pa.agendada ? (pa.tipo||"Visita")+" agendada" : (nivel==="E"?"Contato urgente":"Contato de acompanhamento"));
+      h+="<div style='display:flex;align-items:center;gap:10px;padding:11px 16px;border-bottom:1px solid #1a1010'>";
+      h+="<div style='width:4px;align-self:stretch;background:"+statusCor+";border-radius:2px'></div>";
+      h+="<div style='flex:1;min-width:0'>";
+      h+="<div style='display:flex;align-items:center;gap:7px;flex-wrap:wrap'>";
+      h+="<span style='color:#f5ede0;font-size:13px;font-weight:700'>"+esc(v.ocBase.vitima_nome||"--")+"</span>";
+      if(nivel) h+="<span style='background:"+nc+"22;color:"+nc+";border:1px solid "+nc+";padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700'>"+nivel+"</span>";
+      h+="<span style='background:"+fase.cor+"22;color:"+fase.cor+";padding:1px 7px;border-radius:4px;font-size:9px;font-weight:700'>"+fase.icon+" "+fase.label+"</span>";
+      if(v.temMp) h+="<span style='color:#d4a87a;font-size:9px'>🛡 MP</span>";
+      h+="</div>";
+      h+="<p style='color:#9a7060;font-size:11px;margin:3px 0 0'>"+acaoLabel+" · <span style='color:"+statusCor+";font-weight:700'>"+statusTxt+"</span>"+(v.ocBase.bairro?" · "+esc(v.ocBase.bairro):"")+"</p>";
+      h+="</div>";
+      h+="<button onclick=\"abrirMonitorVCM('"+v.ocBase.id+"')\" style='background:linear-gradient(135deg,#5a1020,#8a1838);border:1px solid #ff1493;color:#ffb3c8;padding:7px 14px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap'>Atender →</button>";
+      h+="</div>";
+    });
+    if(filaShow.length>20) h+="<p style='color:#5a4040;font-size:11px;text-align:center;padding:8px'>+ "+(filaShow.length-20)+" caso(s)</p>";
+    h+="</div>";
+  }
+  h+="</div>";
+
   // CARDS
   h+="<div style='display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px'>";
   var cards=[
