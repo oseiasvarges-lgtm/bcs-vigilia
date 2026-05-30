@@ -451,6 +451,7 @@ function exportarDadosBCS(){
     invItens: state.invItens||[],
     invMovimentacoes: state.invMovimentacoes||[],
     invConferencias: state.invConferencias||[],
+    vcmCasos: state.vcmCasos||{},
     escolas: state.escolas||[],
     visitasEscolares: state.visitasEscolares||[],
     atividadesEscolares: state.atividadesEscolares||[]
@@ -499,6 +500,7 @@ function importarDadosBCS(input){
       if(dados.invItens) state.invItens=dados.invItens;
       if(dados.invMovimentacoes) state.invMovimentacoes=dados.invMovimentacoes;
       if(dados.invConferencias) state.invConferencias=dados.invConferencias;
+      if(dados.vcmCasos) state.vcmCasos=dados.vcmCasos;
       if(dados.escolas) state.escolas=dados.escolas;
       if(dados.visitasEscolares) state.visitasEscolares=dados.visitasEscolares;
       if(dados.atividadesEscolares) state.atividadesEscolares=dados.atividadesEscolares;
@@ -581,6 +583,7 @@ async function sincronizarSheets(){
     await salvarDadoAppSheets("bcs_projetos_sociais",  state.projetosSociais||[]);
     await salvarDadoAppSheets("bcs_inscricoes_proj",   state.inscricoesProjetos||[]);
     await salvarDadoAppSheets("bcs_policiais",         state.policiais||[]);
+    await salvarDadoAppSheets("bcs_vcm_casos",         state.vcmCasos||{});
     await salvarDadoAppSheets("bcs_agendamentos",     state.db.agendamentos||[]);
     await salvarDadoAppSheets("bcs_visitas",          state.db.visitas||[]);
     await salvarDadoAppSheets("bcs_atendimentos",     state.db.atendimentos||[]);
@@ -658,6 +661,7 @@ async function carregarDadosAppDoSheets(){
     var projSociaisSheets = await lerDadoAppSheets("bcs_projetos_sociais");
     var inscricoesSheets  = await lerDadoAppSheets("bcs_inscricoes_proj");
     var policiaisSheets   = await lerDadoAppSheets("bcs_policiais");
+    var vcmCasosSheets    = await lerDadoAppSheets("bcs_vcm_casos");
 
     var localProj  = state.projetos||[];
     var localEv    = state.eventosAvulsos||[];
@@ -710,6 +714,15 @@ async function carregarDadosAppDoSheets(){
     state.projetosSociais  = _mergeById(state.projetosSociais||[],  projSociaisSheets);
     state.inscricoesProjetos = _mergeById(state.inscricoesProjetos||[], inscricoesSheets);
     state.policiais        = _mergeById(state.policiais||[],         policiaisSheets);
+    // 🌸 Casos VCM (objeto keyed por vítima — mantém o mais recente por atualizadoEm)
+    if(vcmCasosSheets && typeof vcmCasosSheets==="object" && !Array.isArray(vcmCasosSheets)){
+      if(!state.vcmCasos) state.vcmCasos={};
+      Object.keys(vcmCasosSheets).forEach(function(k){
+        var rem=vcmCasosSheets[k], loc=state.vcmCasos[k];
+        if(!loc){ state.vcmCasos[k]=rem; }
+        else if((rem.atualizadoEm||"")>(loc.atualizadoEm||"")){ state.vcmCasos[k]=rem; }
+      });
+    }
 
     // 🏫 Restaurar classificacao/escolaNome de outros dispositivos via Sheets
     try{
