@@ -316,6 +316,7 @@ function salvarLocal() {
     if(state.invItens) localStorage.setItem("bcs_inv_itens",JSON.stringify(state.invItens));
     if(state.invMovimentacoes) localStorage.setItem("bcs_inv_mov",JSON.stringify(state.invMovimentacoes));
     if(state.invConferencias) localStorage.setItem("bcs_inv_conf",JSON.stringify(state.invConferencias));
+    if(state.vcmCasos) localStorage.setItem("bcs_vcm_casos",JSON.stringify(state.vcmCasos));
     if(state.policiais) localStorage.setItem("bcs_policiais",JSON.stringify(state.policiais));
     if(state.solicitacoes) localStorage.setItem("bcs_solicitacoes",JSON.stringify(state.solicitacoes));
     if(state.escolas) localStorage.setItem("bcs_escolas",JSON.stringify(state.escolas));
@@ -1049,6 +1050,8 @@ let state = {
   conselho_diretoria:   JSON.parse(localStorage.getItem("bcs_conselho_diretoria")||"[]"),
   // Devolutivas CRAV
   devolutivasCrav: JSON.parse(localStorage.getItem("bcs_devolutivas_crav")||"[]"),
+  // Fluxo VCM — casos (rede de proteção + contatos por vítima)
+  vcmCasos: JSON.parse(localStorage.getItem("bcs_vcm_casos")||"{}"),
 };
 
 // Inicializar arrays vazios se undefined
@@ -3352,6 +3355,106 @@ function _bairroBCS(o){
   var b=(o.bairro||"").trim().toLowerCase();
   return BAIRROS_BCS.some(function(bv){return b===bv||b.includes(bv)||bv.includes(b);});
 }
+// ══════════════════════════════════════════════════════════════════
+//  FLUXO VCM — máquina de estados + periodicidade automática por risco
+// ══════════════════════════════════════════════════════════════════
+// Prazo (em dias) para o próximo contato conforme nível de risco FRIDA
+var VCM_PRAZOS = { E: 2, M: 7, B: 30, "": 2 }; // sem FRIDA = 2 dias (triagem urgente)
+
+// Rede de proteção — órgãos para encaminhamento
+var VCM_REDE = [
+  { k:"crav",            label:"CRAV",            icon:"💜", desc:"Centro de Referência de Atendimento à Mulher", destaque:true },
+  { k:"deam",            label:"DEAM/Delegacia",  icon:"🚔", desc:"Delegacia Especializada de Atendimento à Mulher" },
+  { k:"creas",           label:"CREAS",           icon:"🏛", desc:"Centro de Referência Especializado de Assistência Social" },
+  { k:"mp",              label:"Ministério Público", icon:"⚖️", desc:"Promotoria / Medida Protetiva" },
+  { k:"defensoria",      label:"Defensoria",      icon:"📋", desc:"Defensoria Pública" },
+  { k:"saude",           label:"Saúde",           icon:"🏥", desc:"UBS / Hospital / CAPS" },
+  { k:"conselho_tutelar",label:"Conselho Tutelar",icon:"👶", desc:"Quando há crianças/adolescentes envolvidos" }
+];
+
+// Fases do caso no fluxo
+var VCM_FASES = {
+  triagem:        { label:"Triagem pendente",   cor:"#f59e0b", icon:"🔍", ordem:1 },
+  acompanhamento: { label:"Em acompanhamento",  cor:"#ff69b4", icon:"🔄", ordem:2 },
+  monitoramento:  { label:"Monitoramento",      cor:"#4a9fd4", icon:"👁", ordem:3 },
+  encerrado:      { label:"Encerrado",          cor:"#6a6a6a", icon:"✓",  ordem:4 }
+};
+
+// Chave estável da vítima (bate com a lógica de _buildVitimas)
+function _vcmChave(oc){
+  if(!oc) return "";
+  var chave = norm(oc.vitima_nome||"");
+  var cpf = (oc.vitima_cpf||"").replace(/\D/g,"");
+  if(cpf.length>=11) chave += "|"+cpf;
+  return chave;
+}
+
+// Pega (ou cria em memória) o caso persistido de uma vítima
+function _vcmGetCaso(chave, nomeRef){
+  if(!state.vcmCasos) state.vcmCasos = {};
+  if(!state.vcmCasos[chave]){
+    state.vcmCasos[chave] = {
+      chave: chave, nomeRef: nomeRef||"",
+      rede: {}, contatos: [], atualizadoEm: new Date().toISOString()
+    };
+  }
+  if(!state.vcmCasos[chave].rede) state.vcmCasos[chave].rede = {};
+  if(!state.vcmCasos[chave].contatos) state.vcmCasos[chave].contatos = [];
+  return state.vcmCasos[chave];
+}
+
+// Determina a fase do caso a partir do agregado da vítima
+function _vcmFase(v){
+  if(v.encerrado) return "encerrado";
+  if(!v.fridaRecente) return "triagem";
+  if(v.fridaRecente.nivel==="B") return "monitoramento";
+  return "acompanhamento";
+}
+
+// Calcula a próxima ação devida (data, prazo, vencida) com base no risco
+function _vcmProximaAcao(v){
+  if(v.encerrado) return null;
+  var nivel = (v.fridaRecente && v.fridaRecente.nivel) || "";
+  var prazoDias = VCM_PRAZOS[nivel] != null ? VCM_PRAZOS[nivel] : 7;
+
+  // Se há visita agendada futura, ela É a próxima ação (no prazo)
+  if(v.proximaVisita && v.proximaVisita.data){
+    var dVis = new Date(v.proximaVisita.data+"T12:00");
+    var diasV = Math.ceil((dVis - new Date())/(864e5));
+    return { data:v.proximaVisita.data, dias:diasV, vencida:diasV<0, agendada:true,
+             tipo:v.proximaVisita.tipo||"Visita", nivel:nivel, prazoDias:prazoDias };
+  }
+
+  // Caso contrário: calcula a partir do último marco (FRIDA/visita/contato)
+  var marcos = [];
+  if(v.fridaRecente && v.fridaRecente.data) marcos.push(v.fridaRecente.data);
+  if(v.ultimaVisita && v.ultimaVisita.data) marcos.push(v.ultimaVisita.data);
+  var caso = state.vcmCasos && state.vcmCasos[_vcmChave(v.ocBase)];
+  if(caso && caso.contatos && caso.contatos.length){
+    caso.contatos.forEach(function(c){ if(c.data) marcos.push(c.data); });
+  }
+  // sem nenhum marco → usa data da ocorrência base
+  if(!marcos.length && v.ocBase && v.ocBase.data) marcos.push(v.ocBase.data);
+  if(!marcos.length) return { data:hoje(), dias:0, vencida:true, agendada:false, semBase:true, nivel:nivel, prazoDias:prazoDias };
+
+  marcos.sort();
+  var ultimo = marcos[marcos.length-1];
+  var base = new Date(String(ultimo).slice(0,10)+"T12:00");
+  if(isNaN(base)) base = new Date();
+  var prox = new Date(base.getTime() + prazoDias*864e5);
+  var dias = Math.ceil((prox - new Date())/(864e5));
+  var y=prox.getFullYear(), m=("0"+(prox.getMonth()+1)).slice(-2), d=("0"+prox.getDate()).slice(-2);
+  return { data:y+"-"+m+"-"+d, dias:dias, vencida:dias<0, agendada:false, nivel:nivel, prazoDias:prazoDias };
+}
+
+// Prioridade numérica p/ ordenar a fila de ações (menor = mais urgente)
+function _vcmPrioridade(v){
+  var pa = _vcmProximaAcao(v);
+  if(!pa) return 9999;
+  var pesoNivel = {E:0, M:100, B:200, "":50}[(v.fridaRecente&&v.fridaRecente.nivel)||""];
+  return pesoNivel + (pa.dias||0); // vencidas (dias negativos) sobem
+}
+
 function _buildVitimas(periodo){
   var agora=new Date(), dataCorte=null;
   if(periodo==="semana"){dataCorte=new Date(agora);dataCorte.setDate(agora.getDate()-7);}
@@ -3383,7 +3486,11 @@ function _buildVitimas(periodo){
     var ultimaVisita=ags.filter(function(ag){return ag.status!=="Agendado";}).sort(function(a,b){return(a.data||"")>(b.data||"")?-1:1;})[0]||null;
     var diasSemVisita=ultimaVisita?Math.floor((new Date()-new Date(ultimaVisita.data+"T12:00"))/(1000*60*60*24)):999;
     var encerrado=ocs.some(function(x){return x._encerrado;});
-    vitimas.push({ocBase:o,ocs:ocs,frida:frida,fridaRecente:fridaRecente,temMp:temMp,proximaVisita:proximaVisita,ultimaVisita:ultimaVisita,diasSemVisita:diasSemVisita,encerrado:encerrado});
+    var vit={ocBase:o,ocs:ocs,frida:frida,fridaRecente:fridaRecente,temMp:temMp,proximaVisita:proximaVisita,ultimaVisita:ultimaVisita,diasSemVisita:diasSemVisita,encerrado:encerrado};
+    // Enriquecimento do fluxo VCM
+    vit.fase=_vcmFase(vit);
+    vit.proximaAcao=_vcmProximaAcao(vit);
+    vitimas.push(vit);
   });
   return vitimas;
 }
