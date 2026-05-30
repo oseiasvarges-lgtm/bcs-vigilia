@@ -698,86 +698,70 @@ function criarCanvas(canvasId, boxId, labelId){
   var ctx = cv.getContext("2d");
   var desenhando = false;
   var temAssin   = false;
-  var _snapURL   = null; // salva o último JPEG após cada traço
+  var _dataURL   = null; // snapshot salvo após cada traço completo
 
-  function _comprimirSnap(){
-    // Salva snapshot JPEG 320x90 — protege contra apagamento por resize
-    var W=320, H=90;
-    var tmp=document.createElement("canvas");
-    tmp.width=W; tmp.height=H;
-    var tctx=tmp.getContext("2d");
-    tctx.fillStyle="#070d1a";
-    tctx.fillRect(0,0,W,H);
-    tctx.drawImage(cv,0,0,cv.width,cv.height,0,0,W,H);
-    _snapURL = tmp.toDataURL("image/jpeg",0.7);
-  }
-
-  function _restaurarSnap(){
-    if(!_snapURL) return;
-    var img=new Image();
-    img.onload=function(){
-      ctx.drawImage(img,0,0,cv.width/ratio,cv.height/ratio);
-    };
-    img.src=_snapURL;
-  }
-
-  var ratio = 1;
-  function redim(){
+  // Canvas fixo 600x130 — sem escala por devicePixelRatio
+  // Evita toda complexidade de retina que apagava os traços
+  function initCanvas(){
     var box = document.getElementById(boxId);
-    ratio = window.devicePixelRatio || 1;
-    var novaW = box.clientWidth * ratio;
-    // Só redimensiona se a largura mudou de forma significativa (ignora resize do teclado)
-    if(Math.abs(novaW - cv.width) < 5) return;
-    cv.width  = novaW;
-    cv.height = 130 * ratio;
+    var w   = box.clientWidth || 340;
+    cv.width  = w;
+    cv.height = 130;
     cv.style.height = "130px";
-    ctx.scale(ratio, ratio);
     ctx.strokeStyle = "#6a9ae8";
-    ctx.lineWidth   = 2.5;
+    ctx.lineWidth   = 2;
     ctx.lineCap     = "round";
     ctx.lineJoin    = "round";
-    // Restaura assinatura salva após redimensionamento
-    _restaurarSnap();
+    ctx.fillStyle   = "#070d1a";
+    ctx.fillRect(0, 0, cv.width, cv.height);
   }
-  redim();
-  window.addEventListener("resize", redim);
+  initCanvas();
+
+  // Não conecta resize ao canvas — teclado mobile não apaga mais a assinatura
+  // (o canvas tem tamanho fixo e não reage a mudanças de viewport)
 
   function pos(e){
-    var rect=cv.getBoundingClientRect(), src=e.touches?e.touches[0]:e;
-    return {x:src.clientX-rect.left, y:src.clientY-rect.top};
+    var rect = cv.getBoundingClientRect();
+    var src  = e.touches ? e.touches[0] : e;
+    var scaleX = cv.width  / rect.width;
+    var scaleY = cv.height / rect.height;
+    return {
+      x: (src.clientX - rect.left) * scaleX,
+      y: (src.clientY - rect.top)  * scaleY
+    };
   }
 
-  function salvarAposTraco(){ if(temAssin) _comprimirSnap(); }
+  function salvar(){
+    if(!temAssin) return;
+    _dataURL = cv.toDataURL("image/jpeg", 0.75);
+  }
 
-  cv.addEventListener("mousedown",  function(e){ desenhando=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); });
+  cv.addEventListener("mousedown",  function(e){ desenhando=true; ctx.beginPath(); var p=pos(e); ctx.moveTo(p.x,p.y); });
   cv.addEventListener("mousemove",  function(e){ if(!desenhando)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssin=true; document.getElementById(labelId).style.opacity="0"; });
-  cv.addEventListener("mouseup",    function(){ desenhando=false; salvarAposTraco(); });
-  cv.addEventListener("mouseleave", function(){ desenhando=false; salvarAposTraco(); });
-  cv.addEventListener("touchstart", function(e){ e.preventDefault(); desenhando=true; var p=pos(e); ctx.beginPath(); ctx.moveTo(p.x,p.y); },{passive:false});
+  cv.addEventListener("mouseup",    function(){ desenhando=false; salvar(); });
+  cv.addEventListener("mouseleave", function(){ desenhando=false; salvar(); });
+  cv.addEventListener("touchstart", function(e){ e.preventDefault(); desenhando=true; ctx.beginPath(); var p=pos(e); ctx.moveTo(p.x,p.y); },{passive:false});
   cv.addEventListener("touchmove",  function(e){ e.preventDefault(); if(!desenhando)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssin=true; document.getElementById(labelId).style.opacity="0"; },{passive:false});
-  cv.addEventListener("touchend",   function(){ desenhando=false; salvarAposTraco(); });
+  cv.addEventListener("touchend",   function(){ desenhando=false; salvar(); });
 
   return {
     canvas: cv,
-    temAssin: function(){ return temAssin || !!_snapURL; },
+    temAssin: function(){ return temAssin; },
     limpar: function(){
-      ctx.clearRect(0,0,cv.width,cv.height);
+      ctx.fillStyle="#070d1a";
+      ctx.fillRect(0,0,cv.width,cv.height);
+      ctx.strokeStyle="#6a9ae8";
+      ctx.lineWidth=2;
+      ctx.lineCap="round"; ctx.lineJoin="round";
       temAssin=false;
-      _snapURL=null;
+      _dataURL=null;
       document.getElementById(labelId).style.opacity="1";
     },
     toDataURL: function(){
-      // Usa o snapshot salvo (protege contra canvas apagado por resize)
-      if(_snapURL) return _snapURL;
-      // Fallback: comprime direto do canvas
-      var W=320, H=90;
-      var tmp=document.createElement("canvas");
-      tmp.width=W; tmp.height=H;
-      var tctx=tmp.getContext("2d");
-      tctx.fillStyle="#070d1a";
-      tctx.fillRect(0,0,W,H);
-      tctx.drawImage(cv,0,0,cv.width,cv.height,0,0,W,H);
-      return tmp.toDataURL("image/jpeg",0.7);
+      // Retorna o snapshot salvo (garantido após touchend/mouseup)
+      // Se por algum motivo não foi salvo, salva agora
+      if(!_dataURL && temAssin) salvar();
+      return _dataURL || cv.toDataURL("image/jpeg", 0.75);
     }
   };
 }
