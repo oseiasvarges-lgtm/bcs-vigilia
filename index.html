@@ -15284,6 +15284,8 @@ function renderOcorrenciasGestor(el, perfil_atual){
   h.push("<div style='max-width:900px;margin:0 auto;padding:16px'>");
   h.push("<div style='display:flex;gap:8px;margin-bottom:10px;align-items:center'>");
   h.push("<input id='oc-busca' type='text' placeholder='🔍 Filtrar por nome, Nº, bairro, tipo, suspeito...' value='"+(state.filtroOcBusca||"")+"' style='flex:1;background:#2a1c10;border:1px solid #2a3818;color:#f2eada;padding:10px 13px;border-radius:8px;font-size:13px;box-sizing:border-box;outline:none'/>");
+  var _nEncPend=(state.vcmEncaminhamentos||[]).filter(function(e){return e.status==="pendente";}).length;
+  h.push("<button onclick=\"state.vcmTab='encaminhamentos';setTela('dashvcm')\" style='flex-shrink:0;background:linear-gradient(135deg,#3a0a18,#5a1020);border:2px solid #ff1493;color:#ffb3c8;padding:10px 14px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px'>📤 Encaminhamentos"+(_nEncPend>0?" <span style='background:#ff1493;color:#fff;border-radius:10px;padding:0px 6px;font-size:11px'>"+_nEncPend+"</span>":"")+"</button>");
   h.push("<button onclick='_gestorLancarOcManual()' style='flex-shrink:0;background:linear-gradient(135deg,#1a3a1a,#0a2a0a);border:2px solid #22c55e;color:#4ade80;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;display:inline-flex;align-items:center;gap:6px'><span>📝</span> Lançar Ocorrência</button>");
   h.push("</div>");
 
