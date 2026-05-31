@@ -16630,18 +16630,18 @@ function _invAtualizarSubs(){
 }
 
 function _invSetTipoCarga(tipo){
-  ["none","fixa","pessoal"].forEach(function(t){
-    var btn=document.getElementById("inv-carga-btn-"+t);
-    if(btn) btn.style.background = t===tipo?"#1a2a1a":"transparent";
-  });
-  var secFixa=document.getElementById("inv-sec-fixa");
-  var secPessoal=document.getElementById("inv-sec-pessoal");
-  var secPad=document.getElementById("inv-sec-pad");
-  if(secFixa) secFixa.style.display=tipo==="fixa"?"block":"none";
-  if(secPessoal) secPessoal.style.display=tipo==="pessoal"?"block":"none";
-  if(secPad) secPad.style.display=(tipo==="fixa"||tipo==="pessoal")?"block":"none";
-  var tipEl=document.getElementById("inv-tipo-carga-val");
-  if(tipEl) tipEl.value=tipo;
+  // Só dois estados: none ou fixa
+  var t = (tipo==="pessoal") ? "fixa" : tipo; // unifica pessoal → fixa
+  var btnNone = document.getElementById("inv-carga-btn-none");
+  var btnFixa = document.getElementById("inv-carga-btn-fixa");
+  if(btnNone){ btnNone.style.background = t==="none"?"#1a1a1a":"transparent"; btnNone.style.color=t==="none"?"#e8e0d0":"#aaa"; }
+  if(btnFixa){ btnFixa.style.background = t==="fixa"?"#0a2a1a":"transparent"; }
+  var secFixa  = document.getElementById("inv-sec-fixa");
+  var secPad   = document.getElementById("inv-sec-pad");
+  if(secFixa) secFixa.style.display  = t==="fixa"?"block":"none";
+  if(secPad)  secPad.style.display   = t==="fixa"?"block":"none";
+  var tipEl = document.getElementById("inv-tipo-carga-val");
+  if(tipEl) tipEl.value = t;
 }
 
 function _invAbrirItem(id){
@@ -16708,32 +16708,34 @@ function _invAbrirItem(id){
   html += "</div></div>";
 
   // Tipo de carga
+  // "Carga Fixa" = item formalmente entregue a um policial responsável (assina o termo)
   html += "<div style='border:1px solid #1a3a1a;border-radius:8px;padding:14px;background:#0a1a0a'>";
-  html += "<label style='color:#10b981;font-size:12px;font-weight:700;display:block;margin-bottom:10px'>📋 Tipo de Carga</label>";
+  html += "<label style='color:#10b981;font-size:12px;font-weight:700;display:block;margin-bottom:4px'>📋 Carga</label>";
+  html += "<p style='color:#5a8a6a;font-size:10px;margin:0 0 10px'>Carga Fixa: o policial assina e fica formalmente responsável pelo item</p>";
   html += "<div style='display:flex;gap:8px;margin-bottom:12px'>";
-  html += "<button id='inv-carga-btn-none' onclick=\"_invSetTipoCarga('none')\" type='button' style='flex:1;padding:7px;border:1px solid #333;border-radius:6px;color:#aaa;font-size:12px;cursor:pointer;background:"+(tipoCarga==="none"?"#1a2a1a":"transparent")+"'>Sem Carga</button>";
-  html += "<button id='inv-carga-btn-fixa' onclick=\"_invSetTipoCarga('fixa')\" type='button' style='flex:1;padding:7px;border:1px solid #4a9fd4;border-radius:6px;color:#4a9fd4;font-size:12px;cursor:pointer;background:"+(tipoCarga==="fixa"?"#1a2a1a":"transparent")+"'>📍 Carga Fixa</button>";
-  html += "<button id='inv-carga-btn-pessoal' onclick=\"_invSetTipoCarga('pessoal')\" type='button' style='flex:1;padding:7px;border:1px solid #d4a87a;border-radius:6px;color:#d4a87a;font-size:12px;cursor:pointer;background:"+(tipoCarga==="pessoal"?"#1a2a1a":"transparent")+"'>👤 Carga Pessoal</button>";
+  html += "<button id='inv-carga-btn-none' onclick=\"_invSetTipoCarga('none')\" type='button' style='flex:1;padding:8px;border:1px solid #333;border-radius:6px;color:#aaa;font-size:12px;cursor:pointer;background:"+(tipoCarga==="none"?"#1a1a1a":"transparent")+"'>Sem Carga</button>";
+  html += "<button id='inv-carga-btn-fixa' onclick=\"_invSetTipoCarga('fixa')\" type='button' style='flex:1;padding:8px;border:1px solid #10b981;border-radius:6px;color:#10b981;font-size:12px;font-weight:700;cursor:pointer;background:"+(tipoCarga==="fixa"?"#0a2a1a":"transparent")+"'>✅ Carga Fixa</button>";
   html += "</div>";
   html += "<input type='hidden' id='inv-tipo-carga-val' value='"+tipoCarga+"'>";
+  // Oculta os botões antigos de pessoal — carga fixa agora é o único modo com policial
+  html += "<input type='hidden' id='inv-carga-btn-pessoal' value='pessoal'>";
 
-  // Carga fixa
+  // Carga Fixa — policial responsável (grad + nome + matrícula)
   html += "<div id='inv-sec-fixa' style='display:"+(tipoCarga==="fixa"?"block":"none")+";margin-bottom:10px'>";
-  html += "<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px'>";
-  html += "<div><label style='color:#999;font-size:11px'>Local Fixo</label><select id='inv-carga-local' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'>"+INV_LOCAIS.map(function(l){return "<option"+(item&&item.carga_localizacao===l?" selected":"")+">"+l+"</option>";}).join("")+"</select></div>";
-  html += "<div><label style='color:#999;font-size:11px'>Responsável pela Carga</label><input id='inv-carga-resp' value='"+(item?esc(item.carga_responsavel_nome||""):"")+"' placeholder='Nome do responsável' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
-  html += "</div></div>";
-
-  // Carga pessoal
-  html += "<div id='inv-sec-pessoal' style='display:"+(tipoCarga==="pessoal"?"block":"none")+";margin-bottom:10px'>";
-  html += "<div style='display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px'>";
-  html += "<div><label style='color:#999;font-size:11px'>Graduação</label><input id='inv-carga-grad' value='"+(item?esc(item.carga_responsavel_grad||""):"")+"' placeholder='Ex: SD' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
-  html += "<div><label style='color:#999;font-size:11px'>Nome do Policial</label><input id='inv-carga-nome' value='"+(item?esc(item.carga_responsavel_nome||""):"")+"' placeholder='Nome completo' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
+  html += "<div style='display:grid;grid-template-columns:100px 1fr 140px;gap:8px;margin-bottom:8px'>";
+  html += "<div><label style='color:#999;font-size:11px'>Graduação</label><input id='inv-carga-grad' value='"+(item?esc(item.carga_responsavel_grad||""):"")+"' placeholder='Ex: 3°Sgt' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
+  html += "<div><label style='color:#999;font-size:11px'>Nome do Policial Responsável *</label><input id='inv-carga-nome' value='"+(item?esc(item.carga_responsavel_nome||""):"")+"' placeholder='Nome completo' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
   html += "<div><label style='color:#999;font-size:11px'>Matrícula</label><input id='inv-carga-mat' value='"+(item?esc(item.carga_responsavel_matricula||""):"")+"' placeholder='Nº matrícula' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
   html += "</div></div>";
 
-  // Assinatura (carga fixa ou pessoal)
-  html += "<div id='inv-sec-pad' style='display:"+(tipoCarga!=="none"?"block":"none")+";margin-bottom:4px'>";
+  // Campos ocultos de compatibilidade (carga pessoal unificada em fixa)
+  html += "<div id='inv-sec-pessoal' style='display:none'>";
+  html += "<input type='hidden' id='inv-carga-resp' value=''>";
+  html += "<input type='hidden' id='inv-carga-local' value=''>";
+  html += "</div>";
+
+  // Assinatura (só para carga fixa)
+  html += "<div id='inv-sec-pad' style='display:"+(tipoCarga==="fixa"?"block":"none")+";margin-bottom:4px'>";
   html += "<label style='color:#999;font-size:11px'>Assinatura do Responsável</label>";
   html += "<div style='position:relative;margin-top:4px;border:1px solid #2a3a2a;border-radius:8px;background:#0d0d0d'>";
   html += "<canvas id='inv-pad-canvas' width='560' height='120' style='width:100%;height:120px;border-radius:8px;display:block;cursor:crosshair'></canvas>";
@@ -16810,11 +16812,12 @@ function _invSalvarItem(idExistente){
     observacoes: (document.getElementById("inv-obs")||{}).value||"",
     foto: (document.getElementById("inv-foto-data")||{}).value||"",
     tipo_carga: tipoCarga,
-    carga_responsavel_nome: tipoCarga==="fixa"?((document.getElementById("inv-carga-resp")||{}).value||""):((document.getElementById("inv-carga-nome")||{}).value||""),
-    carga_localizacao: tipoCarga==="fixa"?((document.getElementById("inv-carga-local")||{}).value||""):"",
-    carga_responsavel_grad: tipoCarga==="pessoal"?((document.getElementById("inv-carga-grad")||{}).value||""):"",
-    carga_responsavel_matricula: tipoCarga==="pessoal"?((document.getElementById("inv-carga-mat")||{}).value||""):"",
-    carga_data: tipoCarga!=="none"?new Date().toISOString():"",
+    // Carga Fixa: policial responsável pelo item
+    carga_responsavel_grad: tipoCarga==="fixa"?((document.getElementById("inv-carga-grad")||{}).value||""):"",
+    carga_responsavel_nome: tipoCarga==="fixa"?((document.getElementById("inv-carga-nome")||{}).value||""):"",
+    carga_responsavel_matricula: tipoCarga==="fixa"?((document.getElementById("inv-carga-mat")||{}).value||""):"",
+    carga_localizacao: "",  // localização fica apenas no campo principal do item
+    carga_data: tipoCarga==="fixa"?new Date().toISOString():"",
     carga_assinatura: assin,
     ativo: true
   };
@@ -17125,7 +17128,8 @@ function renderInventario(main){
         h+="<div style='display:flex;flex-direction:column;gap:8px'>";
         catItems.forEach(function(item){
           var est=INV_ESTADOS[item.estado]||{label:item.estado,cor:"#888"};
-          var cargaTxt=item.tipo_carga==="fixa"?"📍 Carga Fixa":item.tipo_carga==="pessoal"?"👤 "+esc(item.carga_responsavel_nome||"Pessoal"):"";
+          var _cargaPolicial=item.carga_responsavel_nome?((item.carga_responsavel_grad?esc(item.carga_responsavel_grad)+" ":"")+esc(item.carga_responsavel_nome)+(item.carga_responsavel_matricula?" ("+esc(item.carga_responsavel_matricula)+")":"")):"-";
+          var cargaTxt=(item.tipo_carga==="fixa"||item.tipo_carga==="pessoal")?"✅ Carga: "+_cargaPolicial:"";
           h+="<div style='background:#111;border:1px solid #1a2a1a;border-radius:10px;padding:12px 14px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>";
           if(item.foto){
             h+="<img src='"+item.foto+"' style='width:56px;height:42px;object-fit:cover;border-radius:6px;border:1px solid #2a2a2a;flex-shrink:0'>";
@@ -17239,17 +17243,14 @@ function _invGerarPDF(){
     if(!ci.length) return;
     h+="<div class='cat-title'>"+INV_CATS[cat].icon+" "+INV_CATS[cat].label+" &nbsp;("+ci.length+" itens)</div>";
     h+="<table>";
-    h+="<tr><th>#</th><th>Tombamento</th><th>Descrição</th><th>Marca / Modelo</th><th>Estado</th><th class='loc'>Localização Atual</th><th class='emp'>Local de Emprego / Responsável</th></tr>";
+    h+="<tr><th>#</th><th>Tombamento</th><th>Descrição</th><th>Marca / Modelo</th><th>Estado</th><th class='loc'>Localização</th><th class='emp'>Carga Fixa — Policial Responsável</th></tr>";
     ci.forEach(function(item,i){
       var est=INV_ESTADOS[item.estado]||{label:item.estado,cor:"#888"};
-      // Local de emprego: carga fixa → local fixo; carga pessoal → grad + nome + matrícula; nenhum → "—"
+      // Policial responsável pela carga (carga fixa ou pessoal — unificados)
       var emprego="—";
-      if(item.tipo_carga==="fixa"){
-        emprego="📍 "+esc(item.carga_localizacao||item.localizacao||"—");
-        if(item.carga_responsavel_nome) emprego+="<br><small>Resp: "+esc(item.carga_responsavel_nome)+"</small>";
-      } else if(item.tipo_carga==="pessoal"){
+      if(item.tipo_carga==="fixa"||item.tipo_carga==="pessoal"){
         var grad=item.carga_responsavel_grad?esc(item.carga_responsavel_grad)+" ":"";
-        emprego="👤 "+grad+esc(item.carga_responsavel_nome||"—");
+        emprego="✅ "+grad+esc(item.carga_responsavel_nome||"—");
         if(item.carga_responsavel_matricula) emprego+="<br><small>Mat: "+esc(item.carga_responsavel_matricula)+"</small>";
       }
       var mm=esc([item.marca,item.modelo].filter(Boolean).join(" ")||"—");
