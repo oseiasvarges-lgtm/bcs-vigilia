@@ -16603,7 +16603,7 @@ function _invComprimirFoto(dataURL, cb){
 function _invIniciarPad(canvas, onChange){
   var ctx = canvas.getContext("2d");
   var painting = false;
-  ctx.strokeStyle="#22c55e"; ctx.lineWidth=2; ctx.lineCap="round";
+  ctx.strokeStyle="#1a3a6a"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.lineJoin="round";
   function pos(e){
     var r=canvas.getBoundingClientRect();
     var src=e.touches?e.touches[0]:e;
@@ -16720,27 +16720,45 @@ function _invAbrirItem(id){
   // Oculta os botões antigos de pessoal — carga fixa agora é o único modo com policial
   html += "<input type='hidden' id='inv-carga-btn-pessoal' value='pessoal'>";
 
-  // Carga Fixa — policial responsável (grad + nome + matrícula)
+  // Carga Fixa — dois lados: quem recebe e quem libera
   html += "<div id='inv-sec-fixa' style='display:"+(tipoCarga==="fixa"?"block":"none")+";margin-bottom:10px'>";
-  html += "<div style='display:grid;grid-template-columns:100px 1fr 140px;gap:8px;margin-bottom:8px'>";
+
+  // ─── Quem recebe (policial responsável) ────────────────────────
+  html += "<div style='background:#0d1f0d;border:1px solid #1a3a1a;border-radius:7px;padding:12px;margin-bottom:10px'>";
+  html += "<p style='color:#4ade80;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px'>👮 Policial que Recebe a Carga</p>";
+  html += "<div style='display:grid;grid-template-columns:100px 1fr 140px;gap:8px;margin-bottom:10px'>";
   html += "<div><label style='color:#999;font-size:11px'>Graduação</label><input id='inv-carga-grad' value='"+(item?esc(item.carga_responsavel_grad||""):"")+"' placeholder='Ex: 3°Sgt' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
-  html += "<div><label style='color:#999;font-size:11px'>Nome do Policial Responsável *</label><input id='inv-carga-nome' value='"+(item?esc(item.carga_responsavel_nome||""):"")+"' placeholder='Nome completo' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
+  html += "<div><label style='color:#999;font-size:11px'>Nome *</label><input id='inv-carga-nome' value='"+(item?esc(item.carga_responsavel_nome||""):"")+"' placeholder='Nome completo' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
   html += "<div><label style='color:#999;font-size:11px'>Matrícula</label><input id='inv-carga-mat' value='"+(item?esc(item.carga_responsavel_matricula||""):"")+"' placeholder='Nº matrícula' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
+  html += "</div>";
+  html += "<label style='color:#999;font-size:11px'>Assinatura de quem recebe</label>";
+  html += "<div style='position:relative;margin-top:4px;border:1px solid #1a3a1a;border-radius:8px;background:#fff'>";
+  html += "<canvas id='inv-pad-canvas' width='500' height='100' style='width:100%;height:100px;border-radius:8px;display:block;cursor:crosshair'></canvas>";
+  html += "<button type='button' onclick='_invLimparPad(\"inv-pad-canvas\")' style='position:absolute;top:5px;right:6px;background:#f0f0f0;border:1px solid #ccc;color:#555;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button>";
   html += "</div></div>";
 
-  // Campos ocultos de compatibilidade (carga pessoal unificada em fixa)
+  // ─── Quem libera (responsável pelo almoxarifado/arsenal) ────────
+  html += "<div style='background:#1a0d0a;border:1px solid #3a1a0a;border-radius:7px;padding:12px;margin-bottom:4px'>";
+  html += "<p style='color:#d4a87a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px'>🗝️ Responsável que Libera a Carga</p>";
+  html += "<div style='display:grid;grid-template-columns:100px 1fr 140px;gap:8px;margin-bottom:10px'>";
+  html += "<div><label style='color:#999;font-size:11px'>Graduação</label><input id='inv-lib-grad' value='"+(item?esc(item.carga_liberador_grad||""):"")+"' placeholder='Ex: Sgt' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
+  html += "<div><label style='color:#999;font-size:11px'>Nome *</label><input id='inv-lib-nome' value='"+(item?esc(item.carga_liberador_nome||""):"")+"' placeholder='Nome do responsável' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
+  html += "<div><label style='color:#999;font-size:11px'>Matrícula</label><input id='inv-lib-mat' value='"+(item?esc(item.carga_liberador_matricula||""):"")+"' placeholder='Nº matrícula' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
+  html += "</div>";
+  html += "<label style='color:#999;font-size:11px'>Assinatura de quem libera</label>";
+  html += "<div style='position:relative;margin-top:4px;border:1px solid #3a1a0a;border-radius:8px;background:#fff'>";
+  html += "<canvas id='inv-pad-lib' width='500' height='100' style='width:100%;height:100px;border-radius:8px;display:block;cursor:crosshair'></canvas>";
+  html += "<button type='button' onclick='_invLimparPad(\"inv-pad-lib\")' style='position:absolute;top:5px;right:6px;background:#f0f0f0;border:1px solid #ccc;color:#555;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button>";
+  html += "</div></div>";
+
+  html += "</div>"; // fim inv-sec-fixa
+
+  // Campos ocultos de compatibilidade
   html += "<div id='inv-sec-pessoal' style='display:none'>";
   html += "<input type='hidden' id='inv-carga-resp' value=''>";
   html += "<input type='hidden' id='inv-carga-local' value=''>";
   html += "</div>";
-
-  // Assinatura (só para carga fixa)
-  html += "<div id='inv-sec-pad' style='display:"+(tipoCarga==="fixa"?"block":"none")+";margin-bottom:4px'>";
-  html += "<label style='color:#999;font-size:11px'>Assinatura do Responsável</label>";
-  html += "<div style='position:relative;margin-top:4px;border:1px solid #2a3a2a;border-radius:8px;background:#0d0d0d'>";
-  html += "<canvas id='inv-pad-canvas' width='560' height='120' style='width:100%;height:120px;border-radius:8px;display:block;cursor:crosshair'></canvas>";
-  html += "<button type='button' onclick='_invLimparPad()' style='position:absolute;top:6px;right:6px;background:#1a1a1a;border:1px solid #333;color:#aaa;padding:3px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button>";
-  html += "</div></div>";
+  html += "<div id='inv-sec-pad' style='display:none'></div>"; // compatibilidade
   html += "</div>"; // fim bloco carga
 
   // Botões
@@ -16753,12 +16771,18 @@ function _invAbrirItem(id){
 
   document.body.insertAdjacentHTML("beforeend", html);
 
-  // Init pad
-  var padCanvas = document.getElementById("inv-pad-canvas");
-  if(padCanvas){
-    _invIniciarPad(padCanvas, null);
-    if(item && item.carga_assinatura) _invCarregarAssin(padCanvas, item.carga_assinatura);
+  // Init pads — fundo branco, traço azul escuro
+  function _initInvPad(id, assinSalva){
+    var c = document.getElementById(id);
+    if(!c) return;
+    // Fundo branco
+    c.getContext("2d").fillStyle="#fff";
+    c.getContext("2d").fillRect(0,0,c.width,c.height);
+    _invIniciarPad(c, null);
+    if(assinSalva) _invCarregarAssin(c, assinSalva);
   }
+  _initInvPad("inv-pad-canvas", item && item.carga_assinatura);
+  _initInvPad("inv-pad-lib",    item && item.carga_liberador_assinatura);
 }
 
 function _invFotoSelecionada(inp){
@@ -16777,25 +16801,33 @@ function _invFotoSelecionada(inp){
   reader.readAsDataURL(file);
 }
 
-function _invLimparPad(){
-  var c = document.getElementById("inv-pad-canvas");
-  if(c) c.getContext("2d").clearRect(0,0,c.width,c.height);
+function _invLimparPad(id){
+  var c = document.getElementById(id||"inv-pad-canvas");
+  if(!c) return;
+  var ctx = c.getContext("2d");
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
 }
 
 function _invSalvarItem(idExistente){
   var desc = (document.getElementById("inv-desc")||{}).value||"";
   if(!desc.trim()){ showToast("Informe a descrição do item","error"); return; }
   var tipoCarga = (document.getElementById("inv-tipo-carga-val")||{}).value||"none";
-  var padCanvas = document.getElementById("inv-pad-canvas");
-  var assin = "";
-  if(padCanvas && tipoCarga!=="none"){
-    // Check if pad has content
-    var ctx=padCanvas.getContext("2d");
-    var px=ctx.getImageData(0,0,padCanvas.width,padCanvas.height).data;
-    var hasContent=false;
-    for(var i=3;i<px.length;i+=4){if(px[i]>0){hasContent=true;break;}}
-    if(hasContent) assin=padCanvas.toDataURL("image/jpeg",0.8);
+
+  function _capturarAssinInv(canvasId){
+    var c = document.getElementById(canvasId);
+    if(!c) return "";
+    // Detecta traço: verifica pixel não-branco fora do fundo
+    var ctx2=c.getContext("2d");
+    var px=ctx2.getImageData(0,0,c.width,c.height).data;
+    for(var i=0;i<px.length;i+=4){
+      // pixel não-branco (R<250 ou G<250 ou B<250)
+      if(px[i]<250||px[i+1]<250||px[i+2]<250){ return c.toDataURL("image/jpeg",0.85); }
+    }
+    return "";
   }
+
+  var assin    = tipoCarga==="fixa" ? _capturarAssinInv("inv-pad-canvas") : "";
+  var assinLib = tipoCarga==="fixa" ? _capturarAssinInv("inv-pad-lib")    : "";
   var item = {
     id: idExistente || _invId("inv"),
     criadoEm: idExistente ? ((state.invItens||[]).find(function(x){return x.id===idExistente;})||{}).criadoEm||new Date().toISOString() : new Date().toISOString(),
@@ -16813,12 +16845,18 @@ function _invSalvarItem(idExistente){
     foto: (document.getElementById("inv-foto-data")||{}).value||"",
     tipo_carga: tipoCarga,
     // Carga Fixa: policial responsável pelo item
-    carga_responsavel_grad: tipoCarga==="fixa"?((document.getElementById("inv-carga-grad")||{}).value||""):"",
-    carga_responsavel_nome: tipoCarga==="fixa"?((document.getElementById("inv-carga-nome")||{}).value||""):"",
-    carga_responsavel_matricula: tipoCarga==="fixa"?((document.getElementById("inv-carga-mat")||{}).value||""):"",
-    carga_localizacao: "",  // localização fica apenas no campo principal do item
+    // Quem recebe
+    carga_responsavel_grad:       tipoCarga==="fixa"?((document.getElementById("inv-carga-grad")||{}).value||""):"",
+    carga_responsavel_nome:       tipoCarga==="fixa"?((document.getElementById("inv-carga-nome")||{}).value||""):"",
+    carga_responsavel_matricula:  tipoCarga==="fixa"?((document.getElementById("inv-carga-mat")||{}).value||""):"",
+    carga_assinatura:             assin,
+    // Quem libera
+    carga_liberador_grad:         tipoCarga==="fixa"?((document.getElementById("inv-lib-grad")||{}).value||""):"",
+    carga_liberador_nome:         tipoCarga==="fixa"?((document.getElementById("inv-lib-nome")||{}).value||""):"",
+    carga_liberador_matricula:    tipoCarga==="fixa"?((document.getElementById("inv-lib-mat")||{}).value||""):"",
+    carga_liberador_assinatura:   assinLib,
+    carga_localizacao: "",
     carga_data: tipoCarga==="fixa"?new Date().toISOString():"",
-    carga_assinatura: assin,
     ativo: true
   };
   if(!state.invItens) state.invItens=[];
@@ -17151,6 +17189,7 @@ function renderInventario(main){
           h+="<button onclick='_invAbrirItem(\""+item.id+"\")' style='background:#1a1a1a;border:1px solid #333;color:#aaa;padding:4px 9px;border-radius:5px;font-size:11px;cursor:pointer'>✏️ Editar</button>";
           h+="<button onclick='_invAbrirMovimentacao(\""+item.id+"\")' style='background:#1a2a1a;border:1px solid #22c55e44;color:#22c55e;padding:4px 9px;border-radius:5px;font-size:11px;cursor:pointer'>🚛 Mover</button>";
           h+="<button onclick='_invVerHistorico(\""+item.id+"\")' style='background:#1a1a2a;border:1px solid #4a9fd433;color:#4a9fd4;padding:4px 9px;border-radius:5px;font-size:11px;cursor:pointer'>📜 Histórico</button>";
+          if(item.tipo_carga==="fixa"&&item.carga_responsavel_nome) h+="<button onclick='_invPDFRecibo(\""+item.id+"\")' style='background:#1a1a0a;border:1px solid #d4a87a55;color:#d4a87a;padding:4px 9px;border-radius:5px;font-size:11px;cursor:pointer'>🧾 Recibo</button>";
           h+="</div></div>";
           h+="</div>";
         });
@@ -17215,6 +17254,93 @@ function renderInventario(main){
 
   h+="</div>";
   main.innerHTML=h;
+}
+
+function _invPDFRecibo(itemId){
+  var item=(state.invItens||[]).find(function(x){return x.id===itemId;});
+  if(!item){ showToast("Item não encontrado","error"); return; }
+  var dt=item.carga_data?new Date(item.carga_data).toLocaleString("pt-BR"):new Date().toLocaleString("pt-BR");
+  var est=(INV_ESTADOS[item.estado]||{}).label||item.estado||"—";
+  var cat=(INV_CATS[item.categoria]||{}).label||item.categoria||"—";
+
+  var html="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Recibo de Carga</title><style>";
+  html+="*{box-sizing:border-box;margin:0;padding:0}";
+  html+="body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;color:#111;padding:28px}";
+  html+=".header{border-bottom:3px solid #1a3a6a;padding-bottom:12px;margin-bottom:18px}";
+  html+=".header h1{font-size:15px;color:#0f2040;font-weight:800}";
+  html+=".titulo{text-align:center;font-size:16px;font-weight:900;text-transform:uppercase;letter-spacing:1px;border:2px solid #1a3a6a;padding:8px;border-radius:6px;margin:14px 0;color:#0f2040}";
+  html+=".grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px}";
+  html+=".box{border:1px solid #ccd6e8;border-radius:6px;padding:10px 14px}";
+  html+=".lbl{font-size:9px;font-weight:700;color:#3a5a8a;text-transform:uppercase;letter-spacing:.5px;margin-bottom:3px}";
+  html+=".val{font-size:13px;font-weight:700;color:#0f1a2e}";
+  html+=".item-box{background:#f0f4ff;border:2px solid #1a3a6a;border-radius:8px;padding:14px;margin-bottom:16px}";
+  html+=".item-box h2{font-size:14px;color:#0f2040;margin-bottom:8px}";
+  html+=".item-row{display:flex;gap:16px;flex-wrap:wrap}";
+  html+=".item-campo{margin-bottom:4px}";
+  html+=".assin-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;padding-top:16px;border-top:2px solid #1a3a6a}";
+  html+=".assin-bloco{border:1px solid #ccd6e8;border-radius:8px;padding:14px;text-align:center}";
+  html+=".assin-bloco img{width:100%;max-height:80px;object-fit:contain;border:1px solid #e0e8f0;border-radius:4px;background:#fff;margin-bottom:8px}";
+  html+=".assin-linha{height:70px;border-bottom:1px solid #333;margin-bottom:8px}";
+  html+=".assin-nome{font-weight:700;font-size:12px;color:#0f2040}";
+  html+=".assin-sub{font-size:10px;color:#5a7a9a;margin-top:2px}";
+  html+=".rodape{margin-top:20px;border-top:1px solid #ccd6e8;padding-top:8px;text-align:center;font-size:9px;color:#8a9aba}";
+  html+="@media print{body{padding:10px}@page{size:A4;margin:1.5cm}}";
+  html+="</style></head><body>";
+
+  html+="<div class='header'><h1>Polícia Militar da Bahia — 77ª CIPM · Base Comunitária de Segurança Nova Cidade</h1><p style='font-size:10px;color:#3a5a8a;margin-top:3px'>Sistema IARA · Controle de Inventário</p></div>";
+  html+="<div class='titulo'>Recibo de Carga — "+esc(cat)+"</div>";
+
+  // Dados do item
+  html+="<div class='item-box'>";
+  html+="<h2>📦 Item</h2>";
+  html+="<div class='item-row'>";
+  if(item.tombamento) html+="<div class='item-campo'><div class='lbl'>Tombamento / Nº</div><div class='val'>"+esc(item.tombamento)+"</div></div>";
+  html+="<div class='item-campo'><div class='lbl'>Descrição</div><div class='val'>"+esc(item.descricao)+"</div></div>";
+  if(item.marca||item.modelo) html+="<div class='item-campo'><div class='lbl'>Marca / Modelo</div><div class='val'>"+esc([item.marca,item.modelo].filter(Boolean).join(" "))+"</div></div>";
+  if(item.numero_serie) html+="<div class='item-campo'><div class='lbl'>Nº Série</div><div class='val'>"+esc(item.numero_serie)+"</div></div>";
+  html+="<div class='item-campo'><div class='lbl'>Estado</div><div class='val'>"+esc(est)+"</div></div>";
+  html+="<div class='item-campo'><div class='lbl'>Localização</div><div class='val'>"+esc(item.localizacao||"—")+"</div></div>";
+  html+="</div></div>";
+
+  // Data e protocolo
+  html+="<div class='grid2'>";
+  html+="<div class='box'><div class='lbl'>Data / Hora da Carga</div><div class='val'>"+dt+"</div></div>";
+  html+="<div class='box'><div class='lbl'>Categoria</div><div class='val'>"+esc(cat)+"</div></div>";
+  html+="</div>";
+
+  // Assinaturas
+  html+="<div class='assin-grid'>";
+  // Quem recebe
+  html+="<div class='assin-bloco'>";
+  html+="<div class='lbl' style='text-align:left;margin-bottom:8px;color:#1a4a1a'>👮 Policial que Recebe a Carga</div>";
+  if(item.carga_assinatura){
+    html+="<img src='"+item.carga_assinatura+"'/>";
+  } else {
+    html+="<div class='assin-linha'></div>";
+  }
+  html+="<div class='assin-nome'>"+(item.carga_responsavel_grad?esc(item.carga_responsavel_grad)+" ":"")+esc(item.carga_responsavel_nome||"—")+"</div>";
+  if(item.carga_responsavel_matricula) html+="<div class='assin-sub'>Matr.: "+esc(item.carga_responsavel_matricula)+"</div>";
+  html+="<div class='assin-sub' style='margin-top:4px;font-style:italic'>Responsável pela guarda do item</div>";
+  html+="</div>";
+  // Quem libera
+  html+="<div class='assin-bloco'>";
+  html+="<div class='lbl' style='text-align:left;margin-bottom:8px;color:#4a2a00'>🗝️ Responsável que Libera a Carga</div>";
+  if(item.carga_liberador_assinatura){
+    html+="<img src='"+item.carga_liberador_assinatura+"'/>";
+  } else {
+    html+="<div class='assin-linha'></div>";
+  }
+  html+="<div class='assin-nome'>"+(item.carga_liberador_grad?esc(item.carga_liberador_grad)+" ":"")+esc(item.carga_liberador_nome||"—")+"</div>";
+  if(item.carga_liberador_matricula) html+="<div class='assin-sub'>Matr.: "+esc(item.carga_liberador_matricula)+"</div>";
+  html+="<div class='assin-sub' style='margin-top:4px;font-style:italic'>Autorizado a liberar o item</div>";
+  html+="</div>";
+  html+="</div>";
+
+  html+="<div class='rodape'>Documento gerado pelo Sistema IARA · 77ª CIPM BCS · "+new Date().toLocaleString("pt-BR")+"</div>";
+  html+="</body></html>";
+
+  var w=window.open("","_blank","width=800,height=900");
+  if(w){ w.document.write(html); w.document.close(); setTimeout(function(){w.print();},500); }
 }
 
 function _invGerarPDF(){
