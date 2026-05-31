@@ -16598,6 +16598,51 @@ function _invSalvarLocal(){
   localStorage.setItem("bcs_inv_conf",  JSON.stringify(state.invConferencias||[]));
 }
 
+// ── Sync inventário → Sheets (JSONP, fire-and-forget) ──────────
+function _invEnviarSheets(tipo, dados){
+  if(!SHEETS_URL) return;
+  // Remove foto e assinaturas grandes para não estourar a URL
+  var copia=Object.assign({},dados);
+  if(copia.foto&&copia.foto.length>500) copia.foto="[foto_local]";
+  ["carga_assinatura","carga_liberador_assinatura",
+   "autorizador_assinatura","receptor_assinatura","assin1","assin2"]
+    .forEach(function(k){ if(copia[k]&&copia[k].length>500) copia[k]="[assin_local]"; });
+  var cb="cb_inv_"+Date.now()+"_"+Math.random().toString(36).slice(2,5);
+  window[cb]=function(){ delete window[cb]; };
+  var sc=document.createElement("script");
+  sc.src=SHEETS_URL
+    +"?acao=salvar&tipo="+encodeURIComponent(tipo)
+    +"&dados="+encodeURIComponent(JSON.stringify(copia))
+    +"&token="+encodeURIComponent(BCS_TOKEN)
+    +"&callback="+cb;
+  sc.onerror=function(){ delete window[cb]; };
+  document.head.appendChild(sc);
+  setTimeout(function(){ if(window[cb]){ delete window[cb]; } }, 15000);
+}
+
+// ── Carrega inventário do Sheets e merge com local ──────────────
+async function _invSincronizarDoSheets(){
+  if(!SHEETS_URL||state._invSincronizando) return;
+  state._invSincronizando=true;
+  try{
+    var rItens = await _sheetsGet({acao:"listar",tipo:"inv_itens"});
+    var rMovs  = await _sheetsGet({acao:"listar",tipo:"inv_movimentacoes"});
+    var rConfs = await _sheetsGet({acao:"listar",tipo:"inv_conferencias"});
+    function _mergeInv(local, remoto){
+      if(!remoto||!remoto.ok||!Array.isArray(remoto.dados)||!remoto.dados.length) return local||[];
+      var ids=new Set((local||[]).map(function(x){return String(x.id);}));
+      var merged=(local||[]).slice();
+      remoto.dados.forEach(function(x){ if(x&&x.id&&!ids.has(String(x.id))) merged.push(x); });
+      return merged;
+    }
+    if(rItens&&rItens.ok) state.invItens=_mergeInv(state.invItens, rItens);
+    if(rMovs &&rMovs.ok)  state.invMovimentacoes=_mergeInv(state.invMovimentacoes, rMovs);
+    if(rConfs&&rConfs.ok) state.invConferencias=_mergeInv(state.invConferencias, rConfs);
+    _invSalvarLocal();
+  }catch(e){ console.warn("[INV] Sync falhou:",e); }
+  finally{ state._invSincronizando=false; }
+}
+
 function _invId(prefix){
   return (prefix||"inv")+"_"+Date.now()+"_"+Math.random().toString(36).slice(2,7);
 }
@@ -16920,8 +16965,9 @@ function _invSalvarItem(idExistente){
     state.invItens.push(item);
   }
   _invSalvarLocal();
+  _invEnviarSheets("inv_item", item);
   document.getElementById("modal-inv-item").remove();
-  showToast("✓ Item salvo com sucesso!");
+  showToast("✓ Item salvo e sincronizando...");
   var main=document.getElementById("main-content")||document.getElementById("main");
   if(main) renderInventario(main);
 }
@@ -17073,8 +17119,9 @@ function _invConfirmarMovimentacao(itemId, origem){
   if(!state.invMovimentacoes) state.invMovimentacoes=[];
   state.invMovimentacoes.push(mov);
   var idx=(state.invItens||[]).findIndex(function(x){return x.id===itemId;});
-  if(idx>=0) state.invItens[idx].localizacao=dest;
+  if(idx>=0){ _invEnviarSheets("inv_item", state.invItens[idx]); state.invItens[idx].localizacao=dest; }
   _invSalvarLocal();
+  _invEnviarSheets("inv_movimentacao", mov);
   document.getElementById("modal-inv-mov").remove();
   showToast("✓ Movimentação registrada! "+esc(origem)+" → "+esc(dest));
   var main=document.getElementById("main-content")||document.getElementById("main");
@@ -17245,6 +17292,7 @@ function _invSalvarConferencia(confId, concluir){
   var cidx=(state.invConferencias||[]).findIndex(function(x){return x.id===confId;});
   if(cidx>=0) state.invConferencias[cidx]=conf; else state.invConferencias.push(conf);
   _invSalvarLocal();
+  _invEnviarSheets("inv_conferencia", conf);
   document.getElementById("modal-inv-conf").remove();
   if(concluir){
     showToast("✓ Conferência concluída!");
@@ -17265,6 +17313,15 @@ function renderInventario(main){
   if(!state.invItens) state.invItens=[];
   if(!state.invMovimentacoes) state.invMovimentacoes=[];
   if(!state.invConferencias) state.invConferencias=[];
+  // Sync silencioso ao abrir (primeira vez ou após 5 min)
+  var _agInv=state._invLastSync||0;
+  if(Date.now()-_agInv > 300000){
+    state._invLastSync=Date.now();
+    _invSincronizarDoSheets().then(function(){
+      var m=document.getElementById("main-content")||document.getElementById("main");
+      if(m&&state.tela==="inventario") renderInventario(m);
+    });
+  }
 
   var tab=state._invTab||"itens";
   var filtCat=state._invFiltCat||"";
@@ -17642,8 +17699,10 @@ function _invConfirmarDevolucao(itemId){
     state.invItens[idx].carga_responsavel_matricula="";
     state.invItens[idx].carga_assinatura="";
     state.invItens[idx].carga_data="";
+    _invEnviarSheets("inv_item", state.invItens[idx]);
   }
   _invSalvarLocal();
+  _invEnviarSheets("inv_movimentacao", mov);
   document.getElementById("modal-inv-dev").remove();
   showToast("✓ Item devolvido ao Almoxarifado!");
   var main=document.getElementById("main-content")||document.getElementById("main");
