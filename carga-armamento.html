@@ -894,6 +894,55 @@ function enviarCarga(e){
     localStorage.setItem(_chave, JSON.stringify(_local));
   }catch(er){}
 
+  // ── Auto-cadastro de policiais no Sheets ───────────────────────
+  // Extrai posto e nome do campo (ex: "3°Sgt Silva" → posto="3°Sgt", nome="Silva")
+  function _extrairPostoNome(texto){
+    if(!texto) return {posto:"", nome:""};
+    var postos=["Cel","TC","Maj","Cap","1°Ten","2°Ten","Asp","SubTen","1°Sgt","2°Sgt","3°Sgt","Cb","Sd","SD","CB"];
+    for(var i=0;i<postos.length;i++){
+      if(texto.indexOf(postos[i])===0)
+        return {posto:postos[i], nome:texto.slice(postos[i].length).trim()};
+    }
+    return {posto:"", nome:texto.trim()};
+  }
+
+  function _autoRegistrarPolicial(matricula, nomeCompleto){
+    if(!matricula || !nomeCompleto || !SHEETS_URL || !TOKEN) return;
+    // Só cadastra se ainda não está no cache
+    var jaExiste = POLICIAIS_CACHE.some(function(p){
+      return p.matricula.toLowerCase() === matricula.toLowerCase();
+    });
+    if(jaExiste) return;
+    var pn = _extrairPostoNome(nomeCompleto);
+    var pol = {
+      id:       "POL-"+Date.now()+"-"+Math.random().toString(36).slice(2,6),
+      matricula: matricula,
+      posto:    pn.posto,
+      nome:     pn.nome || nomeCompleto,
+      turno:    "",
+      telefone: "",
+      status:   "ativo",
+      criadoEm: new Date().toISOString()
+    };
+    // Adiciona ao cache local imediatamente
+    POLICIAIS_CACHE.push(pol);
+    // Envia ao Sheets
+    var cb = "cb_pol_"+Date.now();
+    window[cb] = function(){ delete window[cb]; };
+    var sc = document.createElement("script");
+    sc.src = SHEETS_URL
+      +"?acao=salvar&tipo=policial"
+      +"&dados="+encodeURIComponent(JSON.stringify(pol))
+      +"&token="+encodeURIComponent(TOKEN)
+      +"&callback="+cb;
+    sc.onerror = function(){ delete window[cb]; };
+    document.head.appendChild(sc);
+  }
+
+  // Registra policial solicitante e adjunto automaticamente
+  _autoRegistrarPolicial(dados.matricula,         dados.nome);
+  _autoRegistrarPolicial(dados.matricula_adjunto, dados.nome_adjunto);
+
   if(SHEETS_URL && TOKEN){
     // Comprime assinaturas para miniatura JPEG (~3-5KB) antes de enviar ao Sheets
     // Evita estouro do limite de URL do JSONP mantendo legibilidade no PDF
