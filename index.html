@@ -16564,7 +16564,27 @@ var INV_SUBS = {
   material_permanente: ["Mobiliário","Veículo","Equipamento eletrônico","Computador/Impressora","Armário/Cofre","Climatização","Outro"],
   material_consumo:    ["Papelaria","Limpeza","Higiene","Primeiros socorros","Combustível","Outro"]
 };
-var INV_LOCAIS = ["Sala de Plantão","Sala do Comandante","Sala de Reuniões","Almoxarifado","Garagem","Copa","Área Externa","Depósito","Arsenal","Recepção"];
+var INV_LOCAIS_FIXOS = [
+  "Almoxarifado","SPO","SSO","CORSET","STM",
+  "Sala de Meios","BCS","Sala do Comando","Sala do Subcomando",
+  "Recepção","Pelotão Urbis 1","Pelotão Urbis 6","Cozinha"
+];
+// Retorna todos os locais (fixos + cadastrados pelo usuário)
+function _invGetLocais(){
+  var extras = JSON.parse(localStorage.getItem("bcs_inv_locais_extra")||"[]");
+  return INV_LOCAIS_FIXOS.concat(extras.filter(function(l){return INV_LOCAIS_FIXOS.indexOf(l)<0;}));
+}
+function _invAddLocal(nome){
+  var n = (nome||"").trim();
+  if(!n) return false;
+  var extras = JSON.parse(localStorage.getItem("bcs_inv_locais_extra")||"[]");
+  if(INV_LOCAIS_FIXOS.indexOf(n)>=0 || extras.indexOf(n)>=0) return false;
+  extras.push(n);
+  localStorage.setItem("bcs_inv_locais_extra", JSON.stringify(extras));
+  return true;
+}
+// Compat: mantém INV_LOCAIS apontando para a função dinâmica
+var INV_LOCAIS = INV_LOCAIS_FIXOS; // legado — use _invGetLocais() para a lista completa
 var INV_ESTADOS = {
   otimo:       {label:"Ótimo",       cor:"#22c55e"},
   bom:         {label:"Bom",         cor:"#4a9fd4"},
@@ -16873,54 +16893,157 @@ function _invSalvarItem(idExistente){
   if(main) renderInventario(main);
 }
 
+function _invPadBranco(id){
+  var c=document.getElementById(id); if(!c) return;
+  var ctx=c.getContext("2d");
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
+  _invIniciarPad(c,null);
+}
+function _invCapturarPad(id){
+  var c=document.getElementById(id); if(!c) return "";
+  var px=c.getContext("2d").getImageData(0,0,c.width,c.height).data;
+  for(var i=0;i<px.length;i+=4){ if(px[i]<250||px[i+1]<250||px[i+2]<250) return c.toDataURL("image/jpeg",0.85); }
+  return "";
+}
+
 function _invAbrirMovimentacao(itemId){
   var item=(state.invItens||[]).find(function(x){return x.id===itemId;});
   if(!item) return;
-  var locOpts=INV_LOCAIS.map(function(l){return "<option"+(l===item.localizacao?" disabled":"")+">"+l+"</option>";}).join("");
-  var html="<div id='modal-inv-mov' style='position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9100;display:flex;align-items:center;justify-content:center;padding:20px'>";
-  html+="<div style='background:#111;border:1px solid #2a3a2a;border-radius:14px;width:100%;max-width:500px;padding:0;overflow:hidden'>";
+  var todos=_invGetLocais();
+  var IS="width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box";
+
+  var locOpts=todos.map(function(l){
+    return "<option value='"+esc(l)+"'"+(l===item.localizacao?" disabled":"")+">"+esc(l)+"</option>";
+  }).join("");
+  locOpts+="<option value='__novo__'>+ Cadastrar novo local...</option>";
+
+  var html="<div id='modal-inv-mov' style='position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9100;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto'>";
+  html+="<div style='background:#111;border:1px solid #2a3a2a;border-radius:14px;width:100%;max-width:580px;padding:0;overflow:hidden;margin-bottom:40px'>";
+
+  // Cabeçalho
   html+="<div style='background:#0a1a0a;padding:14px 18px;border-bottom:1px solid #1a2a1a;display:flex;justify-content:space-between;align-items:center'>";
-  html+="<span style='color:#10b981;font-size:14px;font-weight:700'>🚛 Movimentar Item</span>";
+  html+="<span style='color:#10b981;font-size:14px;font-weight:700'>🚛 Movimentação de Item</span>";
   html+="<button onclick=\"document.getElementById('modal-inv-mov').remove()\" style='background:none;border:none;color:#888;font-size:18px;cursor:pointer'>✕</button>";
-  html+="</div><div style='padding:18px;display:flex;flex-direction:column;gap:12px'>";
-  html+="<div style='background:#1a1208;border-radius:8px;padding:10px 14px'><span style='color:#d4a87a;font-size:12px'>Item: </span><span style='color:#e8e0d0;font-size:13px;font-weight:700'>"+esc(item.descricao)+"</span><br><span style='color:#999;font-size:11px'>Local atual: "+esc(item.localizacao||"—")+"</span></div>";
-  html+="<div><label style='color:#999;font-size:11px'>Destino*</label><select id='mov-dest' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'>"+locOpts+"</select></div>";
-  html+="<div><label style='color:#999;font-size:11px'>Responsável pela Movimentação*</label><input id='mov-resp' placeholder='Nome e graduação' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
-  html+="<div><label style='color:#999;font-size:11px'>Motivo</label><input id='mov-motivo' placeholder='Motivo da movimentação' style='width:100%;background:#1a1a1a;border:1px solid #333;color:#e8e0d0;padding:8px;border-radius:6px;font-size:13px;box-sizing:border-box'></div>";
-  html+="<div><label style='color:#999;font-size:11px'>Assinatura do Responsável</label>";
-  html+="<div style='position:relative;margin-top:4px;border:1px solid #2a3a2a;border-radius:8px;background:#0d0d0d'>";
-  html+="<canvas id='mov-pad' width='450' height='100' style='width:100%;height:100px;display:block;cursor:crosshair;border-radius:8px'></canvas>";
-  html+="<button type='button' onclick='document.getElementById(\"mov-pad\").getContext(\"2d\").clearRect(0,0,450,100)' style='position:absolute;top:4px;right:6px;background:#1a1a1a;border:1px solid #333;color:#aaa;padding:2px 7px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button>";
+  html+="</div>";
+
+  html+="<div style='padding:18px;display:flex;flex-direction:column;gap:14px'>";
+
+  // Info do item
+  html+="<div style='background:#1a1208;border-radius:8px;padding:10px 14px'>";
+  html+="<span style='color:#d4a87a;font-size:11px'>Item: </span><span style='color:#e8e0d0;font-size:13px;font-weight:700'>"+esc(item.descricao)+"</span>";
+  if(item.tombamento) html+=" <span style='color:#666;font-size:11px'>#"+esc(item.tombamento)+"</span>";
+  html+="<br><span style='color:#999;font-size:11px'>📍 Origem: <b>"+esc(item.localizacao||"Almoxarifado")+"</b></span>";
+  html+="</div>";
+
+  // Destino + motivo
+  html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px'>";
+  html+="<div><label style='color:#10b981;font-size:11px;font-weight:700;display:block;margin-bottom:4px'>Destino *</label>";
+  html+="<select id='mov-dest' onchange='_invDestChange(this)' style='"+IS+"'>"+locOpts+"</select>";
+  html+="<div id='mov-novo-local' style='display:none;margin-top:6px'><input id='mov-novo-nome' placeholder='Nome do novo local' style='"+IS+"'/><button onclick='_invSalvarNovoLocal()' type='button' style='width:100%;background:#10b981;border:none;color:#fff;padding:6px;border-radius:5px;font-size:11px;font-weight:700;cursor:pointer;margin-top:4px'>+ Salvar Local</button></div>";
+  html+="</div>";
+  html+="<div><label style='color:#999;font-size:11px;display:block;margin-bottom:4px'>Motivo / Observação</label>";
+  html+="<input id='mov-motivo' placeholder='Ex: Uso em operação' style='"+IS+"'/></div>";
+  html+="</div>";
+
+  // Quem autoriza
+  html+="<div style='background:#1a0d08;border:1px solid #3a1a08;border-radius:8px;padding:12px'>";
+  html+="<p style='color:#d4a87a;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px'>🗝️ Quem Autoriza a Movimentação</p>";
+  html+="<div style='display:grid;grid-template-columns:90px 1fr 120px;gap:8px;margin-bottom:8px'>";
+  html+="<div><label style='color:#999;font-size:10px'>Graduação</label><input id='mov-aut-grad' placeholder='Sgt...' style='"+IS+"'></div>";
+  html+="<div><label style='color:#999;font-size:10px'>Nome *</label><input id='mov-aut-nome' placeholder='Nome completo' style='"+IS+"'></div>";
+  html+="<div><label style='color:#999;font-size:10px'>Matrícula</label><input id='mov-aut-mat' placeholder='Nº' style='"+IS+"'></div>";
+  html+="</div>";
+  html+="<label style='color:#999;font-size:10px'>Assinatura de quem autoriza</label>";
+  html+="<div style='position:relative;margin-top:4px;border:1px solid #3a1a08;border-radius:7px;overflow:hidden'>";
+  html+="<canvas id='mov-pad-aut' width='520' height='150' style='width:100%;height:150px;display:block;cursor:crosshair;touch-action:none;background:#fff'></canvas>";
+  html+="<button type='button' onclick='_invLimparMovPad(\"mov-pad-aut\")' style='position:absolute;top:5px;right:6px;background:rgba(240,240,240,.9);border:1px solid #ccc;color:#555;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button>";
   html+="</div></div>";
+
+  // Quem recebe / responsável pelo local
+  html+="<div style='background:#0d1f0d;border:1px solid #1a3a1a;border-radius:8px;padding:12px'>";
+  html+="<p style='color:#4ade80;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin:0 0 10px'>👮 Quem Recebe / Responsável pelo Local</p>";
+  html+="<div style='display:grid;grid-template-columns:90px 1fr 120px;gap:8px;margin-bottom:8px'>";
+  html+="<div><label style='color:#999;font-size:10px'>Graduação</label><input id='mov-rec-grad' placeholder='Sd...' style='"+IS+"'></div>";
+  html+="<div><label style='color:#999;font-size:10px'>Nome *</label><input id='mov-rec-nome' placeholder='Nome completo' style='"+IS+"'></div>";
+  html+="<div><label style='color:#999;font-size:10px'>Matrícula</label><input id='mov-rec-mat' placeholder='Nº' style='"+IS+"'></div>";
+  html+="</div>";
+  html+="<label style='color:#999;font-size:10px'>Assinatura de quem recebe</label>";
+  html+="<div style='position:relative;margin-top:4px;border:1px solid #1a3a1a;border-radius:7px;overflow:hidden'>";
+  html+="<canvas id='mov-pad-rec' width='520' height='150' style='width:100%;height:150px;display:block;cursor:crosshair;touch-action:none;background:#fff'></canvas>";
+  html+="<button type='button' onclick='_invLimparMovPad(\"mov-pad-rec\")' style='position:absolute;top:5px;right:6px;background:rgba(240,240,240,.9);border:1px solid #ccc;color:#555;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button>";
+  html+="</div></div>";
+
+  // Botões
   html+="<div style='display:flex;gap:10px;justify-content:flex-end'>";
-  html+="<button onclick=\"document.getElementById('modal-inv-mov').remove()\" style='background:transparent;border:1px solid #333;color:#888;padding:8px 18px;border-radius:7px;font-size:13px;cursor:pointer'>Cancelar</button>";
-  html+="<button onclick='_invConfirmarMovimentacao(\""+esc(itemId)+"\",\""+esc(item.localizacao||"")+"\")' style='background:#10b981;border:none;color:#fff;padding:8px 20px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer'>✓ Confirmar</button>";
+  html+="<button onclick=\"document.getElementById('modal-inv-mov').remove()\" style='background:transparent;border:1px solid #333;color:#888;padding:9px 20px;border-radius:7px;font-size:13px;cursor:pointer'>Cancelar</button>";
+  html+="<button onclick='_invConfirmarMovimentacao(\""+esc(itemId)+"\",\""+esc(item.localizacao||"Almoxarifado")+"\")' style='background:#10b981;border:none;color:#fff;padding:9px 24px;border-radius:7px;font-size:14px;font-weight:700;cursor:pointer'>✓ Registrar</button>";
   html+="</div></div></div></div>";
+
   document.body.insertAdjacentHTML("beforeend", html);
-  var padMov=document.getElementById("mov-pad");
-  if(padMov) _invIniciarPad(padMov,null);
+  _invPadBranco("mov-pad-aut");
+  _invPadBranco("mov-pad-rec");
+}
+
+function _invLimparMovPad(id){
+  var c=document.getElementById(id); if(!c) return;
+  var ctx=c.getContext("2d");
+  ctx.fillStyle="#fff"; ctx.fillRect(0,0,c.width,c.height);
+}
+
+function _invDestChange(sel){
+  var novo=document.getElementById("mov-novo-local");
+  if(novo) novo.style.display=sel.value==="__novo__"?"block":"none";
+}
+
+function _invSalvarNovoLocal(){
+  var inp=document.getElementById("mov-novo-nome");
+  var nome=(inp&&inp.value)||"";
+  if(!_invAddLocal(nome)){ showToast("Local inválido ou já existe","error"); return; }
+  // Atualiza o select com o novo local
+  var sel=document.getElementById("mov-dest");
+  if(sel){
+    var opt=document.createElement("option");
+    opt.value=nome; opt.textContent=nome;
+    sel.insertBefore(opt, sel.options[sel.options.length-1]);
+    sel.value=nome;
+  }
+  document.getElementById("mov-novo-local").style.display="none";
+  showToast("✓ Local '"+nome+"' cadastrado!");
 }
 
 function _invConfirmarMovimentacao(itemId, origem){
   var dest=(document.getElementById("mov-dest")||{}).value||"";
-  var resp=(document.getElementById("mov-resp")||{}).value||"";
-  if(!dest||!resp.trim()){showToast("Informe destino e responsável","error");return;}
-  var padMov=document.getElementById("mov-pad");
-  var assin="";
-  if(padMov){
-    var ctx2=padMov.getContext("2d");
-    var px2=ctx2.getImageData(0,0,padMov.width,padMov.height).data;
-    var has=false;for(var i=3;i<px2.length;i+=4){if(px2[i]>0){has=true;break;}}
-    if(has) assin=padMov.toDataURL("image/jpeg",0.8);
-  }
-  var mov={id:_invId("mov"),itemId:itemId,dataHora:new Date().toISOString(),origem:origem,destino:dest,responsavel:resp,motivo:(document.getElementById("mov-motivo")||{}).value||"",assinatura:assin};
+  if(!dest||dest==="__novo__"){ showToast("Selecione o destino","error"); return; }
+  var autNome=(document.getElementById("mov-aut-nome")||{}).value||"";
+  var recNome=(document.getElementById("mov-rec-nome")||{}).value||"";
+  if(!autNome.trim()){ showToast("Informe quem autoriza","error"); return; }
+  if(!recNome.trim()){ showToast("Informe quem recebe / responsável","error"); return; }
+
+  var mov={
+    id:_invId("mov"), itemId:itemId,
+    dataHora:new Date().toISOString(),
+    origem:origem, destino:dest,
+    motivo:(document.getElementById("mov-motivo")||{}).value||"",
+    // Autorizador
+    autorizador_grad:(document.getElementById("mov-aut-grad")||{}).value||"",
+    autorizador_nome:autNome.trim(),
+    autorizador_mat:(document.getElementById("mov-aut-mat")||{}).value||"",
+    autorizador_assinatura:_invCapturarPad("mov-pad-aut"),
+    // Receptor / responsável
+    receptor_grad:(document.getElementById("mov-rec-grad")||{}).value||"",
+    receptor_nome:recNome.trim(),
+    receptor_mat:(document.getElementById("mov-rec-mat")||{}).value||"",
+    receptor_assinatura:_invCapturarPad("mov-pad-rec"),
+    // Legado
+    responsavel:autNome.trim(), assinatura:_invCapturarPad("mov-pad-aut")
+  };
   if(!state.invMovimentacoes) state.invMovimentacoes=[];
   state.invMovimentacoes.push(mov);
   var idx=(state.invItens||[]).findIndex(function(x){return x.id===itemId;});
   if(idx>=0) state.invItens[idx].localizacao=dest;
   _invSalvarLocal();
   document.getElementById("modal-inv-mov").remove();
-  showToast("✓ Movimentação registrada! Item agora em: "+dest);
+  showToast("✓ Movimentação registrada! "+esc(origem)+" → "+esc(dest));
   var main=document.getElementById("main-content")||document.getElementById("main");
   if(main) renderInventario(main);
 }
@@ -16940,15 +17063,40 @@ function _invVerHistorico(itemId){
   } else {
     movs.forEach(function(m){
       var dt=m.dataHora?new Date(m.dataHora).toLocaleString("pt-BR"):"—";
+      var autNome=(m.autorizador_grad?m.autorizador_grad+" ":"")+esc(m.autorizador_nome||m.responsavel||"—");
+      var recNome=(m.receptor_grad?m.receptor_grad+" ":"")+esc(m.receptor_nome||"—");
       html+="<div style='background:#1a1a0a;border:1px solid #2a2a1a;border-radius:8px;padding:12px'>";
-      html+="<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:6px'>";
+      // Cabeçalho
+      html+="<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px'>";
       html+="<span style='color:#d4a87a;font-size:11px;font-weight:700'>"+dt+"</span>";
-      html+="<span style='color:#e8e0d0;font-size:12px'>"+esc(m.responsavel||"—")+"</span>";
+      html+="<span style='color:#aaa;font-size:11px;font-weight:700'>"+esc(m.origem||"—")+" → <span style='color:#22c55e'>"+esc(m.destino||"—")+"</span></span>";
       html+="</div>";
-      html+="<div style='color:#aaa;font-size:12px;margin-bottom:4px'>📍 <b style='color:#4a9fd4'>"+esc(m.origem||"—")+"</b> → <b style='color:#22c55e'>"+esc(m.destino||"—")+"</b></div>";
-      if(m.motivo) html+="<div style='color:#888;font-size:11px'>Motivo: "+esc(m.motivo)+"</div>";
-      if(m.assinatura) html+="<div style='margin-top:8px'><img src='"+m.assinatura+"' style='max-width:200px;height:50px;object-fit:contain;border:1px solid #333;border-radius:4px;background:#fff'></div>";
+      if(m.motivo) html+="<div style='color:#888;font-size:11px;margin-bottom:8px'>Motivo: "+esc(m.motivo)+"</div>";
+      // Assinaturas
+      html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:8px'>";
+      // Autorizador
+      html+="<div style='background:#1a0d08;border:1px solid #2a1a08;border-radius:6px;padding:8px;text-align:center'>";
+      html+="<p style='color:#d4a87a;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 5px'>🗝️ Autorizou</p>";
+      if(m.autorizador_assinatura||m.assinatura){
+        html+="<img src='"+(m.autorizador_assinatura||m.assinatura)+"' style='width:100%;max-height:55px;object-fit:contain;border:1px solid #3a2a18;border-radius:4px;background:#fff;display:block;margin:0 auto 4px'>";
+      } else {
+        html+="<div style='height:40px;border-bottom:1px solid #5a4a3a;margin-bottom:4px'></div>";
+      }
+      html+="<p style='color:#e8e0d0;font-size:10px;font-weight:700;margin:0'>"+autNome+"</p>";
+      if(m.autorizador_mat) html+="<p style='color:#888;font-size:9px;margin:1px 0 0'>Matr.: "+esc(m.autorizador_mat)+"</p>";
       html+="</div>";
+      // Receptor
+      html+="<div style='background:#0d1f0d;border:1px solid #1a2a1a;border-radius:6px;padding:8px;text-align:center'>";
+      html+="<p style='color:#4ade80;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 5px'>👮 Recebeu</p>";
+      if(m.receptor_assinatura){
+        html+="<img src='"+m.receptor_assinatura+"' style='width:100%;max-height:55px;object-fit:contain;border:1px solid #1a3a1a;border-radius:4px;background:#fff;display:block;margin:0 auto 4px'>";
+      } else {
+        html+="<div style='height:40px;border-bottom:1px solid #2a3a2a;margin-bottom:4px'></div>";
+      }
+      html+="<p style='color:#e8e0d0;font-size:10px;font-weight:700;margin:0'>"+recNome+"</p>";
+      if(m.receptor_mat) html+="<p style='color:#888;font-size:9px;margin:1px 0 0'>Matr.: "+esc(m.receptor_mat)+"</p>";
+      html+="</div>";
+      html+="</div></div>";
     });
   }
   html+="</div></div></div>";
