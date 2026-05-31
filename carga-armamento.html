@@ -49,7 +49,7 @@ input:focus,select:focus{ border-color:#3a6ae8; }
 .lista-vazia{ text-align:center; padding:20px; background:#070d1a; border:1px dashed #1a3a6a; border-radius:10px; color:#1a3a5a; font-size:12px; margin-bottom:14px; }
 .ic-mun-row{ display:flex; gap:8px; margin-top:6px; }
 .ic-mun-row input{ background:#070d1a; border:1px solid #1a3a4a; color:#e8f0ff; padding:6px 8px; border-radius:6px; font-size:13px; outline:none; }
-.assin-box{ border:2px dashed #1a3a6a; border-radius:10px; background:#070d1a; position:relative; overflow:hidden; }
+.assin-box{ border:2px solid #3a6ae8; border-radius:10px; background:#fff; position:relative; overflow:hidden; }
 .assin-box canvas{ display:block; width:100%; touch-action:none; cursor:crosshair; }
 .assin-label{ position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); color:#1a3a5a; font-size:12px; pointer-events:none; text-align:center; white-space:nowrap; transition:opacity .3s; }
 .assin-actions{ display:flex; gap:8px; margin-top:8px; }
@@ -148,13 +148,15 @@ select option{ background:#0f1a2e; }
     <!-- Assinatura do Policial -->
     <div class="campo">
       <span id="lbl-assin-pol">✍ Assinatura do Policial <em>*</em></span>
-      <div class="assin-box" id="assin-box">
+      <div class="assin-box" id="assin-box" style="background:#fff;border:2px solid #3a6ae8">
         <canvas id="assin-canvas" height="130"></canvas>
-        <div class="assin-label" id="assin-label">Assine aqui com o dedo</div>
+        <div class="assin-label" id="assin-label" style="color:#ccc">Assine aqui com o dedo</div>
       </div>
       <div class="assin-actions">
         <button type="button" class="btn-limpar" onclick="limparAssinatura('pol')">🗑 Limpar</button>
+        <span style="color:#3a6ab8;font-size:11px;align-self:center">↓ Prévia capturada:</span>
       </div>
+      <img id="assin-canvas-prev" style="display:none;width:100%;max-height:70px;object-fit:contain;border:1px solid #22c55e;border-radius:6px;background:#f5f5f5;margin-top:4px" alt="prévia assinatura"/>
       <div class="erro-msg" id="erro-assin">Assinatura do policial obrigatória</div>
     </div>
 
@@ -176,13 +178,15 @@ select option{ background:#0f1a2e; }
     <!-- Assinatura do Adjunto / Recebedor -->
     <div class="campo">
       <span id="lbl-assin-adj">✍ Assinatura do Adjunto Responsável <em>*</em></span>
-      <div class="assin-box" id="assin-box-adj">
+      <div class="assin-box" id="assin-box-adj" style="background:#fff;border:2px solid #3a6ae8">
         <canvas id="assin-canvas-adj" height="130"></canvas>
-        <div class="assin-label" id="assin-label-adj">Adjunto assina aqui</div>
+        <div class="assin-label" id="assin-label-adj" style="color:#ccc">Adjunto assina aqui</div>
       </div>
       <div class="assin-actions">
         <button type="button" class="btn-limpar" onclick="limparAssinatura('adj')">🗑 Limpar</button>
+        <span style="color:#3a6ab8;font-size:11px;align-self:center">↓ Prévia capturada:</span>
       </div>
+      <img id="assin-canvas-adj-prev" style="display:none;width:100%;max-height:70px;object-fit:contain;border:1px solid #22c55e;border-radius:6px;background:#f5f5f5;margin-top:4px" alt="prévia assinatura adjunto"/>
       <div class="erro-msg" id="erro-assin-adj">Assinatura do adjunto obrigatória</div>
     </div>
 
@@ -694,35 +698,46 @@ function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;")
 
 // ── Assinaturas Digitais (Policial + Adjunto) ─────────
 function criarCanvas(canvasId, boxId, labelId){
-  var cv  = document.getElementById(canvasId);
-  var ctx = cv.getContext("2d");
+  var cv      = document.getElementById(canvasId);
+  var prevId  = canvasId + "-prev";   // id da imagem de prévia
   var desenhando = false;
   var temAssin   = false;
-  var _dataURL   = null; // snapshot salvo após cada traço completo
+  var _dataURL   = null;
 
-  // Canvas fixo 600x130 — sem escala por devicePixelRatio
-  // Evita toda complexidade de retina que apagava os traços
+  function _ctx(){ return cv.getContext("2d"); }
+
+  function _initCtx(){
+    var ctx = _ctx();
+    ctx.strokeStyle = "#1a3a6a";  // azul escuro visível no PDF
+    ctx.lineWidth   = 2.5;
+    ctx.lineCap     = "round";
+    ctx.lineJoin    = "round";
+    // fundo branco — máximo contraste, JPEG sem artefato de transparência
+    ctx.fillStyle   = "#ffffff";
+    ctx.fillRect(0, 0, cv.width, cv.height);
+  }
+
+  // Inicializa com largura real do container (aguarda layout)
   function initCanvas(){
     var box = document.getElementById(boxId);
-    var w   = box.clientWidth || 340;
+    var w   = (box && box.clientWidth > 50) ? box.clientWidth : 400;
     cv.width  = w;
     cv.height = 130;
     cv.style.height = "130px";
-    ctx.strokeStyle = "#6a9ae8";
-    ctx.lineWidth   = 2;
-    ctx.lineCap     = "round";
-    ctx.lineJoin    = "round";
-    ctx.fillStyle   = "#070d1a";
-    ctx.fillRect(0, 0, cv.width, cv.height);
+    _initCtx();
   }
-  initCanvas();
 
-  // Não conecta resize ao canvas — teclado mobile não apaga mais a assinatura
-  // (o canvas tem tamanho fixo e não reage a mudanças de viewport)
+  // Garante que o canvas está pronto depois do layout do browser
+  if(document.readyState === "loading"){
+    document.addEventListener("DOMContentLoaded", initCanvas);
+  } else {
+    // Pequeno atraso para garantir que o layout foi calculado
+    setTimeout(initCanvas, 50);
+  }
 
   function pos(e){
-    var rect = cv.getBoundingClientRect();
-    var src  = e.touches ? e.touches[0] : e;
+    var rect   = cv.getBoundingClientRect();
+    var src    = e.touches ? e.touches[0] : e;
     var scaleX = cv.width  / rect.width;
     var scaleY = cv.height / rect.height;
     return {
@@ -731,37 +746,64 @@ function criarCanvas(canvasId, boxId, labelId){
     };
   }
 
-  function salvar(){
-    if(!temAssin) return;
-    _dataURL = cv.toDataURL("image/jpeg", 0.75);
+  function atualizarPrevia(){
+    var img = document.getElementById(prevId);
+    if(!img) return;
+    _dataURL = cv.toDataURL("image/jpeg", 0.85);
+    img.src  = _dataURL;
+    img.style.display = "block";
   }
 
-  cv.addEventListener("mousedown",  function(e){ desenhando=true; ctx.beginPath(); var p=pos(e); ctx.moveTo(p.x,p.y); });
-  cv.addEventListener("mousemove",  function(e){ if(!desenhando)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssin=true; document.getElementById(labelId).style.opacity="0"; });
-  cv.addEventListener("mouseup",    function(){ desenhando=false; salvar(); });
-  cv.addEventListener("mouseleave", function(){ desenhando=false; salvar(); });
-  cv.addEventListener("touchstart", function(e){ e.preventDefault(); desenhando=true; ctx.beginPath(); var p=pos(e); ctx.moveTo(p.x,p.y); },{passive:false});
-  cv.addEventListener("touchmove",  function(e){ e.preventDefault(); if(!desenhando)return; var p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke(); temAssin=true; document.getElementById(labelId).style.opacity="0"; },{passive:false});
-  cv.addEventListener("touchend",   function(){ desenhando=false; salvar(); });
+  function iniciarTraco(e){
+    desenhando = true;
+    var ctx = _ctx();
+    ctx.beginPath();
+    var p = pos(e);
+    ctx.moveTo(p.x, p.y);
+  }
+
+  function continuarTraco(e){
+    if(!desenhando) return;
+    var ctx = _ctx();
+    var p   = pos(e);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    temAssin = true;
+    var lbl = document.getElementById(labelId);
+    if(lbl) lbl.style.opacity = "0";
+  }
+
+  function finalizarTraco(){
+    if(!desenhando) return;
+    desenhando = false;
+    if(temAssin) atualizarPrevia();
+  }
+
+  cv.addEventListener("mousedown",  function(e){ iniciarTraco(e); });
+  cv.addEventListener("mousemove",  function(e){ continuarTraco(e); });
+  cv.addEventListener("mouseup",    function(){ finalizarTraco(); });
+  cv.addEventListener("mouseleave", function(){ finalizarTraco(); });
+  cv.addEventListener("touchstart", function(e){ e.preventDefault(); iniciarTraco(e); }, {passive:false});
+  cv.addEventListener("touchmove",  function(e){ e.preventDefault(); continuarTraco(e); }, {passive:false});
+  cv.addEventListener("touchend",   function(e){ e.preventDefault(); finalizarTraco(); }, {passive:false});
 
   return {
     canvas: cv,
     temAssin: function(){ return temAssin; },
     limpar: function(){
-      ctx.fillStyle="#070d1a";
-      ctx.fillRect(0,0,cv.width,cv.height);
-      ctx.strokeStyle="#6a9ae8";
-      ctx.lineWidth=2;
-      ctx.lineCap="round"; ctx.lineJoin="round";
-      temAssin=false;
-      _dataURL=null;
-      document.getElementById(labelId).style.opacity="1";
+      var ctx = _ctx();
+      cv.width = cv.width; // reset canvas
+      _initCtx();
+      temAssin  = false;
+      _dataURL  = null;
+      var lbl = document.getElementById(labelId);
+      if(lbl) lbl.style.opacity = "1";
+      var img = document.getElementById(prevId);
+      if(img){ img.src=""; img.style.display="none"; }
     },
     toDataURL: function(){
-      // Retorna o snapshot salvo (garantido após touchend/mouseup)
-      // Se por algum motivo não foi salvo, salva agora
-      if(!_dataURL && temAssin) salvar();
-      return _dataURL || cv.toDataURL("image/jpeg", 0.75);
+      if(temAssin && !_dataURL) atualizarPrevia();
+      return _dataURL || cv.toDataURL("image/jpeg", 0.85);
     }
   };
 }
