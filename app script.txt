@@ -1280,6 +1280,17 @@ function doPost(e) {
       if (d.acao==="deletar"&&d.tipo&&d.id) return saida(deletarRegistro(ss,d.tipo,d.id),cb);
       if (d.acao==="editar"&&d.id&&d.campos) return saida(editarOc(ss,d.id,d.campos),cb);
       if (d.acao==="ia"&&d.messages&&d.system) return saida(chamarIA(d.system,d.messages),cb);
+      // ── Tipos especiais que têm funções próprias ────────────────
+      if (d.tipo==="carga_armamento"&&d.registro) return saida(salvarCargaArmamento(ss,d.registro),cb);
+      if (d.tipo==="policial"&&d.registro) return saida(salvarPolicial(ss,d.registro),cb);
+      if (d.tipo==="solicitacao"&&d.registro) return saida(salvarSolicitacao(ss,d.registro),cb);
+      if (d.tipo==="atividade_escolar"&&d.registro) return saida(salvarAtividadeEscolar(ss,d.registro),cb);
+      if (d.tipo==="chamada_projeto"&&d.registro) return saida(salvarChamadaProjeto(ss,d.registro),cb);
+      if (d.tipo==="evento_avulso"&&d.registro) return saida(salvarEventoAvulso(ss,d.registro),cb);
+      if (d.tipo==="inscricoes_projetos"&&d.registro) return saida(salvarInscricaoProjeto(ss,d.registro),cb);
+      if (d.tipo==="inv_item"&&d.registro) return saida(salvarInvItem(ss,d.registro),cb);
+      if (d.tipo==="inv_movimentacao"&&d.registro) return saida(salvarInvMovimentacao(ss,d.registro),cb);
+      if (d.tipo==="inv_conferencia"&&d.registro) return saida(salvarInvConferencia(ss,d.registro),cb);
       if (d.tipo&&d.registro) return saida(salvar(ss,d.tipo,d.registro),cb);
       return saida({ok:false,erro:"Payload sem tipo/registro"},cb);
     }

@@ -198,7 +198,8 @@ select option{ background:#0f1a2e; }
     <h2 id="titulo-sucesso">Carga registrada!</h2>
     <p id="msg-sucesso">Registro salvo com sucesso.</p>
     <div id="protocolo" style="margin-top:16px;background:#070d1a;border:1px solid #1a3a6a;border-radius:10px;padding:14px;font-size:13px;color:#6a9ae8;font-family:monospace;word-break:break-all"></div>
-    <button id="btn-recibo" onclick="gerarRecibo()" style="margin-top:20px;width:100%;background:linear-gradient(135deg,#1a3a8a,#0f2a6a);border:2px solid #3a6ae8;color:#a0c0ff;padding:14px;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.3px">
+    <div id="status-envio" style="display:none;margin-top:12px;background:#0a1428;border:1px solid #1a3a6a;border-radius:8px;padding:10px 14px;color:#6a9ae8;font-size:12px;font-weight:700;text-align:left"></div>
+    <button id="btn-recibo" onclick="gerarRecibo()" style="margin-top:16px;width:100%;background:linear-gradient(135deg,#1a3a8a,#0f2a6a);border:2px solid #3a6ae8;color:#a0c0ff;padding:14px;border-radius:10px;font-size:15px;font-weight:800;cursor:pointer;letter-spacing:.3px">
       📄 Imprimir / Salvar Recibo
     </button>
     <p style="color:#1a3a5a;font-size:11px;margin-top:10px">Guarde o recibo como comprovante da operação</p>
@@ -957,56 +958,84 @@ function enviarCarga(e){
   _autoRegistrarPolicial(dados.matricula_adjunto, dados.nome_adjunto);
 
   if(SHEETS_URL && TOKEN){
-    // Comprime assinaturas para miniatura JPEG (~3-5KB) antes de enviar ao Sheets
-    // Evita estouro do limite de URL do JSONP mantendo legibilidade no PDF
+    // ── Comprime assinaturas para miniatura ──────────────────────
     function _miniAssin(dataURL){
       if(!dataURL) return "";
       try{
-        // já está em JPEG 320x90; reduz mais para caber na URL do Sheets
-        var img=new Image();
-        img.src=dataURL;
-        var W=200, H=65;
+        var img=new Image(); img.src=dataURL;
         var cv2=document.createElement("canvas");
-        cv2.width=W; cv2.height=H;
+        cv2.width=200; cv2.height=65;
         var ctx2=cv2.getContext("2d");
-        ctx2.fillStyle="#070d1a";
-        ctx2.fillRect(0,0,W,H);
-        ctx2.drawImage(img,0,0,W,H);
-        return cv2.toDataURL("image/jpeg",0.55);
+        ctx2.fillStyle="#ffffff"; ctx2.fillRect(0,0,200,65);
+        ctx2.drawImage(img,0,0,200,65);
+        return cv2.toDataURL("image/jpeg",0.6);
       }catch(e){ return ""; }
     }
-    var dadosSheets = {};
-    Object.keys(dados).forEach(function(k){
-      if(k!=="assinatura" && k!=="assinatura_adjunto") dadosSheets[k]=dados[k];
-    });
+
+    var dadosSheets = Object.assign({}, dados);
     dadosSheets.assinatura         = _miniAssin(dados.assinatura);
     dadosSheets.assinatura_adjunto = _miniAssin(dados.assinatura_adjunto);
-    dadosSheets.tem_assinatura = true;
+    dadosSheets.tem_assinatura     = true;
 
-    var cbName = "cb_arm_"+Date.now();
-    window[cbName] = function(){ delete window[cbName]; clearTimeout(tmout); mostrarSucesso(); };
-    var tmout = setTimeout(mostrarSucesso, 8000);
-    var script = document.createElement("script");
-    // Se a URL com miniaturas ainda ficar > 60KB, envia sem assinaturas (fallback seguro)
-    var urlComAssin = SHEETS_URL
-      +"?acao=salvar&tipo=carga_armamento"
-      +"&dados="+encodeURIComponent(JSON.stringify(dadosSheets))
-      +"&token="+encodeURIComponent(TOKEN)
-      +"&callback="+cbName;
-    if(urlComAssin.length > 90000){
-      var dadosSemAssin = Object.assign({},dadosSheets);
-      dadosSemAssin.assinatura=""; dadosSemAssin.assinatura_adjunto="";
-      script.src = SHEETS_URL+"?acao=salvar&tipo=carga_armamento"
-        +"&dados="+encodeURIComponent(JSON.stringify(dadosSemAssin))
-        +"&token="+encodeURIComponent(TOKEN)+"&callback="+cbName;
-    } else {
-      script.src = urlComAssin;
+    // ── Envia via POST (sem limite de tamanho, com assinaturas) ──
+    function _enviarPost(payload, onSuccess, onError){
+      if(!window.fetch){ onError(); return; }
+      fetch(SHEETS_URL, {
+        method: "POST",
+        headers: {"Content-Type":"text/plain"},
+        body: JSON.stringify(payload)
+      })
+      .then(function(r){ return r.text(); })
+      .then(function(txt){
+        try{
+          var txt2=txt.replace(/^[^{]*({.*})[^}]*$/s,"$1");
+          var res=JSON.parse(txt2);
+          if(res&&res.ok){ onSuccess(); } else { onError(res&&res.erro); }
+        }catch(e){ onSuccess(); } // considera enviado mesmo sem confirmar
+      })
+      .catch(function(){ onError(); });
     }
-    script.onerror = function(){ clearTimeout(tmout); mostrarSucesso(); };
-    document.head.appendChild(script);
+
+    // ── Fallback JSONP (caso fetch falhe ou bloqueio CORS) ───────
+    function _enviarJSONP(payload, onSuccess, onError){
+      var cb="cb_arm_"+Date.now();
+      var tmout=setTimeout(function(){ delete window[cb]; onError("timeout"); }, 12000);
+      window[cb]=function(){ delete window[cb]; clearTimeout(tmout); onSuccess(); };
+      // Remove assinaturas do fallback JSONP para não estourar URL
+      var pl2=Object.assign({},payload); pl2.assinatura=""; pl2.assinatura_adjunto="";
+      var sc=document.createElement("script");
+      sc.src=SHEETS_URL+"?acao=salvar&tipo=carga_armamento"
+        +"&dados="+encodeURIComponent(JSON.stringify(pl2))
+        +"&token="+encodeURIComponent(TOKEN)+"&callback="+cb;
+      sc.onerror=function(){ clearTimeout(tmout); delete window[cb]; onError("script error"); };
+      document.head.appendChild(sc);
+    }
+
+    // ── Tenta POST, cai para JSONP se falhar ─────────────────────
+    var _payload={token:TOKEN, tipo:"carga_armamento", registro:dadosSheets};
+    _enviarPost(_payload, function(){
+      _atualizarStatusEnvio("✅ Registrado na planilha com assinaturas!");
+      mostrarSucesso();
+    }, function(err){
+      console.warn("[ARM] POST falhou, tentando JSONP:", err);
+      _enviarJSONP(dadosSheets, function(){
+        _atualizarStatusEnvio("⚠️ Registrado (sem assinatura na planilha)");
+        mostrarSucesso();
+      }, function(err2){
+        console.error("[ARM] JSONP também falhou:", err2);
+        _atualizarStatusEnvio("⚠️ Salvo localmente (planilha offline)");
+        mostrarSucesso();
+      });
+    });
+
   } else {
     setTimeout(mostrarSucesso, 600);
   }
+}
+
+function _atualizarStatusEnvio(msg){
+  var el=document.getElementById("status-envio");
+  if(el){ el.textContent=msg; el.style.display="block"; }
 }
 
 // ── Geração do Recibo ────────────────────────────────────────────
