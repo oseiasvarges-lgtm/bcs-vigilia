@@ -152,6 +152,9 @@ function filtrar(area, btn){
   renderGrid();
 }
 
+// Cache dos projetos visíveis para o onclick usar por índice (evita HTML encoding issues)
+window._projCache = [];
+
 function renderGrid(){
   var grid = document.getElementById("grid-projetos");
   var lista = _filtroAtual==="todos" ? _todos : _todos.filter(function(p){return p.area===_filtroAtual;});
@@ -162,17 +165,15 @@ function renderGrid(){
     return;
   }
 
-  grid.innerHTML = lista.map(function(p){
+  // Guarda no cache global — onclick passa só o índice, sem encoding complexo
+  window._projCache = lista;
+
+  grid.innerHTML = lista.map(function(p, i){
     var icon = AREA_ICONS[p.area]||"🌱";
     var scor = STATUS_COR[p.status]||"#6b7280";
-    var link = BASE_URL+"candidatura.html"
-      +"?id="+encodeURIComponent(p.id)
-      +"&nome="+encodeURIComponent(p.nome)
-      +"&sheets="+encodeURIComponent(SHEETS_URL)
-      +"&token="+encodeURIComponent(SHEETS_TOKEN);
 
     var metaHtml = "";
-    if(p.instrutor) metaHtml += "<div class='proj-meta-row'><span>👨‍🏫</span><span>"+esc(p.instrutor)+"</span></div>";
+    if(p.instrutor) metaHtml += "<div class='proj-meta-row'><span>👨&#x200D;🏫</span><span>"+esc(p.instrutor)+"</span></div>";
     if(p.diasSemana&&p.diasSemana!=="A definir"&&p.diasSemana!=="—") metaHtml += "<div class='proj-meta-row'><span>📅</span><span>"+esc(p.diasSemana)+(p.horario&&p.horario!=="A definir"?" · "+esc(p.horario):"")+"</span></div>";
     if(p.faixaEtaria) metaHtml += "<div class='proj-meta-row'><span>👥</span><span>"+esc(p.faixaEtaria)+"</span></div>";
     if(p.parceria) metaHtml += "<div class='proj-meta-row'><span>🤝</span><span>Parceria: "+esc(p.parceria)+"</span></div>";
@@ -188,7 +189,7 @@ function renderGrid(){
       +"<div class='proj-card-bottom'>"
       +"<span class='proj-status' style='background:"+scor+"22;color:"+scor+";border:1px solid "+scor+"44'>"+esc(p.status)+"</span>"
       +(p.status==="Ativo"
-        ?"<button class='btn-candidatura' onclick='abrirCandidatura(\""+encodeURIComponent(JSON.stringify({id:p.id,nome:p.nome,link:link}))+"\")'>📝 Candidatar-se</button>"
+        ?"<button class='btn-candidatura' onclick='abrirCandidatura("+i+")'>📝 Candidatar-se</button>"
         :"<span style='color:#3a2a5a;font-size:11px'>Inscrições não abertas</span>")
       +"</div>"
       +"</div>";
@@ -197,14 +198,20 @@ function renderGrid(){
   document.getElementById("stat-projetos").textContent=ativos.length;
 }
 
-function abrirCandidatura(encoded){
-  var p = JSON.parse(decodeURIComponent(encoded));
+function abrirCandidatura(idx){
+  var p = (window._projCache||[])[idx];
+  if(!p) return;
+  var link = BASE_URL+"candidatura.html"
+    +"?id="+encodeURIComponent(p.id)
+    +"&nome="+encodeURIComponent(p.nome)
+    +"&sheets="+encodeURIComponent(SHEETS_URL)
+    +"&token="+encodeURIComponent(SHEETS_TOKEN);
   document.getElementById("modal-titulo").textContent = p.nome;
   document.getElementById("modal-info").textContent = "Escaneie o QR Code ou toque no botão para preencher a candidatura.";
-  var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=6&data="+encodeURIComponent(p.link);
+  var qrUrl = "https://api.qrserver.com/v1/create-qr-code/?size=180x180&margin=6&data="+encodeURIComponent(link);
   document.getElementById("modal-qr-img").src = qrUrl;
-  document.getElementById("modal-link").textContent = p.link;
-  document.getElementById("modal-btn").href = p.link;
+  document.getElementById("modal-link").textContent = link;
+  document.getElementById("modal-btn").href = link;
   document.getElementById("modal-qr").style.display = "flex";
 }
 
