@@ -15034,28 +15034,66 @@ function _nomesConectam(nomeA, nomeB){
   return ta[0] === tb[0] && ta[ta.length-1] === tb[tb.length-1];
 }
 
-// Extrai todos os nomes relevantes de uma ocorrência (vítima, autor, solicitante)
-function _ocNomes(oc){
+// Nomes comuns que sozinhos não identificam uma pessoa
+var _OC_SOBRENOMES_COMUNS = /^(silva|santos|souza|oliveira|costa|ferreira|alves|lima|pereira|rodrigues|gomes|martins|rocha|carvalho|nascimento|melo|ribeiro|araujo|barbosa|cardoso|cavalcante|moreira|nunes|teixeira|vieira|moura|campos|machado|medeiros|freitas|lopes|mendes|brito|reis|freire|batista|pinto|ramos|borges|sampaio|azevedo|andrade|dias|cunha|farias|monteiro|sousa|peixoto|bezerra|tavares|figueiredo)$/;
+
+// Extrai nomes de vítimas de uma ocorrência
+function _ocNomesVitima(oc){
   var nomes = [];
   if(oc.vitima_nome) nomes.push(oc.vitima_nome);
   (oc.vitimas||[]).forEach(function(v){ if(v.nome) nomes.push(v.nome); });
-  if(oc.suspeito_nome && !/não identificado|nao identificado/i.test(oc.suspeito_nome)) nomes.push(oc.suspeito_nome);
-  (oc.autores||[]).forEach(function(a){ if(a.nome && !/não identificado|nao identificado/i.test(a.nome)) nomes.push(a.nome); });
-  var solNome = (oc.solicitante&&oc.solicitante.nome)||"";
-  if(solNome) nomes.push(solNome);
   return nomes.filter(function(n){ return n && n.trim().length > 3; });
 }
 
-// Retorna true se dois registros compartilham pelo menos um nome em comum (primeiro+último)
+// Extrai nomes de suspeitos/autores de uma ocorrência
+function _ocNomesSuspeito(oc){
+  var nomes = [];
+  if(oc.suspeito_nome && !/não identificado|nao identificado/i.test(oc.suspeito_nome)) nomes.push(oc.suspeito_nome);
+  (oc.autores||[]).forEach(function(a){ if(a.nome && !/não identificado|nao identificado/i.test(a.nome)) nomes.push(a.nome); });
+  return nomes.filter(function(n){ return n && n.trim().length > 3; });
+}
+
+// Mantido para compatibilidade com código legado
+function _ocNomes(oc){
+  return _ocNomesVitima(oc).concat(_ocNomesSuspeito(oc));
+}
+
+// Verifica se dois nomes conectam E não são apenas sobrenome comum compartilhado
+function _nomesConectamForte(nomeA, nomeB){
+  if(!_nomesConectam(nomeA, nomeB)) return false;
+  var ta = _ocNomeTokens(nomeA);
+  // Se o único token "de identificação" é um sobrenome commoníssimo, exige 3+ tokens
+  if(ta.length === 2 && (_OC_SOBRENOMES_COMUNS.test(ta[0]) || _OC_SOBRENOMES_COMUNS.test(ta[ta.length-1]))){
+    var tb = _ocNomeTokens(nomeB);
+    // Precisa ter pelo menos um token intermediário em comum para sobrenomes comuns
+    if(ta.length < 3 || tb.length < 3) return false;
+  }
+  return true;
+}
+
+// Retorna true se dois registros têm a MESMA VÍTIMA ou o MESMO SUSPEITO
+// Não conecta por solicitante — evita falsos positivos
 function _ocConectadas(a, b){
   if(!a || !b || a.id === b.id) return false;
-  var na = _ocNomes(a);
-  var nb = _ocNomes(b);
-  for(var i=0; i<na.length; i++){
-    for(var j=0; j<nb.length; j++){
-      if(_nomesConectam(na[i], nb[j])) return true;
+
+  // 1. Mesma vítima
+  var va = _ocNomesVitima(a);
+  var vb = _ocNomesVitima(b);
+  for(var i=0; i<va.length; i++){
+    for(var j=0; j<vb.length; j++){
+      if(_nomesConectamForte(va[i], vb[j])) return true;
     }
   }
+
+  // 2. Mesmo suspeito/autor
+  var sa = _ocNomesSuspeito(a);
+  var sb = _ocNomesSuspeito(b);
+  for(var i=0; i<sa.length; i++){
+    for(var j=0; j<sb.length; j++){
+      if(_nomesConectamForte(sa[i], sb[j])) return true;
+    }
+  }
+
   return false;
 }
 
