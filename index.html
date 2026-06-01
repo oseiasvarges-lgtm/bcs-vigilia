@@ -12133,10 +12133,17 @@ function _armSincronizarSilent(){
 }
 
 function renderLivroParteArmamento(main){
-  // Re-lê localStorage para capturar registros salvos em carga-armamento.html
+  // Re-lê localStorage para capturar registros salvos em carga-armamento.html (mesmo browser)
   try{ state.cargasArmamento=JSON.parse(localStorage.getItem("bcs_cargas_armamento")||"[]"); }catch(e){}
-  // Sync silencioso em background (cross-device)
+  // Sync imediato ao abrir (cross-device: QR no celular → IARA no computador)
   _armSincronizarSilent();
+  // Polling a cada 30s enquanto estiver nesta tela
+  if(state._armPollTimer) clearInterval(state._armPollTimer);
+  state._armPollTimer=setInterval(function(){
+    if(state.tela!=="armamento"){ clearInterval(state._armPollTimer); return; }
+    state._armLastSync=0; // força re-sync
+    _armSincronizarSilent();
+  },30000);
   if(!state._armTab) state._armTab="registros";
   var tab=state._armTab;
   var IS="width:100%;background:#070d1a;border:1px solid #1a3a6a;color:#a0c0ff;padding:8px 10px;border-radius:7px;font-size:12px;outline:none;box-sizing:border-box";
@@ -12152,7 +12159,8 @@ function renderLivroParteArmamento(main){
   h.push("<div style='display:flex;gap:8px'>");
   h.push("<button onclick='_armGerarPDFModal()' style='background:linear-gradient(135deg,#1a3a1a,#0a2a0a);border:1px solid #22c55e;color:#4ade80;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📄 PDF</button>");
   h.push("<button onclick='_armQRModal()' style='background:linear-gradient(135deg,#0f2a6a,#0a1a4a);border:1px solid #3a6ae8;color:#6a9ae8;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📲 QR Code</button>");
-  h.push("<button onclick='_armSincronizar()' style='background:#0a0f1a;border:1px solid #1a3a6a;color:#3a6a9a;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>🔄 Sincronizar</button>");
+  var _armUlt=state._armLastSync?new Date(state._armLastSync).toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}):"—";
+  h.push("<button onclick='_armSincronizar()' id='btn-arm-sync' style='background:#0a0f1a;border:1px solid #1a3a6a;color:#3a6a9a;padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;gap:6px'>🔄 Sincronizar<span style='background:#0f1a2e;color:#2a4a7a;padding:1px 7px;border-radius:8px;font-size:9px'>atualizado "+_armUlt+"</span></button>");
   h.push("</div></div>");
 
   // Abas

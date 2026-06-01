@@ -207,9 +207,13 @@ select option{ background:#0f1a2e; }
 
 <script>
 // ── Parâmetros da URL (com fallback fixo para funcionar sem QR) ──────────────
-var params     = new URLSearchParams(location.search);
-var SHEETS_URL = params.get("sheets") || "https://script.google.com/macros/s/AKfycbxKZVJcjgBSVUK7MXcH1ZuKY8-YhmidlTN-olcmLJ0T4ar9fPE05-iZbqJ4KUfHMgovRA/exec";
-var TOKEN      = params.get("token")  || "bcs-token-secreto-2025";
+var params = new URLSearchParams(location.search);
+// Prioridade: URL do QR → URL salva no localStorage (atualizada nas Configurações) → hardcoded
+var _urlQR   = params.get("sheets") || "";
+var _urlLocal= "";
+try{ _urlLocal = localStorage.getItem("bcs_sheets_url")||""; }catch(e){}
+var SHEETS_URL = _urlQR || _urlLocal || "https://script.google.com/macros/s/AKfycbxKZVJcjgBSVUK7MXcH1ZuKY8-YhmidlTN-olcmLJ0T4ar9fPE05-iZbqJ4KUfHMgovRA/exec";
+var TOKEN      = params.get("token") || "bcs-token-secreto-2025";
 
 // ── Data e hora automáticas ───────────────────────────
 (function(){
