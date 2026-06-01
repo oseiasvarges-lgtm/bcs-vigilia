@@ -10063,8 +10063,8 @@ function renderTela() {
     return;
   }
 
-  // OPERADOR DASHBOARD
-  if(perfil==="operador"){
+  // OPERADOR DASHBOARD + formulário de lançar para GESTOR
+  if(perfil==="operador" || (perfil==="gestor" && tela==="lancar")){
     if(tela==="dashboard"){
       var h=[];
       var agora=new Date();
@@ -11104,8 +11104,9 @@ function renderTela() {
   } // fim if filtro
   } // fim if operador
 
-  // LANÇAR OCORRÊNCIA — acessível também pelo gestor (via botão em Analisar Ocorrências)
-  if(tela==="lancar" && state.perfil==="gestor"){
+  // LANÇAR OCORRÊNCIA — gestor agora usa o form completo do operador (bloco acima)
+  // Este bloco nunca é atingido pois o operador/gestor+lancar é capturado acima
+  if(false && tela==="lancar" && state.perfil==="gestor"){
     var h=[];
     var tiposOcG=["Abordagem","Acidente de Trânsito","Ameaça","Apreensão de Drogas","Apreensão de Veículo",
       "Arrombamento","Assalto / Roubo","Atropelamento","Averiguação","Crime Ambiental",
