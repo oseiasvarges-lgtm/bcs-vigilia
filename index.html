@@ -18687,6 +18687,14 @@ function _invGerarPDFConferencia(confId){
   if(adicionados>0){
     localStorage.setItem("bcs_projetos_sociais",JSON.stringify(state.projetosSociais));
     console.log("[BCS] "+adicionados+" projeto(s) social(is) cadastrado(s).");
+    // Envia para Sheets para que o portfólio público os carregue
+    if(adicionados>0){
+      setTimeout(function(){
+        (state.projetosSociais||[]).forEach(function(p){
+          _invEnviarSheets("projeto_social", p);
+        });
+      }, 3000);
+    }
   }
 })();
 

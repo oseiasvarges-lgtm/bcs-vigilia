@@ -214,18 +214,36 @@ function fecharModal(){
 
 function esc(s){ return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
-// Carrega projetos do localStorage (mesmo dispositivo) ou Sheets
+// Dados embutidos — ciclo 2026 (fallback garantido sem Sheets)
+var PROJETOS_SEED = [
+  {id:"SOC_001",nome:"Projeto Adote um Pequeno Leitor",area:"Educação",status:"Ativo",instrutor:"Instituto Pedro Melo (parceria)",diasSemana:"A definir",horario:"",faixaEtaria:"Crianças e adolescentes",parceria:"Instituto Pedro Melo",vagas:null,descricao:"Viabiliza a entrega de livros infanto-juvenis para crianças e adolescentes com o objetivo de fomentar a leitura. Parceria com o Instituto Pedro Melo."},
+  {id:"SOC_002",nome:"Projeto Informática de Base",area:"Tecnologia",status:"Ativo",instrutor:"SD PM Willy Iglesias (Eng. da Computação)",diasSemana:"Terças-feiras",horario:"",faixaEtaria:"Crianças, adolescentes e jovens",parceria:"",vagas:null,descricao:"Ensina Informática Básica e Avançada para crianças, adolescentes e jovens."},
+  {id:"SOC_003",nome:"Projeto Acordes Mágicos",area:"Música",status:"Ativo",instrutor:"Sr. Carlos Eduardo (voluntário)",diasSemana:"Sextas-feiras",horario:"Tarde",faixaEtaria:"Crianças e adolescentes",parceria:"",vagas:null,descricao:"Proporciona aulas de violão para crianças e adolescentes."},
+  {id:"SOC_004",nome:"Projeto Luta Cidadã",area:"Esporte",status:"Ativo",instrutor:"Soldado PM Uilliam (Faixa Preta 2º DAN)",diasSemana:"Segundas, Terças e Quintas",horario:"",faixaEtaria:"Crianças e adolescentes",parceria:"Pastoral do Menor",vagas:null,descricao:"Ensina a arte milenar do judô para crianças e adolescentes em parceria com a Pastoral do Menor."},
+  {id:"SOC_005",nome:"Projeto Gravidez com Amparo",area:"Saúde & Bem-estar",status:"Ativo",instrutor:"",diasSemana:"",horario:"",faixaEtaria:"Gestantes",parceria:"Parceiros doadores",vagas:null,descricao:"Orienta e difunde a importância da amamentação e o cuidado durante a gestação para mães carentes. Distribui itens e enxovais mediante doações de parceiros."},
+  {id:"SOC_006",nome:"Projeto Empoderamento Feminino",area:"Educação",status:"Ativo",instrutor:"Microlins (parceria)",diasSemana:"",horario:"",faixaEtaria:"Mulheres em vulnerabilidade social",parceria:"Microlins",vagas:null,descricao:"Visa atender mulheres em vulnerabilidade social e que sofrem ou sofreram violência doméstica, proporcionando cursos para melhorar o currículo profissional e inseri-las no mercado de trabalho."},
+  {id:"SOC_007",nome:"Projeto Universidade para Todos",area:"Educação",status:"Ativo",instrutor:"UESB (parceria)",diasSemana:"",horario:"Noturno",faixaEtaria:"Jovens e adultos",parceria:"UESB",vagas:20,descricao:"Em parceria com a UESB, oferece 20 vagas para curso pré-vestibular no turno noturno, de abril a novembro (data do ENEM)."},
+  {id:"SOC_008",nome:"Projeto Robótica na Base",area:"Tecnologia",status:"Ativo",instrutor:"SD PM Willy Iglesias (Eng. da Computação)",diasSemana:"Quintas-feiras",horario:"",faixaEtaria:"Crianças e adolescentes",parceria:"",vagas:null,descricao:"Aulas de programação e robótica com objetivo de desenvolvimento cognitivo e despertar científico."},
+  {id:"SOC_009",nome:"Projeto Esporte por Toda Parte",area:"Esporte",status:"Ativo",instrutor:"Profa. Luanna Rainne (Lic. Ed. Física)",diasSemana:"",horario:"",faixaEtaria:"Adolescentes, adultos e idosos",parceria:"SUDESB",vagas:null,descricao:"Aulas de ginástica, capoeira e boxe em parceria com a SUDESB."},
+  {id:"SOC_010",nome:"Projeto Gibi Turma da BCS",area:"Arte",status:"Ativo",instrutor:"77ª CIPM BCS",diasSemana:"—",horario:"—",faixaEtaria:"Crianças até 8 anos",parceria:"",vagas:null,descricao:"Lança um gibi lúdico instruindo sobre bons hábitos no dia a dia, cuidado com o meio ambiente e outros temas para crianças de até 8 anos."}
+];
+
+// Carrega projetos: seed → localStorage → Sheets (ordem de prioridade)
 function carregarProjetos(){
-  // Tenta localStorage do IARA primeiro
+  // 1. Seed embutido (garante que sempre aparece algo)
+  _todos = PROJETOS_SEED.slice();
+  renderGrid();
+
+  // 2. Sobrescreve com localStorage se tiver dados mais ricos
   try{
     var local = JSON.parse(localStorage.getItem("bcs_projetos_sociais")||"[]");
-    if(local.length){
+    if(local.length > 0){
       _todos = local.filter(function(p){return p.status!=="Encerrado";});
       renderGrid();
     }
   }catch(e){}
 
-  // Busca atualização do Sheets
+  // 3. Busca atualização do Sheets (dados ao vivo)
   if(!SHEETS_URL) return;
   var cb = "cb_ps_"+Date.now();
   window[cb] = function(resp){
@@ -233,7 +251,6 @@ function carregarProjetos(){
     if(resp&&resp.ok&&Array.isArray(resp.dados)&&resp.dados.length){
       _todos = resp.dados.filter(function(p){return p.status!=="Encerrado";});
       renderGrid();
-      // Conta áreas distintas
       var areas = {};
       _todos.forEach(function(p){if(p.area)areas[p.area]=1;});
       document.getElementById("stat-areas").textContent=Object.keys(areas).length;
