@@ -131,7 +131,10 @@ select option{ background:#0f1a2e; }
     <hr class="separador"/>
 
     <!-- Seleção de materiais por cards -->
-    <div class="secao-titulo" id="secao-titulo-mat">📦 Selecione os Materiais</div>
+    <div class="secao-titulo" id="secao-titulo-mat" style="display:flex;justify-content:space-between;align-items:center">
+      <span>📦 Selecione os Materiais</span>
+      <span id="contador-pat" style="font-size:10px;font-weight:700;background:#1a2a4a;color:#6a9ae8;padding:2px 9px;border-radius:8px;letter-spacing:0"></span>
+    </div>
     <div id="grid-materiais" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px"></div>
     <div id="aviso-sem-mat" style="display:none;text-align:center;padding:20px;background:#070d1a;border:1px dashed #1a3a4a;border-radius:10px;color:#2a5a7a;font-size:12px;margin-bottom:10px">
       ⏳ Carregando materiais…
@@ -492,14 +495,35 @@ function _renderizarMateriais(){
   if(!lista.length){
     grid.innerHTML="";
     aviso.style.display="block";
-    aviso.innerHTML = MATERIAIS_CACHE.length===0
-      ? "⏳ Carregando materiais…"
-      : (tipoCarga==="Descarga"
-          ? "✅ Nenhum material com carga ativa para devolver."
-          : "✅ Nenhum material disponível para carga no momento.");
+    if(MATERIAIS_CACHE.length===0){
+      aviso.innerHTML = "<div style='text-align:center;padding:8px'>"
+        +"<div style='font-size:28px;margin-bottom:8px'>⏳</div>"
+        +"<p style='color:#6a9ae8;font-size:13px;font-weight:700;margin:0 0 4px'>Carregando patrimônio...</p>"
+        +"<p style='color:#2a4a6a;font-size:11px;margin:0' id='aviso-pat-detalhe'>Buscando materiais cadastrados</p>"
+        +"</div>";
+      // Após 8s sem dados, avisa que precisa cadastrar no patrimônio
+      if(!window._avisoPat){
+        window._avisoPat = setTimeout(function(){
+          window._avisoPat = null;
+          if(MATERIAIS_CACHE.length > 0) return; // já carregou
+          var el = document.getElementById("aviso-pat-detalhe");
+          if(el) el.innerHTML = "<span style='color:#f59e0b;font-weight:700'>⚠️ Nenhum material encontrado.</span><br>"
+            +"<span style='color:#2a4a6a'>Os materiais precisam ser cadastrados no Livro de Parte → aba Patrimônio antes de registrar uma carga.</span>";
+          var avEl = document.getElementById("aviso-sem-mat");
+          if(avEl) avEl.style.background="#1a0a00";
+        }, 8000);
+      }
+    } else if(tipoCarga==="Descarga"){
+      aviso.innerHTML = "✅ Nenhum material com carga ativa para devolver.";
+    } else {
+      aviso.innerHTML = "✅ Todos os materiais estão disponíveis — nenhuma carga ativa.";
+    }
     return;
   }
   aviso.style.display="none";
+  if(window._avisoPat){ clearTimeout(window._avisoPat); window._avisoPat=null; }
+  var cEl=document.getElementById("contador-pat");
+  if(cEl) cEl.textContent=lista.length+" disponível"+(lista.length!==1?"is":"")+" · "+ITENS.length+" selecionado"+(ITENS.length!==1?"s":"");
 
   grid.innerHTML = lista.map(function(m){
     var id  = "mc_"+m.id;
