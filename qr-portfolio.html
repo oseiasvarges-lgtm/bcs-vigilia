@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>QR Code — Portfólio BCS</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:#0a0714;color:#e8e0f0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.card{background:#130d24;border:2px solid #3a1a58;border-radius:20px;padding:32px;max-width:480px;width:100%;text-align:center}
+h1{color:#e0d0ff;font-size:18px;font-weight:800;margin-bottom:4px}
+.sub{color:#7060a0;font-size:12px;margin-bottom:24px}
+canvas{border-radius:16px;max-width:100%;margin:0 auto;display:block;cursor:pointer}
+canvas:hover{opacity:.92}
+.btn-dl{display:block;margin:18px auto 0;background:linear-gradient(135deg,#6a2a9a,#4a1a7a);border:none;color:#e8d0ff;padding:12px 28px;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;width:100%}
+.btn-dl:hover{background:linear-gradient(135deg,#7a3aaa,#5a2a8a)}
+.url{color:#5a4a80;font-size:11px;margin-top:14px;word-break:break-all}
+.tip{color:#4a3a6a;font-size:11px;margin-top:8px}
+.status{color:#a78bfa;font-size:12px;margin-top:12px;min-height:18px}
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🌱 Portfólio de Projetos Sociais</h1>
+  <p class="sub">77ª CIPM · Base Comunitária de Segurança Nova Cidade</p>
+
+  <canvas id="qr-canvas" width="380" height="380" title="Clique para abrir o portfólio"></canvas>
+
+  <p class="status" id="status">⏳ Gerando QR Code...</p>
+
+  <button class="btn-dl" onclick="baixarQR()">⬇️ Baixar / Imprimir QR Code</button>
+
+  <p class="url">bcs-iara.github.io/projetos</p>
+  <p class="tip">Aponte a câmera do celular para acessar o portfólio de projetos</p>
+</div>
+
+<script>
+var URL_PORTFOLIO = "https://bcs-iara.github.io/projetos";
+var URL_LOGO      = "https://bcs-iara.github.io/logo-bcs.png";
+
+var canvas  = document.getElementById("qr-canvas");
+var ctx     = canvas.getContext("2d");
+var W = canvas.width, H = canvas.height;
+
+// Fundo branco arredondado
+function drawBackground(){
+  ctx.fillStyle = "#ffffff";
+  roundRect(ctx, 0, 0, W, H, 16);
+  ctx.fill();
+}
+
+function roundRect(ctx, x, y, w, h, r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y);
+  ctx.lineTo(x+w-r,y); ctx.arcTo(x+w,y,x+w,y+r,r);
+  ctx.lineTo(x+w,y+h-r); ctx.arcTo(x+w,y+h,x+w-r,y+h,r);
+  ctx.lineTo(x+r,y+h); ctx.arcTo(x,y+h,x,y+h-r,r);
+  ctx.lineTo(x,y+r); ctx.arcTo(x,y,x+r,y,r);
+  ctx.closePath();
+}
+
+function gerarQR(){
+  // QR code com alta correção de erro (H = 30%) para suportar a logo
+  var qrApiUrl = "https://api.qrserver.com/v1/create-qr-code/"
+    +"?size=340x340"
+    +"&ecc=H"
+    +"&margin=1"
+    +"&color=0f1428"
+    +"&bgcolor=ffffff"
+    +"&data="+encodeURIComponent(URL_PORTFOLIO);
+
+  var qrImg = new Image();
+  qrImg.crossOrigin = "anonymous";
+
+  qrImg.onload = function(){
+    drawBackground();
+
+    // Desenha o QR centralizado com padding
+    var pad = 20;
+    ctx.drawImage(qrImg, pad, pad, W - pad*2, H - pad*2);
+
+    // Carrega a logo
+    carregarLogo();
+  };
+
+  qrImg.onerror = function(){
+    document.getElementById("status").textContent = "❌ Erro ao carregar QR. Verifique a conexão.";
+  };
+
+  qrImg.src = qrApiUrl;
+}
+
+function carregarLogo(){
+  var logo = new Image();
+  logo.crossOrigin = "anonymous";
+
+  logo.onload = function(){
+    // Círculo branco de fundo para a logo (30% do QR)
+    var cx = W/2, cy = H/2;
+    var logoR = W * 0.165; // raio do círculo
+
+    // Sombra suave
+    ctx.shadowColor = "rgba(0,0,0,0.15)";
+    ctx.shadowBlur  = 8;
+    ctx.fillStyle   = "#ffffff";
+    ctx.beginPath();
+    ctx.arc(cx, cy, logoR + 6, 0, Math.PI*2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+
+    // Recorte circular para a logo
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, logoR, 0, Math.PI*2);
+    ctx.clip();
+    ctx.drawImage(logo, cx - logoR, cy - logoR, logoR*2, logoR*2);
+    ctx.restore();
+
+    document.getElementById("status").textContent = "✅ QR Code pronto! Clique para abrir o portfólio.";
+    canvas.onclick = function(){ window.open(URL_PORTFOLIO, "_blank"); };
+  };
+
+  logo.onerror = function(){
+    // Sem logo: texto "BCS" no centro
+    var cx = W/2, cy = H/2, r = W*0.12;
+    ctx.fillStyle = "#0f2040";
+    ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold "+(r*0.65)+"px Segoe UI,sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillText("BCS", cx, cy);
+    document.getElementById("status").textContent = "✅ QR Code gerado!";
+    canvas.onclick = function(){ window.open(URL_PORTFOLIO,"_blank"); };
+  };
+
+  logo.src = URL_LOGO;
+}
+
+function baixarQR(){
+  var a = document.createElement("a");
+  a.download = "qr-projetos-bcs.png";
+  a.href = canvas.toDataURL("image/png");
+  a.click();
+}
+
+// Inicia geração
+drawBackground();
+gerarQR();
+</script>
+</body>
+</html>
