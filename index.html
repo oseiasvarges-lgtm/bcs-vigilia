@@ -12509,6 +12509,42 @@ function _armGerarPDFRegistro(protocolo){
 //  CONEXÃO LIVRO DE PARTE ↔ INVENTÁRIO
 // ══════════════════════════════════════════════════════════════════
 
+// Importa itens encontrados nos registros de carga para o patrimônio
+function _armImportarCodigosParaPatrimonio(){
+  var codigosEmCarga={};
+  (state.cargasArmamento||[]).forEach(function(c){
+    (c.itens||[]).forEach(function(it){
+      var cod=(it.codigo||"").toUpperCase().trim();
+      if(!cod) return;
+      if(!codigosEmCarga[cod]) codigosEmCarga[cod]={
+        codigo:cod, tipo:it.tipo||"Arma",
+        descricao:it.descricao||cod, serie:it.serie||""
+      };
+    });
+  });
+  if(!state.materiaisPatrimonio) state.materiaisPatrimonio=[];
+  var importados=0;
+  Object.keys(codigosEmCarga).forEach(function(cod){
+    var jaExiste=(state.materiaisPatrimonio||[]).find(function(m){
+      return (m.codigo||"").toUpperCase()===cod;
+    });
+    if(jaExiste) return;
+    var d=codigosEmCarga[cod];
+    var mat={
+      id:"MAT-"+Date.now()+"-"+Math.random().toString(36).slice(2,5),
+      codigo:d.codigo, tipo:d.tipo, descricao:d.descricao,
+      serie:d.serie, obs:"Importado dos registros de carga",
+      status:"ativo", criadoEm:new Date().toISOString()
+    };
+    state.materiaisPatrimonio.push(mat);
+    _syncMatSheets(mat);
+    importados++;
+  });
+  salvarLocal();
+  showToast("✅ "+importados+" item(s) importado(s) para o patrimônio!");
+  renderLivroParteArmamento(document.getElementById("main")||document.getElementById("main-content"));
+}
+
 // Migra todos os materiais do patrimônio para o inventário como material_belico
 function _armMigrarParaInventario(){
   var mats=(state.materiaisPatrimonio||[]).filter(function(m){return (m.status||"ativo")==="ativo";});
@@ -12624,7 +12660,28 @@ function _renderPatrimonioCadastro(h,IS){
 
   var TIPOS_MAT=["Arma","Colete Balístico","Munição","Algemas","Rádio","Lanterna","Bastão","Equipamento Tático","Veículo","Outros"];
 
-  // Botão de migração para o inventário
+  // Importar itens dos registros de carga para o patrimônio
+  var _codigosEmCarga={};
+  (state.cargasArmamento||[]).forEach(function(c){
+    (c.itens||[]).forEach(function(it){
+      var cod=(it.codigo||"").toUpperCase().trim();
+      if(!cod) return;
+      if(!_codigosEmCarga[cod]) _codigosEmCarga[cod]={codigo:cod,tipo:it.tipo||"Arma",descricao:it.descricao||"",serie:it.serie||""};
+    });
+  });
+  var _novosCods=Object.keys(_codigosEmCarga).filter(function(cod){
+    return !(state.materiaisPatrimonio||[]).find(function(m){return (m.codigo||"").toUpperCase()===cod;});
+  });
+  if(_novosCods.length){
+    h.push("<div style='background:#1a0a08;border:1px solid #f59e0b55;border-radius:10px;padding:12px 16px;margin-bottom:14px'>");
+    h.push("<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px'>");
+    h.push("<div><p style='color:#f59e0b;font-size:12px;font-weight:700;margin:0'>⚠️ "+_novosCods.length+" item(s) nos registros de carga não constam no patrimônio</p>");
+    h.push("<p style='color:#7a5a3a;font-size:11px;margin:2px 0 0'>Códigos: "+_novosCods.slice(0,5).join(", ")+(_novosCods.length>5?" e mais "+(_novosCods.length-5)+"...":"")+"</p></div>");
+    h.push("<button onclick='_armImportarCodigosParaPatrimonio()' style='background:#1a1208;border:1px solid #f59e0b;color:#f59e0b;padding:7px 16px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer'>📋 Importar para Patrimônio</button>");
+    h.push("</div></div>");
+  }
+
+  // Botão de migração patrimônio → inventário
   var _jaNoInv=(state.invItens||[]).filter(function(x){return x.categoria==="material_belico";}).length;
   var _totalPat=(state.materiaisPatrimonio||[]).filter(function(x){return (x.status||"ativo")==="ativo";}).length;
   var _naoMigrados=_totalPat-_jaNoInv;
