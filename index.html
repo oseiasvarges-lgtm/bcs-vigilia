@@ -6236,11 +6236,47 @@ function gerarCardProjeto(id){
 }
 
 // ── Ver lista de inscrições ──────────────────────────────────────────────────
+// ── Fonte única de verdade: alunos de um projeto = candidatos APROVADOS ──────
+// Mantém compatibilidade com inscrições legadas (inscricoesProjetos)
+function _getAlunosProjeto(projId){
+  // 1. Candidatos aprovados (nova fonte)
+  var aprovados=(state.candidaturas||[])
+    .filter(function(c){ return c.projeto_id===projId && c.status==="aprovado"; })
+    .map(function(c){
+      return {
+        id:          c.id,
+        nome:        c.nome||"",
+        telefone:    c.telefone||c.responsavel_telefone||"",
+        bairro:      c.bairro||"",
+        data_nasc:   c.data_nascimento||"",
+        responsavel: c.responsavel_nome||"",
+        assinatura:  c.responsavel_assinatura||"",
+        comprovante: c.comprovante_residencia||"",
+        projeto_id:  projId,
+        origem:      "candidatura",
+        data_inscricao: c.data_decisao||c.data_candidatura||""
+      };
+    });
+
+  // 2. Inscrições legadas (inscricoesProjetos) — mantidas para compatibilidade
+  var legados=(state.inscricoesProjetos||[])
+    .filter(function(i){ return i.projeto_id===projId; })
+    .filter(function(i){
+      // Remove duplicatas: se já existe candidatura aprovada com mesmo nome, ignora legado
+      return !aprovados.find(function(a){
+        return norm(a.nome)===norm(i.nome);
+      });
+    })
+    .map(function(i){ return Object.assign({}, i, {origem:"legado"}); });
+
+  return aprovados.concat(legados);
+}
+
 function verListaInscricoes(projId){
   var p=(state.projetosSociais||[]).find(function(x){return x.id===projId;});
   if(!p) p=(state.projetos||[]).find(function(x){return x.id===projId;});
   if(!p) return;
-  var inscs=(state.inscricoesProjetos||[]).filter(function(ins){return ins.projeto_id===projId;});
+  var inscs=_getAlunosProjeto(projId);
   var mEx=document.getElementById("modal-inscricoes"); if(mEx) mEx.remove();
   var modal=document.createElement("div");
   modal.id="modal-inscricoes";
@@ -6248,42 +6284,34 @@ function verListaInscricoes(projId){
   var h=[];
   h.push("<div style='background:#2a1c10;border:2px solid #d4a87a;border-radius:14px;max-width:640px;width:100%;padding:22px;margin:auto'>");
   h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px'>");
-  h.push("<div><h3 style='color:#f5ede0;font-size:15px;font-weight:800;margin:0'>📋 Inscrições — "+esc(p.nome)+"</h3>");
-  h.push("<p style='color:#8a6a4a;font-size:11px;margin:3px 0 0'>"+inscs.length+" inscrição(ões) recebida(s)</p></div>");
+  h.push("<div><h3 style='color:#f5ede0;font-size:15px;font-weight:800;margin:0'>👥 Alunos — "+esc(p.nome)+"</h3>");
+  h.push("<p style='color:#8a6a4a;font-size:11px;margin:3px 0 0'>"+inscs.length+" aluno(s) aprovado(s)</p></div>");
   h.push("<button onclick=\"document.getElementById('modal-inscricoes').remove()\" style='background:none;border:none;color:#8a6a4a;font-size:22px;cursor:pointer'>×</button>");
   h.push("</div>");
   if(!inscs.length){
-    h.push("<p style='color:#4a3224;text-align:center;padding:24px'>Nenhuma inscrição ainda.</p>");
+    h.push("<div style='text-align:center;padding:30px;color:#4a3224'>");
+    h.push("<p style='font-size:13px;margin-bottom:8px'>Nenhum aluno aprovado ainda.</p>");
+    h.push("<p style='font-size:11px;color:#3a2218'>Acesse <b>Candidaturas</b> para aprovar candidatos.</p>");
+    h.push("</div>");
   } else {
-    // Tabela
-    h.push("<div style='overflow-x:auto;border-radius:10px;border:1px solid #4a3224'>");
-    h.push("<table style='width:100%;border-collapse:collapse;font-size:12px'>");
-    h.push("<thead><tr style='background:#36221a'><th style='padding:8px 10px;color:#8a6a4a;font-weight:700;text-align:left;font-size:10px;text-transform:uppercase'>#</th><th style='padding:8px 10px;color:#8a6a4a;font-weight:700;text-align:left;font-size:10px;text-transform:uppercase'>Nome</th><th style='padding:8px 10px;color:#8a6a4a;font-weight:700;text-align:left;font-size:10px;text-transform:uppercase'>Telefone</th><th style='padding:8px 10px;color:#8a6a4a;font-weight:700;text-align:left;font-size:10px;text-transform:uppercase'>Cursos</th><th style='padding:8px 10px;color:#8a6a4a;font-weight:700;text-align:left;font-size:10px;text-transform:uppercase'>Data</th></tr></thead>");
-    h.push("<tbody>");
+    h.push("<div style='display:flex;flex-direction:column;gap:8px'>");
     inscs.forEach(function(ins,idx){
-      var dt=ins.data_inscricao?new Date(ins.data_inscricao).toLocaleDateString("pt-BR"):"";
-      var bg=idx%2===0?"#2a1c10":"#1e1408";
-      h.push("<tr style='background:"+bg+";border-top:1px solid #3a2818'>");
-      h.push("<td style='padding:7px 10px;color:#5e4636'>"+( idx+1)+"</td>");
-      h.push("<td style='padding:7px 10px;color:#f5ede0;font-weight:600'>"+esc(ins.nome||"")+"</td>");
-      h.push("<td style='padding:7px 10px;color:#c8b07a'>"+esc(ins.telefone||"")+"</td>");
-      h.push("<td style='padding:7px 10px;color:#6a9a5a;font-size:11px'>"+esc(ins.cursos||"—")+"</td>");
-      h.push("<td style='padding:7px 10px;color:#5e4636;white-space:nowrap'>"+dt+"</td>");
-      h.push("</tr>");
-    });
-    h.push("</tbody></table></div>");
-    // Sugestões
-    var sugs=inscs.filter(function(ins){return ins.sugestao&&ins.sugestao.trim();});
-    if(sugs.length){
-      h.push("<div style='margin-top:14px'><p style='color:#8a6a4a;font-size:10px;font-weight:700;text-transform:uppercase;margin-bottom:8px'>💡 Sugestões de Cursos</p>");
-      sugs.forEach(function(ins){
-        h.push("<div style='background:#36221a;border:1px solid #4a3224;border-radius:7px;padding:8px 10px;margin-bottom:5px'>");
-        h.push("<p style='color:#c8b07a;font-size:12px;margin:0'>\""+esc(ins.sugestao)+"\"</p>");
-        h.push("<p style='color:#5e4636;font-size:10px;margin:3px 0 0'>— "+esc(ins.nome||"Anônimo")+"</p>");
-        h.push("</div>");
-      });
+      var dt=ins.data_inscricao?new Date(ins.data_inscricao).toLocaleDateString("pt-BR"):"—";
+      var idade="";
+      if(ins.data_nasc){ var a=Math.floor((new Date()-new Date(ins.data_nasc))/(365.25*864e5)); idade=a+" anos"; }
+      h.push("<div style='background:#1e1408;border:1px solid #3a2818;border-radius:8px;padding:10px 12px'>");
+      h.push("<div style='display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap'>");
+      h.push("<div style='flex:1;min-width:0'>");
+      h.push("<p style='color:#f5ede0;font-size:13px;font-weight:700;margin:0'>"+esc(ins.nome||"")+(idade?" <span style=\"color:#8a6a4a;font-size:10px;font-weight:400\">"+idade+"</span>":"")+"</p>");
+      h.push("<p style='color:#8a6a4a;font-size:11px;margin:2px 0 0'>📱 "+esc(ins.telefone||"—")+(ins.bairro?" · "+esc(ins.bairro):"")+" · Desde "+dt+"</p>");
+      if(ins.responsavel) h.push("<p style='color:#6a5030;font-size:10px;margin:2px 0 0'>Responsável: "+esc(ins.responsavel)+"</p>");
       h.push("</div>");
-    }
+      h.push("<div style='display:flex;gap:5px;flex-shrink:0'>");
+      if(ins.assinatura) h.push("<img src='"+ins.assinatura+"' title='Assinatura' style='height:32px;width:70px;object-fit:contain;border:1px solid #4a3224;border-radius:4px;background:#fff'>");
+      if(ins.comprovante&&ins.comprovante!=="[foto_local]") h.push("<img src='"+ins.comprovante+"' title='Comprovante' onclick='window.open(this.src,\"_blank\")' style='height:32px;width:40px;object-fit:cover;border:1px solid #4a3224;border-radius:4px;cursor:pointer'>");
+      h.push("</div></div></div>");
+    });
+    h.push("</div>");
   }
   h.push("</div>");
   modal.innerHTML=h.join("");
@@ -7457,7 +7485,7 @@ function renderCursosComunitarios(main){
     h.push("<div style='display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:14px'>");
     cursos.forEach(function(c){
       var scor=SOC_SCORS[c.status]||"#6b7280";
-      var inscs=(state.inscricoesProjetos||[]).filter(function(i){return i.projeto_id===c.id;});
+      var inscs=_getAlunosProjeto(c.id);
       var chamsCt=(state.chamadas||[]).filter(function(ch){return ch.projetoId===c.id;}).length;
       h.push("<div style='background:linear-gradient(145deg,#0e0820,#160e2a);border:1px solid #3a1e6a;border-radius:12px;padding:16px;display:flex;flex-direction:column;gap:10px'>");
       // Header do card
@@ -7484,7 +7512,7 @@ function renderCursosComunitarios(main){
       }
       // KPIs
       h.push("<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:6px'>");
-      h.push("<div style='background:#0a0614;border:1px solid #2a1a4a;border-radius:7px;padding:7px;text-align:center'><p style='color:#5a4a7a;font-size:9px;margin:0 0 2px;text-transform:uppercase;font-weight:700'>Inscritos</p><p style='color:#c89ae8;font-size:16px;font-weight:900;margin:0'>"+inscs.length+"</p></div>");
+      h.push("<div style='background:#0a0614;border:1px solid #2a1a4a;border-radius:7px;padding:7px;text-align:center'><p style='color:#5a4a7a;font-size:9px;margin:0 0 2px;text-transform:uppercase;font-weight:700'>Alunos</p><p style='color:#c89ae8;font-size:16px;font-weight:900;margin:0'>"+inscs.length+"</p></div>");
       h.push("<div style='background:#0a0614;border:1px solid #2a1a4a;border-radius:7px;padding:7px;text-align:center'><p style='color:#5a4a7a;font-size:9px;margin:0 0 2px;text-transform:uppercase;font-weight:700'>Vagas</p><p style='color:#c89ae8;font-size:16px;font-weight:900;margin:0'>"+(c.vagas||"∞")+"</p></div>");
       h.push("<div style='background:#0a0614;border:1px solid #2a1a4a;border-radius:7px;padding:7px;text-align:center'><p style='color:#5a4a7a;font-size:9px;margin:0 0 2px;text-transform:uppercase;font-weight:700'>Chamadas</p><p style='color:#c89ae8;font-size:16px;font-weight:900;margin:0'>"+chamsCt+"</p></div>");
       h.push("</div>");
@@ -12002,7 +12030,7 @@ function renderPortalInstrutor(app){
     h.push("<p style='color:#8a5ab8;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin:0 0 16px'>Meus Cursos ("+meusProjetos.length+")</p>");
     meusProjetos.forEach(function(c){
       var scor=SOC_SCORS[c.status]||"#6b7280";
-      var inscs=(state.inscricoesProjetos||[]).filter(function(ins){return ins.projeto_id===c.id;});
+      var inscs=_getAlunosProjeto(c.id);
       var minhasChamadas=(state.chamadas||[]).filter(function(cha){return cha.projetoId===c.id;});
       var vagasNum=parseInt(c.vagas)||0;
       var vagasDisp=vagasNum?Math.max(0,vagasNum-inscs.length):null;
@@ -12030,7 +12058,7 @@ function renderPortalInstrutor(app){
       }
       // KPIs
       h.push("<div style='display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px'>");
-      h.push("<div style='background:#0a0014;border:1px solid #3a1a58;border-radius:8px;padding:8px;text-align:center'><p style='color:#8a5ab8;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 3px'>Inscritos</p><p style='color:#c89ae8;font-size:18px;font-weight:900;margin:0'>"+inscs.length+"</p></div>");
+      h.push("<div style='background:#0a0014;border:1px solid #3a1a58;border-radius:8px;padding:8px;text-align:center'><p style='color:#8a5ab8;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 3px'>Alunos</p><p style='color:#c89ae8;font-size:18px;font-weight:900;margin:0'>"+inscs.length+"</p></div>");
       h.push("<div style='background:#0a0014;border:1px solid #3a1a58;border-radius:8px;padding:8px;text-align:center'><p style='color:#8a5ab8;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 3px'>Vagas</p><p style='color:"+(vagasDisp===null?"#8a5ab8":vagasDisp===0?"#ef4444":vagasDisp<=3?"#f59e0b":"#22c55e")+";font-size:18px;font-weight:900;margin:0'>"+(vagasDisp===null?"–":vagasDisp+" disp.")+"</p></div>");
       h.push("<div style='background:#0a0014;border:1px solid #3a1a58;border-radius:8px;padding:8px;text-align:center'><p style='color:#8a5ab8;font-size:9px;font-weight:700;text-transform:uppercase;margin:0 0 3px'>Chamadas</p><p style='color:#c89ae8;font-size:18px;font-weight:900;margin:0'>"+minhasChamadas.length+"</p></div>");
       h.push("</div>");
@@ -12039,7 +12067,7 @@ function renderPortalInstrutor(app){
       if(inscs.length>0){
         h.push("<button onclick=\"abrirChamadaModal('"+c.id+"')\" style='flex:2;min-width:120px;background:linear-gradient(135deg,#1a0a28,#2a1040);border:1px solid #8a4aba;color:#c89ae8;padding:9px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📋 Fazer Chamada</button>");
       }
-      h.push("<button onclick=\"verListaInscricoes('"+c.id+"')\" style='flex:1;min-width:100px;background:#0a0014;border:1px solid #4a2a68;color:#8a5ab8;padding:9px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>👥 Inscritos</button>");
+      h.push("<button onclick=\"verListaInscricoes('"+c.id+"')\" style='flex:1;min-width:100px;background:#0a0014;border:1px solid #4a2a68;color:#8a5ab8;padding:9px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>👥 Alunos</button>");
       h.push("<button onclick='_qrCandidatura(\""+c.id+"\",\""+esc(c.nome)+"\")' style='flex:1;min-width:80px;background:#1a0a28;border:1px solid #8a4aba44;color:#a78bfa;padding:9px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📱 QR Vaga</button>");
       if(minhasChamadas.length>0){
         h.push("<button onclick=\"verHistoricoChamadas('"+c.id+"')\" style='flex:1;min-width:100px;background:#0a1408;border:1px solid #2a4a2a;color:#4a8a4a;padding:9px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>📅 Histórico</button>");
@@ -12065,8 +12093,8 @@ function abrirChamadaModal(projId){
   var p=(state.projetosSociais||[]).find(function(x){return x.id===projId;});
   if(!p) p=(state.projetos||[]).find(function(x){return x.id===projId;});
   if(!p) return;
-  var inscs=(state.inscricoesProjetos||[]).filter(function(ins){return ins.projeto_id===projId;});
-  if(!inscs.length){ showToast("Nenhum inscrito para fazer chamada."); return; }
+  var inscs=_getAlunosProjeto(projId);
+  if(!inscs.length){ showToast("Nenhum aluno aprovado para fazer chamada. Aprove candidatos primeiro."); return; }
   var mEx=document.getElementById("modal-chamada"); if(mEx) mEx.remove();
   var modal=document.createElement("div");
   modal.id="modal-chamada";
@@ -12186,7 +12214,7 @@ function renderTabInstrutores(container){
   instrutores.forEach(function(inst){
     var totalInscritos=0; var totalChamadas=0; var somaFreq=0; var qtdChamadas=0;
     inst.projetos.forEach(function(c){
-      totalInscritos+=(state.inscricoesProjetos||[]).filter(function(i){return i.projeto_id===c.id;}).length;
+      totalInscritos+=_getAlunosProjeto(c.id).length;
       var chams=(state.chamadas||[]).filter(function(cha){return cha.projetoId===c.id;});
       totalChamadas+=chams.length;
       chams.forEach(function(cha){
@@ -12243,7 +12271,7 @@ function renderTabInstrutores(container){
       h.push("<div style='display:flex;flex-wrap:wrap;gap:8px'>");
       inst.projetos.forEach(function(c){
         var scor=SOC_SCORS[c.status]||"#8a4aba";
-        var insc=(state.inscricoesProjetos||[]).filter(function(i){return i.projeto_id===c.id;}).length;
+        var insc=_getAlunosProjeto(c.id).length;
         var cham=(state.chamadas||[]).filter(function(cha){return cha.projetoId===c.id;}).length;
         var vagasNum=parseInt(c.vagas)||0;
         var vagasInfo=vagasNum?("  ·  "+(Math.max(0,vagasNum-insc))+" vagas disp."):"";
