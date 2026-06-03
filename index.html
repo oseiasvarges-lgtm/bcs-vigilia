@@ -16366,11 +16366,18 @@ function renderOcorrenciasGestor(el, perfil_atual){
       h.push("<span onclick='_filtrarConectadas(\""+esc(o.id)+"\")' style='background:#0a1a0a;border:1px solid #22c55e55;color:#22c55e;padding:3px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px'>🔗 "+_nConect+" ocorrência"+(+_nConect===1?"":"s")+" conectada"+(+_nConect===1?"":"s")+" <span style='opacity:.6;font-size:9px'>(clique para ver)</span></span>");
       h.push("</div>");
     }
-    // Badge de complemento já lançado
+    // Complemento + ações
     var _compOc=(state.ocComplementos||[]).find(function(c){return c.ocId===o.id;});
-    h.push("<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'>");
+    // Destaque do botão Complemento — separado dos outros para chamar atenção
+    h.push("<div style='margin-top:10px;padding-top:10px;border-top:1px solid #4a3224'>");
+    h.push("<button onclick='_abrirComplemento(\""+esc(o.id)+"\")' style='width:100%;background:"+((_compOc)?"#0a2a1a":"#1a1208")+";border:2px solid "+((_compOc)?"#22c55e":"#4a9fd4")+";color:"+((_compOc)?"#22c55e":"#4a9fd4")+";padding:10px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px'>");
+    h.push("<span style='font-size:16px'>"+((_compOc)?"✅":"📊")+"</span>");
+    h.push("<span>"+((_compOc)?"Complemento lançado — clique para editar":"📊 Lançar Complemento no Relatório Mensal")+"</span>");
+    if(_compOc) h.push("<span style='background:"+((_compOc)?"#22c55e22":"transparent")+";padding:2px 8px;border-radius:5px;font-size:11px'>"+(_compOc.visitasSol+_compOc.visitasCom+_compOc.reunioes+_compOc.acoesSociais)+" itens</span>");
+    h.push("</button>");
+    h.push("</div>");
+    h.push("<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px'>");
     h.push("<button data-oc='"+o.id+"' data-act='pdf' style='background:#0a1628;border:1px solid #d4a87a;color:#d4a87a;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>📄 PDF</button>");
-    h.push("<button onclick='_abrirComplemento(\""+esc(o.id)+"\")' style='background:#0a1a2a;border:1px solid #4a9fd4"+((_compOc)?"":"55")+";color:#4a9fd4;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>"+((_compOc)?"✅":"📊")+" Complemento"+((_compOc)?" ("+(_compOc.visitasSol+_compOc.visitasCom+_compOc.reunioes+_compOc.acoesSociais)+" lançados)":"")+"</button>");
     h.push("<button data-oc='"+o.id+"' data-act='excluir' style='background:#1a0000;border:1px solid #ef4444;color:#ef4444;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>🗑 Excluir</button>");
     h.push("</div>");
     h.push("</div>");
