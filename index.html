@@ -320,6 +320,7 @@ function salvarLocal() {
     if(state.vcmEncaminhamentos) localStorage.setItem("bcs_vcm_enc",JSON.stringify(state.vcmEncaminhamentos));
     if(state.candidaturas) localStorage.setItem("bcs_candidaturas",JSON.stringify(state.candidaturas));
     if(state.cadastroInstrutores) localStorage.setItem("bcs_instrutores_cad",JSON.stringify(state.cadastroInstrutores));
+    if(state.ocComplementos) localStorage.setItem("bcs_oc_complementos",JSON.stringify(state.ocComplementos));
     if(state.policiais) localStorage.setItem("bcs_policiais",JSON.stringify(state.policiais));
     if(state.solicitacoes) localStorage.setItem("bcs_solicitacoes",JSON.stringify(state.solicitacoes));
     if(state.escolas) localStorage.setItem("bcs_escolas",JSON.stringify(state.escolas));
@@ -1073,6 +1074,7 @@ let state = {
   vcmEncaminhamentos: JSON.parse(localStorage.getItem("bcs_vcm_enc")||"[]"),
   candidaturas: JSON.parse(localStorage.getItem("bcs_candidaturas")||"[]"),
   cadastroInstrutores: JSON.parse(localStorage.getItem("bcs_instrutores_cad")||"[]"),
+  ocComplementos: JSON.parse(localStorage.getItem("bcs_oc_complementos")||"[]"),
 };
 
 // Inicializar arrays vazios se undefined
@@ -7871,19 +7873,27 @@ function _sincCandidaturasSheets(){
 // ══════════════════════════════════════════════════════════════════
 //  RELATÓRIO MENSAL — 6 indicadores automáticos
 // ══════════════════════════════════════════════════════════════════
-function _computarRelatorio(mes, ano){
+// periodo: {tipo:"mes",mes,ano} | {tipo:"semestre",sem,ano} | {tipo:"ano",ano}
+function _computarRelatorio(mes, ano, periodo){
   var ocs = state.db.ocorrencias || [];
   var agds = state.db.agendamentos || [];
   var visitas = state.db.visitas || [];
+  var comps = state.ocComplementos || [];
+  var per = periodo || {tipo:"mes", mes:mes, ano:ano};
 
-  // Filtra pelo mês/ano
-  function noMes(dataStr){
+  function noPeriodo(dataStr){
     if(!dataStr) return false;
     var d = new Date((dataStr+"").slice(0,10)+"T12:00");
-    return d.getFullYear()===ano && d.getMonth()===(mes-1);
+    var y = d.getFullYear(), m = d.getMonth()+1;
+    if(per.tipo==="mes")      return y===per.ano && m===per.mes;
+    if(per.tipo==="semestre") return y===per.ano && (per.sem===1 ? m<=6 : m>=7);
+    if(per.tipo==="ano")      return y===per.ano;
+    return false;
   }
+  // alias para compatibilidade
+  var noMes = noPeriodo;
 
-  var ocsDoMes = ocs.filter(function(o){ return noMes(o.data); });
+  var ocsDoMes = ocs.filter(function(o){ return noPeriodo(o.data); });
 
   // 1. Visitas Comunitárias — ocorrências + visitas agendadas realizadas
   var visitasCom = ocsDoMes.filter(function(o){
@@ -7939,18 +7949,38 @@ function _computarRelatorio(mes, ano){
   var visitasPessoas = (visitas||[]).filter(function(v){ return noMes(v.data); }).length;
   beneficiados += visitasPessoas;
 
-  // 6. Inscritos nos Projetos — total de alunos aprovados em todos os projetos ativos
+  // 6. Inscritos nos Projetos
   var inscritos = 0;
   (state.projetosSociais||[]).filter(function(p){ return p.status==="Ativo"; })
     .forEach(function(p){ inscritos += _getAlunosProjeto(p.id).length; });
 
+  // 7. REGRA VCM: toda ocorrência VD/VCM/Maria da Penha = +1 Visita Solidária
+  //    (mesmo atendimento por telefone é acompanhamento ativo)
+  var visitasSol = ocsDoMes.filter(function(o){
+    return o.violencia_domestica ||
+           /maria da penha|violên?cia dom[eé]stica|vcm|violên?cia contra a mulher/i.test(o.tipo||"") ||
+           /acompanhamento vcm|visita solid/i.test(o.classificacao||"");
+  }).length;
+
+  // 8. COMPLEMENTOS MANUAIS — soma os lançamentos das auxiliares
+  var compsDoMes = comps.filter(function(c){ return noPeriodo(c.mes+"-01"); });
+  compsDoMes.forEach(function(c){
+    visitasSol  += (c.visitasSol||0);
+    visitasCom  += (c.visitasCom||0);
+    reunioes    += (c.reunioes||0);
+    acoes       += (c.acoesSociais||0);
+    beneficiados+= (c.beneficiados||0);
+  });
+
   return {
-    visitasCom: visitasCom,
-    reunioes:   reunioes,
-    acoes:      acoes,
-    projAtivos: projAtivos,
-    beneficiados: beneficiados,
-    inscritos:  inscritos
+    visitasSol:  visitasSol,
+    visitasCom:  visitasCom,
+    reunioes:    reunioes,
+    acoes:       acoes,
+    projAtivos:  projAtivos,
+    beneficiados:beneficiados,
+    inscritos:   inscritos,
+    nComplementos: compsDoMes.length
   };
 }
 
@@ -7959,12 +7989,18 @@ var MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
 
 function _renderRelatorioMensal(main){
   var agora = new Date();
+  if(!state._relTipo) state._relTipo="mes";
   var mes  = state._relMes  || (agora.getMonth()+1);
   var ano  = state._relAno  || agora.getFullYear();
-  var dados = _computarRelatorio(mes, ano);
-  var mesNome = MESES_PT[mes-1]+" / "+ano;
+  var sem  = state._relSem  || (mes<=6?1:2);
+  var per  = state._relTipo==="semestre" ? {tipo:"semestre",sem:sem,ano:ano}
+           : state._relTipo==="ano"      ? {tipo:"ano",ano:ano}
+           : {tipo:"mes",mes:mes,ano:ano};
+  var dados = _computarRelatorio(mes, ano, per);
+  var perNome = per.tipo==="mes" ? MESES_PT[mes-1]+" / "+ano
+              : per.tipo==="semestre" ? (sem===1?"1º":"2º")+" Semestre / "+ano
+              : "Ano "+ano;
 
-  // Tabs (reutiliza o mesmo padrão)
   var _nCandPend=(state.candidaturas||[]).filter(function(e){return e.status==="pendente";}).length;
   var h=[];
   h.push("<div style='max-width:800px;margin:0 auto;padding:16px 20px 40px'>");
@@ -7976,36 +8012,51 @@ function _renderRelatorioMensal(main){
   });
   h.push("</div>");
 
-  // Cabeçalho
-  h.push("<div style='display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:20px'>");
-  h.push("<div><h2 style='color:#e0d0ff;font-size:17px;font-weight:800;margin:0'>📋 Relatório Mensal</h2>");
-  h.push("<p style='color:#7060a0;font-size:12px;margin:3px 0 0'>Indicadores calculados automaticamente · "+mesNome+"</p></div>");
-  // Seletor de mês
-  h.push("<div style='display:flex;gap:6px;align-items:center'>");
-  h.push("<select onchange='state._relMes=+this.value;_renderRelatorioMensal(document.getElementById(\"main\"))' style='background:#1a0a28;border:1px solid #3a1a58;color:#e0d0ff;padding:7px 10px;border-radius:7px;font-size:12px;outline:none'>");
-  MESES_PT.forEach(function(m,i){
-    h.push("<option value='"+(i+1)+"'"+(mes===(i+1)?" selected":"")+">"+m+"</option>");
+  // Cabeçalho + seletores de período
+  h.push("<div style='display:flex;align-items:flex-start;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px'>");
+  h.push("<div><h2 style='color:#e0d0ff;font-size:17px;font-weight:800;margin:0'>📋 Relatório de Atividades</h2>");
+  h.push("<p style='color:#7060a0;font-size:12px;margin:3px 0 0'>"+perNome+(dados.nComplementos?" · "+dados.nComplementos+" complemento(s) lançado(s)":"")+"</p></div>");
+  h.push("<div style='display:flex;flex-direction:column;gap:6px;align-items:flex-end'>");
+  // Tipo de período
+  h.push("<div style='display:flex;gap:4px'>");
+  [["mes","Mês"],["semestre","Semestre"],["ano","Ano"]].forEach(function(tp){
+    var at=state._relTipo===tp[0];
+    h.push("<button onclick=\"state._relTipo='"+tp[0]+"';_renderRelatorioMensal(document.getElementById('main'))\" style='padding:5px 12px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;border:"+(at?"1px solid #a78bfa":"1px solid #2a1a4a")+";background:"+(at?"#2a1250":"transparent")+";color:"+(at?"#a78bfa":"#5a4a80")+"'>"+tp[1]+"</button>");
   });
-  h.push("</select>");
+  h.push("</div>");
+  // Seletores conforme tipo
+  h.push("<div style='display:flex;gap:6px;align-items:center'>");
+  if(per.tipo==="mes"){
+    h.push("<select onchange='state._relMes=+this.value;_renderRelatorioMensal(document.getElementById(\"main\"))' style='background:#1a0a28;border:1px solid #3a1a58;color:#e0d0ff;padding:7px 10px;border-radius:7px;font-size:12px;outline:none'>");
+    MESES_PT.forEach(function(m,i){ h.push("<option value='"+(i+1)+"'"+(mes===(i+1)?" selected":"")+">"+m+"</option>"); });
+    h.push("</select>");
+  }
+  if(per.tipo==="semestre"){
+    h.push("<select onchange='state._relSem=+this.value;_renderRelatorioMensal(document.getElementById(\"main\"))' style='background:#1a0a28;border:1px solid #3a1a58;color:#e0d0ff;padding:7px 10px;border-radius:7px;font-size:12px;outline:none'>");
+    h.push("<option value='1'"+(sem===1?" selected":"")+">1º Semestre</option>");
+    h.push("<option value='2'"+(sem===2?" selected":"")+">2º Semestre</option>");
+    h.push("</select>");
+  }
   h.push("<select onchange='state._relAno=+this.value;_renderRelatorioMensal(document.getElementById(\"main\"))' style='background:#1a0a28;border:1px solid #3a1a58;color:#e0d0ff;padding:7px 10px;border-radius:7px;font-size:12px;outline:none'>");
   for(var y=ano-2; y<=ano+1; y++) h.push("<option value='"+y+"'"+(ano===y?" selected":"")+">"+y+"</option>");
-  h.push("</select>");
-  h.push("</div></div>");
+  h.push("</select></div></div></div>");
 
-  // Cards dos 6 indicadores
+  // Cards dos 7 indicadores (inclui Visitas Solidárias)
   var indicadores = [
-    {label:"Visitas Comunitárias",    icon:"🏘️", val:dados.visitasCom,   cor:"#d4a87a", key:"visitasCom",
-     fonte:"Ocorrências classificadas como Visita Comunitária + agendamentos realizados"},
-    {label:"Reuniões Comunitárias",   icon:"🤝", val:dados.reunioes,    cor:"#a78bfa", key:"reunioes",
-     fonte:"Ocorrências com tipo 'reunião' + Atas do Conselho Comunitário"},
-    {label:"Ações Sociais",           icon:"🌟", val:dados.acoes,       cor:"#4a9fd4", key:"acoes",
-     fonte:"Ocorrências classificadas como Projeto Social / Visita Solidária"},
-    {label:"Projetos Sociais Ativos", icon:"🌱", val:dados.projAtivos,  cor:"#22c55e", key:"projAtivos",
-     fonte:"Projetos com status Ativo no módulo Projetos Sociais"},
-    {label:"Beneficiados",            icon:"👥", val:dados.beneficiados,cor:"#ff69b4", key:"beneficiados",
-     fonte:"Presenças em chamadas do mês + visitas realizadas"},
-    {label:"Inscritos nos Projetos",  icon:"📚", val:dados.inscritos,   cor:"#f59e0b", key:"inscritos",
-     fonte:"Total de candidatos aprovados em todos os projetos ativos"}
+    {label:"Visitas Solidárias",      icon:"🤝", val:dados.visitasSol,  cor:"#ff69b4", key:"visitasSol",
+     fonte:"Atendimentos VCM/VD/Maria da Penha (inclusive telefone) + complementos manuais"},
+    {label:"Visitas Comunitárias",    icon:"🏘️", val:dados.visitasCom,  cor:"#d4a87a", key:"visitasCom",
+     fonte:"Ocorrências 'Visita Comunitária' + agendamentos realizados + complementos"},
+    {label:"Reuniões Comunitárias",   icon:"🗣️", val:dados.reunioes,   cor:"#a78bfa", key:"reunioes",
+     fonte:"Ocorrências 'Reunião Comunitária' + Atas do Conselho + complementos"},
+    {label:"Ações Sociais",           icon:"🌟", val:dados.acoes,      cor:"#4a9fd4", key:"acoes",
+     fonte:"Ocorrências 'Ação Social' / 'Visita Solidária' / 'Projeto Social' + complementos"},
+    {label:"Projetos Sociais Ativos", icon:"🌱", val:dados.projAtivos, cor:"#22c55e", key:"projAtivos",
+     fonte:"Projetos com status Ativo"},
+    {label:"Beneficiados",            icon:"👥", val:dados.beneficiados,cor:"#f59e0b", key:"beneficiados",
+     fonte:"Presenças nas chamadas + visitas + complementos manuais"},
+    {label:"Inscritos nos Projetos",  icon:"📚", val:dados.inscritos,  cor:"#60a5fa", key:"inscritos",
+     fonte:"Total de candidatos aprovados em projetos ativos"}
   ];
 
   h.push("<div style='display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px'>");
@@ -8032,18 +8083,20 @@ function _renderRelatorioMensal(main){
   h.push("</div>");
 
   // Texto pronto para copiar
+  function _vr(key,auto){ return (state["_relMan_"+key]!=null&&state["_relMan_"+key]!=="")?+state["_relMan_"+key]:auto; }
   var linhas=[
-    "RELATÓRIO MENSAL — 77ª CIPM BCS",
+    "RELATÓRIO DE ATIVIDADES — 77ª CIPM BCS",
     "Base Comunitária de Segurança Nova Cidade",
-    "Referência: "+mesNome,
-    "—————————————————————",
-    "Visitas Comunitárias:     "+((state._relMan_visitasCom!=null&&state._relMan_visitasCom!=="")?+state._relMan_visitasCom:dados.visitasCom),
-    "Reuniões Comunitárias:    "+((state._relMan_reunioes!=null&&state._relMan_reunioes!=="")?+state._relMan_reunioes:dados.reunioes),
-    "Ações Sociais:            "+((state._relMan_acoes!=null&&state._relMan_acoes!=="")?+state._relMan_acoes:dados.acoes),
-    "Projetos Sociais:         "+((state._relMan_projAtivos!=null&&state._relMan_projAtivos!=="")?+state._relMan_projAtivos:dados.projAtivos),
-    "Beneficiados:             "+((state._relMan_beneficiados!=null&&state._relMan_beneficiados!=="")?+state._relMan_beneficiados:dados.beneficiados),
-    "Inscritos nos Projetos:   "+((state._relMan_inscritos!=null&&state._relMan_inscritos!=="")?+state._relMan_inscritos:dados.inscritos),
-    "—————————————————————",
+    "Referência: "+perNome,
+    "————————————————————————————",
+    "Visitas Solidárias:       "+_vr("visitasSol", dados.visitasSol),
+    "Visitas Comunitárias:     "+_vr("visitasCom", dados.visitasCom),
+    "Reuniões Comunitárias:    "+_vr("reunioes",   dados.reunioes),
+    "Ações Sociais:            "+_vr("acoes",      dados.acoes),
+    "Projetos Sociais:         "+_vr("projAtivos", dados.projAtivos),
+    "Beneficiados:             "+_vr("beneficiados",dados.beneficiados),
+    "Inscritos nos Projetos:   "+_vr("inscritos",  dados.inscritos),
+    "————————————————————————————",
     "Gerado pelo Sistema IARA · "+new Date().toLocaleDateString("pt-BR")
   ];
   var textoRelatorio = linhas.join("\n");
@@ -16313,8 +16366,11 @@ function renderOcorrenciasGestor(el, perfil_atual){
       h.push("<span onclick='_filtrarConectadas(\""+esc(o.id)+"\")' style='background:#0a1a0a;border:1px solid #22c55e55;color:#22c55e;padding:3px 10px;border-radius:5px;font-size:10px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:4px'>🔗 "+_nConect+" ocorrência"+(+_nConect===1?"":"s")+" conectada"+(+_nConect===1?"":"s")+" <span style='opacity:.6;font-size:9px'>(clique para ver)</span></span>");
       h.push("</div>");
     }
+    // Badge de complemento já lançado
+    var _compOc=(state.ocComplementos||[]).find(function(c){return c.ocId===o.id;});
     h.push("<div style='display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:8px'>");
     h.push("<button data-oc='"+o.id+"' data-act='pdf' style='background:#0a1628;border:1px solid #d4a87a;color:#d4a87a;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>📄 PDF</button>");
+    h.push("<button onclick='_abrirComplemento(\""+esc(o.id)+"\")' style='background:#0a1a2a;border:1px solid #4a9fd4"+((_compOc)?"":"55")+";color:#4a9fd4;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>"+((_compOc)?"✅":"📊")+" Complemento"+((_compOc)?" ("+(_compOc.visitasSol+_compOc.visitasCom+_compOc.reunioes+_compOc.acoesSociais)+" lançados)":"")+"</button>");
     h.push("<button data-oc='"+o.id+"' data-act='excluir' style='background:#1a0000;border:1px solid #ef4444;color:#ef4444;padding:5px 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>🗑 Excluir</button>");
     h.push("</div>");
     h.push("</div>");
@@ -16396,6 +16452,100 @@ function _gestorLancarOcManual(){
   // Marca que ao salvar deve voltar para ocorrencias (não para dashboard)
   state._lancarRetornoGestor = true;
   setTela("lancar");
+}
+
+// ── Complemento de Ocorrência → alimenta Relatório Mensal ────────
+function _abrirComplemento(ocId){
+  var oc=(state.db.ocorrencias||[]).find(function(x){return x.id===ocId;});
+  if(!oc) return;
+  var comp=(state.ocComplementos||[]).find(function(c){return c.ocId===ocId;})||{};
+  var relato=(oc.texto_original||oc.descricao_dinamica||oc.descricao||"").trim();
+  var IS="width:100%;background:#0a1628;border:1px solid #1e3d6a;color:#c5daf5;padding:9px;border-radius:6px;font-size:15px;text-align:center;font-weight:700;outline:none;box-sizing:border-box";
+
+  var html="<div id='modal-complemento' style='position:fixed;inset:0;background:rgba(0,0,0,0.88);z-index:9800;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto'>";
+  html+="<div style='background:#070e1c;border:1px solid #1e3d6a;border-radius:14px;width:100%;max-width:580px;padding:0;margin-bottom:40px'>";
+  // Cabeçalho
+  html+="<div style='background:#0a1628;padding:14px 18px;border-bottom:1px solid #1a3358;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0'>";
+  html+="<div><p style='color:#4a9fd4;font-size:11px;font-weight:700;text-transform:uppercase;margin:0 0 2px;letter-spacing:1px'>📊 Complemento de Ocorrência</p>";
+  html+="<p style='color:#c5daf5;font-size:13px;font-weight:700;margin:0'>"+esc(oc.tipo||"Ocorrência")+" · "+esc(oc.data||"")+"</p></div>";
+  html+="<button onclick=\"document.getElementById('modal-complemento').remove()\" style='background:none;border:none;color:#888;font-size:18px;cursor:pointer'>✕</button>";
+  html+="</div>";
+  html+="<div style='padding:18px;display:flex;flex-direction:column;gap:14px'>";
+
+  // Relato para leitura
+  if(relato){
+    html+="<div style='background:#060d1c;border:1px solid #1a3358;border-radius:8px;padding:12px'>";
+    html+="<p style='color:#4a9fd4;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 8px'>📋 Relato — leia e preencha abaixo</p>";
+    html+="<p style='color:#8a9aba;font-size:12px;line-height:1.7;margin:0;white-space:pre-wrap;max-height:140px;overflow-y:auto'>"+esc(relato)+"</p>";
+    html+="</div>";
+  }
+
+  // Campos de complemento
+  html+="<p style='color:#c5daf5;font-size:12px;font-weight:700;margin:0'>Quantas ações esta ocorrência gerou?</p>";
+  html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px'>";
+  [
+    {id:"comp-vsol", label:"🤝 Visitas Solidárias", hint:"inclui VCM por telefone", val:comp.visitasSol||0},
+    {id:"comp-vcom", label:"🏘️ Visitas Comunitárias", hint:"presença na comunidade", val:comp.visitasCom||0},
+    {id:"comp-reun", label:"🗣️ Reuniões Comunitárias", hint:"reuniões realizadas", val:comp.reunioes||0},
+    {id:"comp-acao", label:"🌟 Ações Sociais", hint:"ações e distribuições", val:comp.acoesSociais||0},
+    {id:"comp-benef", label:"👥 Beneficiados", hint:"pessoas atendidas/impactadas", val:comp.beneficiados||0},
+    {id:"comp-obs-wrap", label:"📝 Observação", hint:"opcional", val:null}
+  ].forEach(function(f){
+    if(f.id==="comp-obs-wrap"){
+      html+="<div><label style='color:#4a9fd4;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px'>"+f.label+"</label>";
+      html+="<input id='comp-obs' type='text' value='"+esc(comp.obs||"")+"' placeholder=''+f.hint+'' style='"+IS.replace("font-size:15px","font-size:12px").replace("text-align:center","text-align:left")+"'></div>";
+    } else {
+      html+="<div><label style='color:#4a9fd4;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px'>"+f.label+"</label>";
+      html+="<p style='color:#3a5a7a;font-size:9px;margin:0 0 4px'>"+f.hint+"</p>";
+      html+="<input id='"+f.id+"' type='number' min='0' max='999' value='"+f.val+"' style='"+IS+"'></div>";
+    }
+  });
+  html+="</div>";
+
+  // Botões
+  html+="<div style='display:flex;gap:8px;justify-content:flex-end'>";
+  if(comp.ocId) html+="<button onclick='_removerComplemento(\""+ocId+"\")' style='background:transparent;border:1px solid #3a1a1a;color:#ef4444;padding:8px 14px;border-radius:6px;font-size:12px;cursor:pointer'>🗑 Remover</button>";
+  html+="<button onclick=\"document.getElementById('modal-complemento').remove()\" style='background:transparent;border:1px solid #1e3d6a;color:#4a9fd4;padding:8px 16px;border-radius:6px;font-size:12px;cursor:pointer'>Cancelar</button>";
+  html+="<button onclick='_salvarComplemento(\""+ocId+"\")' style='background:linear-gradient(135deg,#0c2d5c,#1a4d9a);border:1px solid #4a9fd4;color:#c5daf5;padding:8px 20px;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer'>💾 Salvar</button>";
+  html+="</div></div></div></div>";
+  document.body.insertAdjacentHTML("beforeend",html);
+}
+
+function _salvarComplemento(ocId){
+  var oc=(state.db.ocorrencias||[]).find(function(x){return x.id===ocId;});
+  if(!oc) return;
+  var v=function(id){return parseInt((document.getElementById(id)||{value:"0"}).value)||0;};
+  if(!state.ocComplementos) state.ocComplementos=[];
+  var mes=oc.data?oc.data.slice(0,7):"";
+  var obj={
+    ocId:ocId, mes:mes,
+    tipo:oc.tipo||"", classificacao:oc.classificacao||"",
+    visitasSol: v("comp-vsol"),
+    visitasCom: v("comp-vcom"),
+    reunioes:   v("comp-reun"),
+    acoesSociais: v("comp-acao"),
+    beneficiados: v("comp-benef"),
+    obs:(document.getElementById("comp-obs")||{value:""}).value.trim(),
+    lancadoEm:new Date().toISOString()
+  };
+  var idx=state.ocComplementos.findIndex(function(c){return c.ocId===ocId;});
+  if(idx>=0) state.ocComplementos[idx]=obj; else state.ocComplementos.push(obj);
+  localStorage.setItem("bcs_oc_complementos",JSON.stringify(state.ocComplementos));
+  salvarLocal();
+  document.getElementById("modal-complemento").remove();
+  showToast("✅ Complemento salvo! Relatório mensal atualizado.");
+  var el=document.getElementById("main-content")||document.getElementById("main");
+  if(el) renderOcorrenciasGestor(el, state._ocPerfil);
+}
+
+function _removerComplemento(ocId){
+  state.ocComplementos=(state.ocComplementos||[]).filter(function(c){return c.ocId!==ocId;});
+  localStorage.setItem("bcs_oc_complementos",JSON.stringify(state.ocComplementos));
+  salvarLocal();
+  document.getElementById("modal-complemento").remove();
+  showToast("Complemento removido.");
+  var el=document.getElementById("main-content")||document.getElementById("main");
+  if(el) renderOcorrenciasGestor(el, state._ocPerfil);
 }
 
 function _filtrarConectadas(ocId){
