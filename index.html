@@ -3600,6 +3600,13 @@ function _modalVcm(titulo, vitimas){
 }
 
 function _renderVcmEncaminhamentos(main){
+  // Relê localStorage para capturar encaminhamentos adicionados pelo monitor VCM
+  try{
+    var _locEnc=JSON.parse(localStorage.getItem("bcs_vcm_enc")||"[]");
+    if(_locEnc.length>(state.vcmEncaminhamentos||[]).length){
+      state.vcmEncaminhamentos=_locEnc;
+    }
+  }catch(e){}
   var encs=(state.vcmEncaminhamentos||[]).slice().sort(function(a,b){
     // pendentes primeiro, depois por data desc
     if(a.status==="pendente"&&b.status!=="pendente") return -1;
@@ -16620,6 +16627,12 @@ function _vcmEncaminhar(ocId, servico){
       caso.rede[servico]={marcado:true,data:new Date().toISOString()};
       _vcmSalvarCasos();
     }
+  }
+  // Re-renderiza a tela atual para atualizar badges e contadores
+  var _mainEl=document.getElementById("main-content")||document.getElementById("main");
+  if(_mainEl){
+    if(state.tela==="dashvcm") renderDashboardVCM(_mainEl);
+    else if(state.tela==="ocorrencias") renderOcorrenciasGestor(_mainEl, state._ocPerfil);
   }
 }
 
