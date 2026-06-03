@@ -7473,7 +7473,10 @@ function renderCursosComunitarios(main){
   h.push("<h2 style='color:#e0d0ff;font-size:16px;font-weight:800;margin:0 0 3px'>📚 Cursos Comunitários</h2>");
   h.push("<p style='color:#7060a0;font-size:11px;margin:0'>"+cursos.length+" curso(s) cadastrado(s)</p>");
   h.push("</div>");
+  h.push("<div style='display:flex;gap:8px'>");
+  h.push("<button onclick='_sincronizarProjetosSociais()' title='Envia todos os projetos para a planilha e atualiza o portfólio público' style='background:#0a1a2a;border:1px solid #4a9fd455;color:#4a9fd4;padding:10px 14px;border-radius:9px;font-size:12px;font-weight:700;cursor:pointer'>🔄 Sync Portfólio</button>");
   h.push("<button onclick='abrirModalNovoCurso()' style='background:linear-gradient(135deg,#6a2a9a,#4a1a7a);border:none;color:#e8d0ff;padding:10px 20px;border-radius:9px;font-size:13px;font-weight:700;cursor:pointer'>+ Novo Curso</button>");
+  h.push("</div>");
   h.push("</div>");
 
   if(!cursos.length){
@@ -7594,8 +7597,11 @@ function abrirModalNovoCurso(editId){
       obj.id="SOC_"+Date.now(); obj.criadoEm=new Date().toISOString();
       state.projetosSociais.push(obj);
     }
-    salvarLocal(); modal.remove();
-    showToast(edit?"Curso atualizado!":"Curso cadastrado!");
+    salvarLocal();
+    // Sincroniza com a aba projetos_sociais da planilha (alimenta o portfólio público)
+    _invEnviarSheets("projeto_social", edit||obj);
+    modal.remove();
+    showToast(edit?"Curso atualizado! Sincronizando portfólio...":"Curso cadastrado! Sincronizando portfólio...");
     renderProjetosSociais(document.getElementById("main"));
   };
   setTimeout(function(){document.getElementById("cnome")&&document.getElementById("cnome").focus();},100);
@@ -7603,9 +7609,24 @@ function abrirModalNovoCurso(editId){
 
 function excluirCurso(id){
   if(!confirm("Excluir este curso? Os inscritos não serão apagados.")) return;
+  // Marca como encerrado na planilha (não deleta — mantém histórico)
+  var proj=(state.projetosSociais||[]).find(function(x){return x.id===id;});
+  if(proj){ proj.status="Encerrado"; _invEnviarSheets("projeto_social", proj); }
   state.projetosSociais=(state.projetosSociais||[]).filter(function(c){return c.id!==id;});
   salvarLocal();
   renderProjetosSociais(document.getElementById("main"));
+}
+
+// Sincroniza todos os projetos sociais com a aba da planilha (e portfólio)
+function _sincronizarProjetosSociais(){
+  if(!SHEETS_URL) return;
+  var prjs=state.projetosSociais||[];
+  if(!prjs.length) return;
+  // Envia em lotes com pequeno delay para não sobrecarregar
+  prjs.forEach(function(p, i){
+    setTimeout(function(){ _invEnviarSheets("projeto_social", p); }, i*200);
+  });
+  showToast("🔄 Sincronizando "+prjs.length+" projeto(s) com o portfólio...");
 }
 
 function gerarCardCurso(id){
