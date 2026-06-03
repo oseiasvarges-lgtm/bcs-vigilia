@@ -319,6 +319,7 @@ function salvarLocal() {
     if(state.vcmCasos) localStorage.setItem("bcs_vcm_casos",JSON.stringify(state.vcmCasos));
     if(state.vcmEncaminhamentos) localStorage.setItem("bcs_vcm_enc",JSON.stringify(state.vcmEncaminhamentos));
     if(state.candidaturas) localStorage.setItem("bcs_candidaturas",JSON.stringify(state.candidaturas));
+    if(state.cadastroInstrutores) localStorage.setItem("bcs_instrutores_cad",JSON.stringify(state.cadastroInstrutores));
     if(state.policiais) localStorage.setItem("bcs_policiais",JSON.stringify(state.policiais));
     if(state.solicitacoes) localStorage.setItem("bcs_solicitacoes",JSON.stringify(state.solicitacoes));
     if(state.escolas) localStorage.setItem("bcs_escolas",JSON.stringify(state.escolas));
@@ -1071,6 +1072,7 @@ let state = {
   vcmCasos: JSON.parse(localStorage.getItem("bcs_vcm_casos")||"{}"),
   vcmEncaminhamentos: JSON.parse(localStorage.getItem("bcs_vcm_enc")||"[]"),
   candidaturas: JSON.parse(localStorage.getItem("bcs_candidaturas")||"[]"),
+  cadastroInstrutores: JSON.parse(localStorage.getItem("bcs_instrutores_cad")||"[]"),
 };
 
 // Inicializar arrays vazios se undefined
@@ -7458,7 +7460,7 @@ function renderCursosComunitarios(main){
   var _tab=state._psTab||"cursos";
   var _nCandPend=(state.candidaturas||[]).filter(function(c){return c.status==="pendente";}).length;
   h.push("<div style='display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap'>");
-  [["monitoramento","📊 Monitoramento"],["cursos","📚 Projetos"],["candidaturas","📋 Candidaturas"],["relatorio","📋 Relatório Mensal"],["portfolio","🌐 Portfólio"]].forEach(function(t){
+  [["monitoramento","📊 Monitoramento"],["cursos","📚 Projetos"],["candidaturas","📋 Candidaturas"],["instrutores","👨‍🏫 Instrutores"],["relatorio","📋 Relatório"],["portfolio","🌐 Portfólio"]].forEach(function(t){
     var ativo=_tab===t[0];
     var extra=t[0]==="candidaturas"&&_nCandPend>0?" <span style='background:#a78bfa;color:#1a0a28;border-radius:8px;padding:1px 6px;font-size:10px'>"+_nCandPend+"</span>":"";
     h.push("<button onclick=\"state._psTab='"+t[0]+"';renderProjetosSociais(document.getElementById('main'))\" style='padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:"+(ativo?"2px solid #a78bfa":"1px solid #4a2a78")+";background:"+(ativo?"#a78bfa22":"#0e0820")+";color:"+(ativo?"#a78bfa":"#5a4a80")+"'>"+t[1]+extra+"</button>");
@@ -7946,7 +7948,7 @@ function _renderRelatorioMensal(main){
   var h=[];
   h.push("<div style='max-width:800px;margin:0 auto;padding:16px 20px 40px'>");
   h.push("<div style='display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap'>");
-  [["monitoramento","📊 Monitoramento"],["cursos","📚 Projetos"],["candidaturas","📋 Candidaturas"],["relatorio","📋 Relatório Mensal"],["portfolio","🌐 Portfólio"]].forEach(function(t){
+  [["monitoramento","📊 Monitoramento"],["cursos","📚 Projetos"],["candidaturas","📋 Candidaturas"],["instrutores","👨‍🏫 Instrutores"],["relatorio","📋 Relatório"],["portfolio","🌐 Portfólio"]].forEach(function(t){
     var ativo=t[0]==="relatorio";
     var extra=t[0]==="candidaturas"&&_nCandPend>0?" <span style='background:#a78bfa;color:#1a0a28;border-radius:8px;padding:1px 6px;font-size:10px'>"+_nCandPend+"</span>":"";
     h.push("<button onclick=\"state._psTab='"+t[0]+"';renderProjetosSociais(document.getElementById('main'))\" style='padding:9px 16px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;border:"+(ativo?"2px solid #a78bfa":"1px solid #4a2a78")+";background:"+(ativo?"#a78bfa22":"#0e0820")+";color:"+(ativo?"#a78bfa":"#5a4a80")+"'>"+t[1]+extra+"</button>");
@@ -8065,6 +8067,148 @@ function _imprimirRelatorio(){
   }
 }
 
+// ── Cadastro de Instrutores ──────────────────────────────────────
+function abrirCadastroInstrutor(editId){
+  var edit=editId?(state.cadastroInstrutores||[]).find(function(x){return x.id===editId;}):null;
+  var IS="width:100%;background:#1a0a28;border:1px solid #3a1a58;color:#e0d0ff;padding:9px 11px;border-radius:7px;font-size:13px;outline:none;box-sizing:border-box";
+  var LS="color:#8a5ab8;font-size:10px;font-weight:700;text-transform:uppercase;display:block;margin-bottom:4px";
+  var _assinInstr=edit?edit.assinatura:"";
+  var tipo=edit?edit.tipo:"pm";
+  var html="<div id='modal-cad-instr' style='position:fixed;inset:0;background:rgba(0,0,0,0.92);z-index:10001;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow-y:auto'>";
+  html+="<div style='background:#1a0a28;border:2px solid #8a4aba;border-radius:14px;width:100%;max-width:540px;margin-bottom:40px'>";
+  html+="<div style='background:#120828;padding:14px 18px;border-bottom:1px solid #2a1a4a;display:flex;justify-content:space-between;align-items:center;border-radius:14px 14px 0 0'>";
+  html+="<span style='color:#c89ae8;font-size:14px;font-weight:700'>👨‍🏫 "+(edit?"Editar":"Cadastrar")+" Instrutor</span>";
+  html+="<button onclick=\"document.getElementById('modal-cad-instr').remove()\" style='background:none;border:none;color:#888;font-size:18px;cursor:pointer'>✕</button>";
+  html+="</div><div style='padding:20px;display:flex;flex-direction:column;gap:12px'>";
+  // Tipo
+  html+="<div style='display:flex;gap:8px'>";
+  html+="<button id='btn-tipo-pm' onclick='_instrTipo(\"pm\")' type='button' style='flex:1;padding:9px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:2px solid #a78bfa;background:"+(tipo==="pm"?"#2a1250":"transparent")+";color:#a78bfa'>👮 Policial Militar</button>";
+  html+="<button id='btn-tipo-vol' onclick='_instrTipo(\"voluntario\")' type='button' style='flex:1;padding:9px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;border:2px solid #22c55e;background:"+(tipo==="voluntario"?"#0a2a1a":"transparent")+";color:#22c55e'>🤝 Voluntário</button>";
+  html+="<input type='hidden' id='instr-tipo' value='"+tipo+"'></div>";
+  // Dados
+  html+="<div style='display:grid;grid-template-columns:110px 1fr;gap:10px'>";
+  html+="<div><label style='"+LS+"'>Graduação</label><input id='instr-grad' value='"+(edit?esc(edit.grad||""):"")+"' placeholder='SD, Sgt...' style='"+IS+"'></div>";
+  html+="<div><label style='"+LS+"'>Nome completo *</label><input id='instr-nome' value='"+(edit?esc(edit.nome||""):"")+"' placeholder='Nome do instrutor' style='"+IS+"'></div>";
+  html+="</div>";
+  html+="<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px'>";
+  html+="<div><label style='"+LS+"'>Telefone</label><input id='instr-tel' value='"+(edit?esc(edit.telefone||""):"")+"' placeholder='(77) 9 xxxx-xxxx' style='"+IS+"'></div>";
+  html+="<div><label style='"+LS+"'>Área de Atuação</label><input id='instr-area' value='"+(edit?esc(edit.area||""):"")+"' placeholder='Judô, Informática...' style='"+IS+"'></div>";
+  html+="</div>";
+  html+="<div><label style='"+LS+"'>Qualificação / Formação</label><input id='instr-qualif' value='"+(edit?esc(edit.qualificacao||""):"")+"' placeholder='Faixa Preta 2º DAN, Eng. da Computação...' style='"+IS+"'></div>";
+  // PIN pessoal
+  html+="<div style='background:#0a0020;border:1px solid #2a1a4a;border-radius:8px;padding:12px'>";
+  html+="<label style='"+LS+"'>PIN pessoal de acesso (4-8 dígitos)</label>";
+  html+="<input id='instr-pin-cad' type='password' maxlength='8' placeholder='"+(edit?"Deixe vazio para manter o atual":"Crie um PIN pessoal")+"' style='"+IS+";letter-spacing:4px;text-align:center'>";
+  html+="<p style='color:#3a2a5a;font-size:10px;margin:5px 0 0'>Cada instrutor tem seu próprio PIN</p></div>";
+  // Assinatura
+  html+="<div><label style='"+LS+"'>Assinatura Digital</label>";
+  html+="<div style='border:2px solid #3a1a58;border-radius:8px;background:#fff;position:relative;overflow:hidden'>";
+  html+="<canvas id='instr-pad' width='480' height='120' style='width:100%;height:120px;display:block;cursor:crosshair;touch-action:none'></canvas>";
+  html+="<button type='button' onclick='_limparInstrPad()' style='position:absolute;top:5px;right:7px;background:rgba(240,240,240,.9);border:1px solid #ccc;color:#555;padding:2px 8px;border-radius:4px;font-size:10px;cursor:pointer'>Limpar</button>";
+  html+="</div></div>";
+  // Obs
+  html+="<div><label style='"+LS+"'>Observações</label><textarea id='instr-obs' rows='2' style='"+IS+";resize:vertical'>"+(edit?esc(edit.obs||""):"")+"</textarea></div>";
+  // Botões
+  html+="<div style='display:flex;gap:8px;justify-content:flex-end'>";
+  html+="<button onclick=\"document.getElementById('modal-cad-instr').remove()\" style='background:transparent;border:1px solid #3a1a58;color:#8a5ab8;padding:9px 16px;border-radius:7px;font-size:12px;cursor:pointer'>Cancelar</button>";
+  if(edit&&edit.tipo==="voluntario") html+="<button onclick='_gerarTermoVoluntario(\""+editId+"\")' style='background:#0a2a1a;border:1px solid #22c55e;color:#22c55e;padding:9px 14px;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer'>📄 Termo</button>";
+  html+="<button onclick='_salvarInstrutor(\""+esc(editId||"")+"\")'  style='background:linear-gradient(135deg,#6a2a9a,#4a1a7a);border:none;color:#e8d0ff;padding:9px 20px;border-radius:7px;font-size:13px;font-weight:700;cursor:pointer'>💾 Salvar</button>";
+  html+="</div></div></div></div>";
+  document.body.insertAdjacentHTML("beforeend",html);
+  // Canvas
+  (function(){
+    var cv=document.getElementById("instr-pad"), ctx=cv.getContext("2d"), painting=false;
+    ctx.fillStyle="#fff"; ctx.fillRect(0,0,cv.width,cv.height);
+    ctx.strokeStyle="#1a0a28"; ctx.lineWidth=2.5; ctx.lineCap="round"; ctx.lineJoin="round";
+    function pos(e){ var r=cv.getBoundingClientRect(),s=e.touches?e.touches[0]:e; return {x:(s.clientX-r.left)*(cv.width/r.width),y:(s.clientY-r.top)*(cv.height/r.height)}; }
+    cv.onmousedown=cv.ontouchstart=function(e){e.preventDefault();painting=true;var p=pos(e);ctx.beginPath();ctx.moveTo(p.x,p.y);};
+    cv.onmousemove=cv.ontouchmove=function(e){e.preventDefault();if(!painting)return;var p=pos(e);ctx.lineTo(p.x,p.y);ctx.stroke();};
+    cv.onmouseup=cv.onmouseleave=cv.ontouchend=function(){painting=false;_assinInstr=cv.toDataURL("image/jpeg",.85);};
+    if(edit&&edit.assinatura){var img=new Image();img.onload=function(){ctx.drawImage(img,0,0,cv.width,cv.height);};img.src=edit.assinatura;_assinInstr=edit.assinatura;}
+  })();
+  window._limparInstrPad=function(){var cv=document.getElementById("instr-pad");if(!cv)return;var ctx=cv.getContext("2d");ctx.fillStyle="#fff";ctx.fillRect(0,0,cv.width,cv.height);_assinInstr="";};
+  window._instrTipo=function(t){document.getElementById("instr-tipo").value=t;document.getElementById("btn-tipo-pm").style.background=t==="pm"?"#2a1250":"transparent";document.getElementById("btn-tipo-vol").style.background=t==="voluntario"?"#0a2a1a":"transparent";};
+  window._salvarInstrutor=function(editId){
+    var nome=(document.getElementById("instr-nome")||{value:""}).value.trim();
+    if(!nome){showToast("Informe o nome","error");return;}
+    var pinNovo=(document.getElementById("instr-pin-cad")||{value:""}).value.trim();
+    var pinFinal=pinNovo||(edit&&edit.pin)||INSTRUTOR_PIN;
+    if(!state.cadastroInstrutores) state.cadastroInstrutores=[];
+    var obj={id:editId||("INSTR_"+Date.now()),nome:nome,
+      tipo:(document.getElementById("instr-tipo")||{value:"pm"}).value,
+      grad:(document.getElementById("instr-grad")||{value:""}).value.trim(),
+      telefone:(document.getElementById("instr-tel")||{value:""}).value.trim(),
+      area:(document.getElementById("instr-area")||{value:""}).value.trim(),
+      qualificacao:(document.getElementById("instr-qualif")||{value:""}).value.trim(),
+      obs:(document.getElementById("instr-obs")||{value:""}).value.trim(),
+      pin:pinFinal, assinatura:_assinInstr||(edit&&edit.assinatura)||"",
+      criadoEm:edit?edit.criadoEm:new Date().toISOString()};
+    if(editId){var idx=state.cadastroInstrutores.findIndex(function(x){return x.id===editId;});if(idx>=0)state.cadastroInstrutores[idx]=obj;else state.cadastroInstrutores.push(obj);}
+    else state.cadastroInstrutores.push(obj);
+    localStorage.setItem("bcs_instrutores_cad",JSON.stringify(state.cadastroInstrutores));
+    salvarLocal(); document.getElementById("modal-cad-instr").remove(); showToast("✓ Instrutor salvo!");
+    var m=document.getElementById("main")||document.getElementById("main-content");
+    if(m) renderProjetosSociais(m);
+  };
+}
+
+function _gerarTermoVoluntario(instrId){
+  var instr=(state.cadastroInstrutores||[]).find(function(x){return x.id===instrId;});
+  if(!instr){showToast("Instrutor não encontrado","error");return;}
+  var dt=new Date().toLocaleDateString("pt-BR",{day:"2-digit",month:"long",year:"numeric"});
+  var h="<!DOCTYPE html><html><head><meta charset='UTF-8'><title>Termo de Voluntariado</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:Arial,sans-serif;font-size:12px;color:#111;padding:30px;line-height:1.8}.header{text-align:center;border-bottom:2px solid #1a3a6a;padding-bottom:12px;margin-bottom:20px}.titulo{font-size:16px;font-weight:900;text-transform:uppercase;color:#1a3a6a;margin:10px 0}.assin-grid{display:grid;grid-template-columns:1fr 1fr;gap:30px;margin-top:30px}.assin-bloco{text-align:center;border-top:1px solid #333;padding-top:8px}@media print{body{padding:10px}@page{size:A4;margin:1.5cm}}</style></head><body>";
+  h+="<div class='header'><p style='font-size:11px;color:#555'>Polícia Militar da Bahia — 77ª CIPM</p><p class='titulo'>Termo de Adesão de Voluntário</p><p style='font-size:11px;color:#555'>Base Comunitária de Segurança Nova Cidade · Vitória da Conquista / BA</p></div>";
+  h+="<p>Eu, <strong>"+esc(instr.nome)+"</strong>"+(instr.qualificacao?", "+esc(instr.qualificacao):"")+" declaro, para os devidos fins, que presto serviços voluntários à 77ª CIPM BCS, na qualidade de instrutor(a) voluntário(a), sem vínculo empregatício ou remuneração, conforme a Lei Federal nº 9.608/1998.</p>";
+  h+="<p style='margin-top:10px'><strong>Área de Atuação:</strong> "+esc(instr.area||"—")+"</p>";
+  h+="<p><strong>Telefone:</strong> "+esc(instr.telefone||"—")+"</p>";
+  if(instr.obs) h+="<p><strong>Observações:</strong> "+esc(instr.obs)+"</p>";
+  h+="<p style='margin-top:14px'>Declaro estar ciente de que minha participação é voluntária e espontânea, podendo ser encerrada a qualquer momento mediante comunicação prévia.</p>";
+  h+="<p style='margin-top:10px'>Vitória da Conquista, "+dt+".</p>";
+  h+="<div class='assin-grid'><div class='assin-bloco'>"+(instr.assinatura?"<img src='"+instr.assinatura+"' style='max-width:200px;max-height:65px;object-fit:contain;margin-bottom:6px;display:block;margin-left:auto;margin-right:auto'>":"<div style='height:55px'></div>")+"<p style='font-weight:700;font-size:11px'>"+esc(instr.nome)+"</p><p style='font-size:10px;color:#555'>Voluntário(a)</p></div>";
+  h+="<div class='assin-bloco'><div style='height:55px'></div><p style='font-weight:700;font-size:11px'>Responsável pela BCS</p><p style='font-size:10px;color:#555'>77ª CIPM — Comandante</p></div></div></body></html>";
+  var w=window.open("","_blank");if(w){w.document.write(h);w.document.close();setTimeout(function(){w.print();},500);}
+}
+
+function _renderInstrutores(main){
+  var cads=state.cadastroInstrutores||[];
+  var _nCP=(state.candidaturas||[]).filter(function(e){return e.status==="pendente";}).length;
+  var h=[];
+  h.push("<div style='max-width:800px;margin:0 auto;padding:16px 20px 40px'>");
+  h.push("<div style='display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap'>");
+  [["monitoramento","📊 Monitoramento"],["cursos","📚 Projetos"],["candidaturas","📋 Candidaturas"+((_nCP>0)?" ("+_nCP+")":"")],["instrutores","👨‍🏫 Instrutores"],["relatorio","📋 Relatório"],["portfolio","🌐 Portfólio"]].forEach(function(t){
+    var k=t[0].split(" ")[0]; var ativo=k==="instrutores";
+    h.push("<button onclick=\"state._psTab='"+k+"';renderProjetosSociais(document.getElementById('main'))\" style='padding:9px 14px;border-radius:8px;font-size:11px;font-weight:700;cursor:pointer;border:"+(ativo?"2px solid #a78bfa":"1px solid #4a2a78")+";background:"+(ativo?"#a78bfa22":"#0e0820")+";color:"+(ativo?"#a78bfa":"#5a4a80")+"'>"+t[1]+"</button>");
+  });
+  h.push("</div>");
+  h.push("<div style='display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;flex-wrap:wrap;gap:8px'>");
+  h.push("<div><h2 style='color:#e0d0ff;font-size:16px;font-weight:800;margin:0'>👨‍🏫 Instrutores Cadastrados</h2>");
+  h.push("<p style='color:#7060a0;font-size:12px;margin:2px 0 0'>"+cads.length+" cadastrado(s)</p></div>");
+  h.push("<button onclick='abrirCadastroInstrutor(null)' style='background:linear-gradient(135deg,#6a2a9a,#4a1a7a);border:none;color:#e8d0ff;padding:9px 18px;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer'>+ Cadastrar</button>");
+  h.push("</div>");
+  if(!cads.length){
+    h.push("<div style='text-align:center;padding:50px;color:#4a3a6a'><div style='font-size:40px;margin-bottom:12px'>👨‍🏫</div><p>Nenhum instrutor cadastrado ainda.</p><p style='font-size:11px;margin-top:8px'>Cadastre PMs e voluntários que atuam nos projetos.</p></div>");
+  } else {
+    h.push("<div style='display:flex;flex-direction:column;gap:10px'>");
+    cads.forEach(function(instr){
+      h.push("<div style='background:#130d24;border:1px solid #2a1a4a;border-left:4px solid "+(instr.tipo==="voluntario"?"#22c55e":"#a78bfa")+";border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap'>");
+      h.push("<span style='font-size:26px'>"+(instr.tipo==="voluntario"?"🤝":"👮")+"</span>");
+      h.push("<div style='flex:1;min-width:0'>");
+      h.push("<p style='color:#e0d0ff;font-size:14px;font-weight:700;margin:0'>"+(instr.grad?esc(instr.grad)+" ":"")+esc(instr.nome)+(instr.tipo==="voluntario"?" <span style=\"background:#22c55e22;color:#22c55e;padding:1px 7px;border-radius:5px;font-size:10px;font-weight:700\">Voluntário</span>":"")+"</p>");
+      h.push("<p style='color:#7060a0;font-size:11px;margin:2px 0 0'>"+esc(instr.area||"—")+(instr.qualificacao?" · "+esc(instr.qualificacao):"")+"</p>");
+      if(instr.telefone) h.push("<p style='color:#5a4a80;font-size:10px;margin:1px 0 0'>📱 "+esc(instr.telefone)+"</p>");
+      h.push("</div>");
+      if(instr.assinatura) h.push("<img src='"+instr.assinatura+"' style='height:36px;width:90px;object-fit:contain;border:1px solid #2a1a4a;border-radius:4px;background:#fff;flex-shrink:0'/>");
+      h.push("<div style='display:flex;gap:6px;flex-shrink:0'>");
+      h.push("<button onclick='abrirCadastroInstrutor(\""+instr.id+"\")' style='background:#1a0a28;border:1px solid #3a1a58;color:#a78bfa;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer'>✏ Editar</button>");
+      if(instr.tipo==="voluntario") h.push("<button onclick='_gerarTermoVoluntario(\""+instr.id+"\")' style='background:#0a2a1a;border:1px solid #22c55e44;color:#22c55e;padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer'>📄 Termo</button>");
+      h.push("</div></div>");
+    });
+    h.push("</div>");
+  }
+  h.push("</div>");
+  main.innerHTML=h.join("");
+}
+
 function renderProjetosSociais(main){
   if(!state._psTab) state._psTab="cursos";
   // ── roteamento por sub-aba ──
@@ -8074,6 +8218,10 @@ function renderProjetosSociais(main){
   }
   if(state._psTab==="candidaturas"){
     _renderCandidaturas(main);
+    return;
+  }
+  if(state._psTab==="instrutores"){
+    _renderInstrutores(main);
     return;
   }
   if(state._psTab==="relatorio"){
@@ -12186,50 +12334,79 @@ function fazerLoginConselho(){
 
 function fazerLoginInstrutor(){
   var overlay=document.createElement("div");
-  overlay.style.cssText="position:fixed;inset:0;background:#000a;z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px";
-  // Montar opções de instrutores existentes (campo instrutor nos cursos comunitários)
-  var nomes=[];
-  (state.projetosSociais||[]).forEach(function(c){ if(c.instrutor&&nomes.indexOf(c.instrutor)<0) nomes.push(c.instrutor); });
-  var nomeBtns=nomes.map(function(n){
-    return "<button onclick=\"document.getElementById('instrutor-nome').value='"+n.replace(/'/g,"&#39;")+"'\" style='background:#36221a;border:1px solid #6a3a9a;color:#c89ae8;padding:5px 12px;border-radius:6px;font-size:12px;cursor:pointer;margin:3px'>"+n+"</button>";
+  overlay.id="modal-login-instr";
+  overlay.style.cssText="position:fixed;inset:0;background:#000a;z-index:9999;display:flex;align-items:flex-start;justify-content:center;padding:20px;overflow-y:auto";
+
+  var cads=state.cadastroInstrutores||[];
+  // Nomes dos projetos não cadastrados (acesso rápido legado)
+  var nomesProj=[];
+  (state.projetosSociais||[]).forEach(function(c){
+    if(c.instrutor&&!cads.find(function(x){return x.nome.toLowerCase()===c.instrutor.toLowerCase();}))
+      if(nomesProj.indexOf(c.instrutor)<0) nomesProj.push(c.instrutor);
+  });
+
+  var btnsCad=cads.map(function(instr,i){
+    return "<button onclick='_selInstr("+i+")' style='display:flex;align-items:center;gap:10px;width:100%;background:#1a0a28;border:1px solid #3a1a58;border-radius:8px;padding:10px 12px;cursor:pointer;text-align:left;margin-bottom:6px'>"
+      +"<span style='font-size:18px'>"+(instr.tipo==="voluntario"?"🤝":"👮")+"</span>"
+      +"<div style='flex:1;min-width:0'>"
+      +"<p style='color:#e0d0ff;font-size:13px;font-weight:700;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap'>"+(instr.grad?esc(instr.grad)+" ":"")+esc(instr.nome)+"</p>"
+      +"<p style='color:#5a4a80;font-size:10px;margin:1px 0 0'>"+esc(instr.area||"")+"</p>"
+      +"</div></button>";
   }).join("");
+
   overlay.innerHTML=
-    "<div style='background:#1a0a28;border:2px solid #8a4aba;border-radius:14px;padding:28px 24px;width:340px;max-width:100%;text-align:center'>"
-    +"<div style='font-size:36px;margin-bottom:10px'>👨‍🏫</div>"
-    +"<h3 style='color:#c89ae8;font-size:15px;font-weight:700;margin:0 0 4px'>Portal do Instrutor</h3>"
-    +"<p style='color:#8a5ab8;font-size:11px;margin:0 0 20px'>77ª CIPM — BCS</p>"
-    +(nomes.length?"<p style='color:#6a4a88;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 6px'>Selecione seu nome</p><div style='margin-bottom:12px'>"+nomeBtns+"</div>":"")
-    +"<p style='color:#6a4a88;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 5px'>"+(nomes.length?"Ou digite":"Seu nome")+"</p>"
-    +"<input id='instrutor-nome' type='text' placeholder='Nome completo' style='width:100%;background:#2a1040;border:1px solid #6a3a9a;color:#e8d0ff;padding:10px;border-radius:8px;font-size:13px;text-align:center;box-sizing:border-box;margin-bottom:12px'/>"
+    "<div style='background:#1a0a28;border:2px solid #8a4aba;border-radius:14px;padding:24px;width:100%;max-width:380px;margin:auto'>"
+    +"<div style='text-align:center;margin-bottom:18px'><div style='font-size:38px;margin-bottom:8px'>👨‍🏫</div>"
+    +"<h3 style='color:#c89ae8;font-size:16px;font-weight:800;margin:0 0 3px'>Portal do Instrutor</h3>"
+    +"<p style='color:#5a4a80;font-size:11px;margin:0'>77ª CIPM BCS · Nova Cidade</p></div>"
+    +(cads.length?"<p style='color:#6a4a88;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 8px'>Selecione seu perfil</p>"+btnsCad:"")
+    +(nomesProj.length?"<p style='color:#4a3a68;font-size:10px;font-weight:700;text-transform:uppercase;margin:8px 0 6px'>Acesso rápido</p>"
+      +"<div style='display:flex;flex-wrap:wrap;gap:4px;margin-bottom:12px'>"
+      +nomesProj.map(function(n){return "<button onclick=\"document.getElementById('instr-n').value='"+n.replace(/'/g,"&#39;")+"';document.getElementById('instr-p').focus()\" style='background:#1a0a28;border:1px solid #2a1a48;color:#a78bfa;padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer'>"+esc(n)+"</button>";}).join("")
+      +"</div>":"")
+    +"<p style='color:#6a4a88;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 5px'>Nome</p>"
+    +"<input id='instr-n' type='text' placeholder='Nome completo' style='width:100%;background:#2a1040;border:1px solid #6a3a9a;color:#e8d0ff;padding:10px;border-radius:8px;font-size:13px;text-align:center;box-sizing:border-box;margin-bottom:10px'/>"
     +"<p style='color:#6a4a88;font-size:10px;font-weight:700;text-transform:uppercase;margin:0 0 5px'>PIN</p>"
-    +"<input id='instrutor-pin' type='password' maxlength='8' placeholder='••••••' style='width:100%;background:#2a1040;border:1px solid #6a3a9a;color:#e8d0ff;padding:10px;border-radius:8px;font-size:20px;text-align:center;letter-spacing:8px;box-sizing:border-box;margin-bottom:8px'/>"
-    +"<p id='instrutor-pin-err' style='color:#ef4444;font-size:12px;display:none;margin:0 0 10px'>PIN ou nome inválido</p>"
-    +"<div style='display:flex;gap:8px;margin-top:6px'>"
-    +"<button onclick='this.closest(\"[style*=inset]\").remove()' style='flex:1;background:#2a1040;border:1px solid #4a2a68;color:#8a5ab8;padding:10px;border-radius:8px;font-size:13px;cursor:pointer'>Cancelar</button>"
+    +"<input id='instr-p' type='password' maxlength='8' placeholder='••••••' style='width:100%;background:#2a1040;border:1px solid #6a3a9a;color:#e8d0ff;padding:10px;border-radius:8px;font-size:20px;text-align:center;letter-spacing:8px;box-sizing:border-box;margin-bottom:8px'/>"
+    +"<p id='instr-err' style='color:#ef4444;font-size:12px;display:none;margin:0 0 10px'></p>"
+    +"<div style='display:flex;gap:8px;margin-top:4px'>"
+    +"<button onclick=\"document.getElementById('modal-login-instr').remove()\" style='flex:1;background:#2a1040;border:1px solid #4a2a68;color:#8a5ab8;padding:10px;border-radius:8px;font-size:13px;cursor:pointer'>Cancelar</button>"
     +"<button id='btn-entrar-instr' style='flex:2;background:linear-gradient(135deg,#6a2a9a,#4a1a7a);border:none;color:#e8d0ff;padding:10px;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer'>Entrar →</button>"
     +"</div></div>";
+
   document.body.appendChild(overlay);
-  setTimeout(function(){ var i=document.getElementById("instrutor-nome"); if(i&&!i.value) i.focus(); },100);
+  setTimeout(function(){ var i=document.getElementById("instr-n"); if(i&&!i.value) i.focus(); },100);
+
+  window._selInstr=function(idx){
+    var instr=(state.cadastroInstrutores||[])[idx];
+    if(!instr) return;
+    document.getElementById("instr-n").value=instr.nome;
+    document.getElementById("instr-p").focus();
+  };
+
   function _tentarEntrar(){
-    var nome=(document.getElementById("instrutor-nome")||{value:""}).value.trim();
-    var pin=(document.getElementById("instrutor-pin")||{value:""}).value.trim();
-    if(!nome||pin!==INSTRUTOR_PIN){
-      var err=document.getElementById("instrutor-pin-err");
-      if(err){ err.textContent=!nome?"Informe seu nome":"PIN incorreto"; err.style.display="block"; }
-      return;
-    }
+    var nome=(document.getElementById("instr-n")||{value:""}).value.trim();
+    var pin=(document.getElementById("instr-p")||{value:""}).value.trim();
+    var err=document.getElementById("instr-err");
+    if(!nome){ if(err){err.textContent="Informe seu nome";err.style.display="block";} return; }
+    var instrCad=(state.cadastroInstrutores||[]).find(function(x){return x.nome.toLowerCase()===nome.toLowerCase();});
+    var pinOk=instrCad?(pin===instrCad.pin):(pin===INSTRUTOR_PIN);
+    if(!pinOk){ if(err){err.textContent="PIN incorreto";err.style.display="block";} return; }
     overlay.remove();
     state.perfil="instrutor";
-    state.instrutorNome=nome;
+    state.instrutorNome=instrCad?instrCad.nome:nome;
+    state._instrCad=instrCad||null;
     render();
   }
   document.getElementById("btn-entrar-instr").onclick=_tentarEntrar;
-  document.getElementById("instrutor-pin").onkeydown=function(e){ if(e.key==="Enter") _tentarEntrar(); };
+  document.getElementById("instr-p").onkeydown=function(e){ if(e.key==="Enter") _tentarEntrar(); };
 }
 
 // ── Portal do Instrutor — layout próprio ─────────────────────────────────────
 function renderPortalInstrutor(app){
   var nome=state.instrutorNome||"Instrutor";
+  var cad=state._instrCad||(state.cadastroInstrutores||[]).find(function(x){return x.nome.toLowerCase()===nome.toLowerCase();})||null;
+  var nomeExibir=cad?(cad.grad?cad.grad+" "+cad.nome:cad.nome):nome;
   var meusProjetos=(state.projetosSociais||[]).filter(function(c){
     return c.instrutor&&c.instrutor.toLowerCase()===nome.toLowerCase();
   });
@@ -12239,8 +12416,8 @@ function renderPortalInstrutor(app){
   h.push("<div style='min-height:100vh;background:#0f0608;color:#f5ede0;font-family:Segoe UI,system-ui,sans-serif'>");
   h.push("<div style='background:linear-gradient(135deg,#1a0a28,#2a1040);border-bottom:2px solid #6a3a9a44;padding:14px 20px;display:flex;align-items:center;justify-content:space-between'>");
   h.push("<div style='display:flex;align-items:center;gap:12px'>");
-  h.push("<div style='width:40px;height:40px;background:#2a1040;border:2px solid #8a4aba;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px'>👨‍🏫</div>");
-  h.push("<div><p style='color:#c89ae8;font-size:13px;font-weight:700;margin:0'>"+esc(nome)+"</p><p style='color:#6a4a88;font-size:10px;margin:0;letter-spacing:1px;text-transform:uppercase'>Instrutor · 77ª CIPM BCS</p></div>");
+  h.push("<div style='width:40px;height:40px;background:#2a1040;border:2px solid #8a4aba;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px'>"+(cad&&cad.tipo==="voluntario"?"🤝":"👨‍🏫")+"</div>");
+  h.push("<div><p style='color:#c89ae8;font-size:14px;font-weight:700;margin:0'>"+esc(nomeExibir)+"</p><p style='color:#6a4a88;font-size:10px;margin:1px 0 0;letter-spacing:.5px;text-transform:uppercase'>"+(cad&&cad.area?esc(cad.area)+" · ":"")+(cad&&cad.tipo==="voluntario"?"Voluntário":"Instrutor")+" · 77ª CIPM BCS</p></div>");
   h.push("</div>");
   h.push("<button onclick=\"state.perfil=null;state.instrutorNome='';render()\" style='background:transparent;border:1px solid #4a2a68;color:#8a5ab8;padding:7px 14px;border-radius:7px;font-size:12px;cursor:pointer'>⏏ Sair</button>");
   h.push("</div>");
