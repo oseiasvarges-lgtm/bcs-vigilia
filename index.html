@@ -8341,12 +8341,18 @@ function _computarRelatorio(mes, ano, periodo){
   (state.projetosSociais||[]).filter(function(p){ return p.status==="Ativo"; })
     .forEach(function(p){ inscritos += _getAlunosProjeto(p.id).length; });
 
-  // 7. REGRA VCM: toda ocorrência VD/VCM/Maria da Penha = +1 Visita Solidária
-  //    (mesmo atendimento por telefone é acompanhamento ativo)
+  // 7. Visitas Solidárias — VCM/VD + ocorrências classificadas + atendimentos tipo VS
   var visitasSol = ocsDoMes.filter(function(o){
+    var tp=(o.tipo||"").toLowerCase();
+    var cl=(o.classificacao||"").toLowerCase();
     return o.violencia_domestica ||
-           /maria da penha|violên?cia dom[eé]stica|vcm|violên?cia contra a mulher/i.test(o.tipo||"") ||
-           /acompanhamento vcm|visita solid/i.test(o.classificacao||"");
+           /maria da penha|violên?cia dom[eé]stica|vcm|violên?cia contra a mulher/i.test(tp) ||
+           /acompanhamento vcm|visita solid/i.test(cl) ||
+           /visita solid/i.test(tp); // ocorrência com tipo = "Visita Solidária"
+  }).length;
+  // + Atendimentos com tipo "Visita Solidária" (lançados manualmente)
+  visitasSol += (state.db.atendimentos||[]).filter(function(a){
+    return noMes(a.data) && /visita solid/i.test(a.tipo||"");
   }).length;
 
   // 8. COMPLEMENTOS MANUAIS — soma os lançamentos das auxiliares
@@ -8377,6 +8383,13 @@ var MESES_PT = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
 function _renderRelatorioMensal(main){
   var agora = new Date();
   if(!state._relTipo) state._relTipo="mes";
+  // Restaurar ajustes manuais salvos do localStorage (se ainda não em memória)
+  try{
+    var _rmSalvo = JSON.parse(localStorage.getItem("bcs_rel_ajustes")||"{}");
+    Object.keys(_rmSalvo).forEach(function(k){
+      if(state[k]==null) state[k]=_rmSalvo[k];
+    });
+  }catch(e){}
   var mes  = state._relMes  || (agora.getMonth()+1);
   var ano  = state._relAno  || agora.getFullYear();
   var sem  = state._relSem  || (mes<=6?1:2);
@@ -8463,7 +8476,7 @@ function _renderRelatorioMensal(main){
     h.push("<p style='color:#4a3a6a;font-size:9px;margin:0 0 8px;line-height:1.4'>"+ind.fonte+"</p>");
     // Campo de ajuste manual
     h.push("<input type='number' min='0' value='"+(ajustado?+state[manualKey]:"")+"' placeholder='Ajuste manual...' ");
-    h.push("oninput=\"state['"+manualKey+"']=this.value||null;_renderRelatorioMensal(document.getElementById('main'))\" ");
+    h.push("oninput=\"state['"+manualKey+"']=this.value||null;try{var _rm={};['visitasSol','visitasCom','reunioes','acoes','projAtivos','beneficiados','inscritos'].forEach(function(k){if(state['_relMan_'+k]!=null)_rm['_relMan_'+k]=state['_relMan_'+k];});localStorage.setItem('bcs_rel_ajustes',JSON.stringify(_rm));}catch(e){}; _renderRelatorioMensal(document.getElementById('main'))\" ");
     h.push("style='width:100%;background:#1a0a28;border:1px solid #2a1a4a;color:#e0d0ff;padding:5px 8px;border-radius:5px;font-size:11px;outline:none'/>");
     h.push("</div>");
   });
@@ -8504,7 +8517,7 @@ function _renderRelatorioMensal(main){
 
   // Guarda o texto para as funções de copiar/imprimir
   window._relTextoAtual = textoRelatorio;
-  window._relMesNomeAtual = mesNome;
+  window._relMesNomeAtual = perNome;
 }
 
 function _copiarRelatorio(){
