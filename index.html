@@ -8271,6 +8271,7 @@ function _computarRelatorio(mes, ano, periodo){
   var agds = state.db.agendamentos || [];
   var visitas = state.db.visitas || [];
   var comps = state.ocComplementos || [];
+  console.log("[BCS] _computarRelatorio mes=",mes,"ano=",ano,"periodo=",JSON.stringify(periodo),"comps.length=",comps.length,"comps=",JSON.stringify(comps));
   var per = periodo || {tipo:"mes", mes:mes, ano:ano};
   // Mapa de ocorrências para recuperar datas de complementos com mes inválido
   var _ocsMap = {};
@@ -8364,8 +8365,14 @@ function _computarRelatorio(mes, ano, periodo){
   }).length;
 
   // 8. COMPLEMENTOS MANUAIS — soma os lançamentos das auxiliares
+  console.log("[BCS] Complementos total:",comps.length,"per:",JSON.stringify(per));
+  comps.forEach(function(c,i){
+    var _m=_normMesComp(c,_ocsMap);
+    var _ok=noPeriodo(_m+"-01");
+    console.log("[BCS] comp["+i+"] ocId:",c.ocId,"mes_orig:",c.mes,"mes_norm:",_m,"noPeriodo:",_ok,"vsol:",c.visitasSol);
+  });
   var compsDoMes = comps.filter(function(c){
-    var _m = _normMesComp(c, _ocsMap); // normaliza mesmo se mes estava malformado
+    var _m = _normMesComp(c, _ocsMap);
     return noPeriodo(_m+"-01");
   });
   compsDoMes.forEach(function(c){
