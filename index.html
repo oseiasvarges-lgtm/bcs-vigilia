@@ -5460,15 +5460,21 @@ function renderDashComandante(main){
         "</div></div>"+
         "<div id='rel-mensal-output'><p style='color:#5e4636;font-size:12px;text-align:center;padding:20px 0'>Selecione o mês e clique em Gerar Análise.</p></div>";
 
-      // Restaurar relatório salvo se existir para o mês selecionado
+      // Restaurar último relatório salvo (independente do mês — sempre mostra se existe)
       try{
-        var _rMesSalvo  = localStorage.getItem("bcs_rel_mensal_mes")||"";
         var _rTextoSalvo= localStorage.getItem("bcs_rel_mensal_texto")||"";
         var _rNomeSalvo = localStorage.getItem("bcs_rel_mensal_nomemes")||"";
         var _rHoraSalva = localStorage.getItem("bcs_rel_mensal_hora")||"";
-        if(_rTextoSalvo && _rMesSalvo === (state._relMes||mesAtualISO)){
+        var _rMesSalvo  = localStorage.getItem("bcs_rel_mensal_mes")||"";
+        if(_rTextoSalvo){
           state._relMensalTexto   = _rTextoSalvo;
           state._relMensalNomeMes = _rNomeSalvo;
+          // Ajustar select para o mês do relatório salvo
+          if(_rMesSalvo){
+            state._relMes = _rMesSalvo;
+            var _selR = document.getElementById("sel-rel-mes");
+            if(_selR){ var _optR=_selR.querySelector("option[value='"+_rMesSalvo+"']"); if(_optR) _selR.value=_rMesSalvo; }
+          }
           var _outR = document.getElementById("rel-mensal-output");
           if(_outR){
             var _htmlR = _rTextoSalvo
@@ -5483,8 +5489,11 @@ function renderDashComandante(main){
             _outR.innerHTML =
               "<div style='border-top:2px solid #d4a87a;padding-top:16px'>"+
               "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px'>"+
-              "<p style='color:#d4a87a;font-size:11px;font-weight:700;text-transform:uppercase;margin:0'>Análise gerada às "+_rHoraSalva+" · 💾 Restaurada</p>"+
+              "<p style='color:#d4a87a;font-size:11px;font-weight:700;text-transform:uppercase;margin:0'>"+(_rNomeSalvo||"Relatório")+(_rHoraSalva?" · "+_rHoraSalva:"")+(_rMesSalvo&&_rMesSalvo!==mesAtualISO?" · ⚠ mês anterior":"")+"</p>"+
+              "<div style='display:flex;gap:8px'>"+
+              "<button onclick='localStorage.removeItem(\"bcs_rel_mensal_texto\");state._relMensalTexto=null;document.getElementById(\"rel-mensal-output\").innerHTML=\"<p style=\\\"color:#5e4636;font-size:12px;text-align:center;padding:20px 0\\\">Selecione o mês e clique em Gerar Análise.</p>\"' style='background:#301c16;border:1px solid #5a2a1a;color:#d06040;padding:6px 10px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer'>🗑 Limpar</button>"+
               "<button onclick='exportarRelatorioMensalPDF()' style='background:#1a1a2a;border:1px solid #3a3a6a;color:#6a9adf;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>📄 Exportar PDF</button>"+
+              "</div>"+
               "</div>"+
               "<div style='line-height:1.8;font-size:12px;color:#c8b07a'>"+_htmlR+"</div>"+
               "</div>";
@@ -5627,7 +5636,8 @@ async function gerarRelatorioMensalIA(){
       localStorage.setItem("bcs_rel_mensal_nomemes", nomeMes);
       localStorage.setItem("bcs_rel_mensal_mes",    mesISO);
       localStorage.setItem("bcs_rel_mensal_hora",   new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));
-    }catch(e2){}
+      console.log("[BCS] Relatório mensal salvo no localStorage ("+Math.round(texto.length/1024*10)/10+" KB)");
+    }catch(e2){ console.warn("[BCS] Falha ao salvar relatório mensal no localStorage:",e2); }
 
     // Renderizar
     var htmlTexto = texto
