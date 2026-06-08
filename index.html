@@ -8247,12 +8247,34 @@ function _sincCandidaturasSheets(){
 //  RELATÓRIO MENSAL — 6 indicadores automáticos
 // ══════════════════════════════════════════════════════════════════
 // periodo: {tipo:"mes",mes,ano} | {tipo:"semestre",sem,ano} | {tipo:"ano",ano}
+function _normMesComp(c, ocsMap){
+  // Retorna "YYYY-MM" a partir de c.mes (que pode estar malformado) ou da data da ocorrência
+  var s = String(c.mes||"").trim();
+  // Formato correto YYYY-MM
+  if(/^\d{4}-\d{2}$/.test(s)) return s;
+  // DD/MM/YYYY completo
+  if(/^\d{2}\/\d{2}\/\d{4}$/.test(s)){ var p=s.split("/"); return p[2]+"-"+p[1]; }
+  // Qualquer outro formato quebrado → usar data da ocorrência vinculada
+  if(c.ocId && ocsMap){
+    var oc = ocsMap[c.ocId];
+    if(oc && oc.data){
+      var d = String(oc.data).trim();
+      if(/^\d{2}\/\d{2}\/\d{4}$/.test(d)){ var p2=d.split("/"); return p2[2]+"-"+p2[1]; }
+      if(/^\d{4}-\d{2}/.test(d)) return d.slice(0,7);
+    }
+  }
+  return s;
+}
+
 function _computarRelatorio(mes, ano, periodo){
   var ocs = state.db.ocorrencias || [];
   var agds = state.db.agendamentos || [];
   var visitas = state.db.visitas || [];
   var comps = state.ocComplementos || [];
   var per = periodo || {tipo:"mes", mes:mes, ano:ano};
+  // Mapa de ocorrências para recuperar datas de complementos com mes inválido
+  var _ocsMap = {};
+  ocs.forEach(function(o){ if(o.id) _ocsMap[o.id]=o; });
 
   function noPeriodo(dataStr){
     if(!dataStr) return false;
@@ -8342,7 +8364,10 @@ function _computarRelatorio(mes, ano, periodo){
   }).length;
 
   // 8. COMPLEMENTOS MANUAIS — soma os lançamentos das auxiliares
-  var compsDoMes = comps.filter(function(c){ return noPeriodo(c.mes+"-01"); });
+  var compsDoMes = comps.filter(function(c){
+    var _m = _normMesComp(c, _ocsMap); // normaliza mesmo se mes estava malformado
+    return noPeriodo(_m+"-01");
+  });
   compsDoMes.forEach(function(c){
     visitasSol  += (c.visitasSol||0);
     visitasCom  += (c.visitasCom||0);
