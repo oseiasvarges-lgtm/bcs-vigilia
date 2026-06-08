@@ -5439,7 +5439,11 @@ function renderDashComandante(main){
       var sec = document.getElementById("sec-relatorio-mensal");
       if(!sec) return;
       var mesAtualISO = hojeDate.getFullYear()+"-"+String(hojeDate.getMonth()+1).padStart(2,"0");
-      if(!state._relMes) state._relMes = mesAtualISO;
+      if(!state._relMes){
+        // Restaurar mês salvo do localStorage (se houver)
+        var _relMesSalvo = localStorage.getItem("bcs_rel_mensal_mes");
+        state._relMes = _relMesSalvo || mesAtualISO;
+      }
       var opsMes="";
       for(var mi=0;mi<12;mi++){
         var dm2=new Date(hojeDate.getFullYear(),hojeDate.getMonth()-mi,1);
@@ -5455,6 +5459,38 @@ function renderDashComandante(main){
         "<button onclick='gerarRelatorioMensalIA()' style='background:linear-gradient(135deg,#5a3a9a,#3a2a7a);border:none;color:#d4b8ff;padding:7px 16px;border-radius:7px;font-size:11px;font-weight:700;cursor:pointer'>⚡ Gerar Análise</button>"+
         "</div></div>"+
         "<div id='rel-mensal-output'><p style='color:#5e4636;font-size:12px;text-align:center;padding:20px 0'>Selecione o mês e clique em Gerar Análise.</p></div>";
+
+      // Restaurar relatório salvo se existir para o mês selecionado
+      try{
+        var _rMesSalvo  = localStorage.getItem("bcs_rel_mensal_mes")||"";
+        var _rTextoSalvo= localStorage.getItem("bcs_rel_mensal_texto")||"";
+        var _rNomeSalvo = localStorage.getItem("bcs_rel_mensal_nomemes")||"";
+        var _rHoraSalva = localStorage.getItem("bcs_rel_mensal_hora")||"";
+        if(_rTextoSalvo && _rMesSalvo === (state._relMes||mesAtualISO)){
+          state._relMensalTexto   = _rTextoSalvo;
+          state._relMensalNomeMes = _rNomeSalvo;
+          var _outR = document.getElementById("rel-mensal-output");
+          if(_outR){
+            var _htmlR = _rTextoSalvo
+              .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+              .replace(/^(#{1,3})\s+(.+)$/gm, function(_,h,t){ var s=h.length; return "<h"+(s+2)+" style='color:#d4a87a;font-size:"+(s===1?"15px":s===2?"13px":"12px")+";font-weight:700;margin:"+(s===1?"18px 0 8px":"12px 0 5px")+"'>"+t+"</h"+(s+2)+">"; })
+              .replace(/^\d+\.\s+\*\*(.+?)\*\*(.*)$/gm,"<p style='margin:6px 0'><strong style='color:#f5ede0'>$1</strong>$2</p>")
+              .replace(/\*\*(.+?)\*\*/g,"<strong style='color:#f5ede0'>$1</strong>")
+              .replace(/^[-•]\s+(.+)$/gm,"<li style='color:#c8b07a;font-size:12px;margin:3px 0'>$1</li>")
+              .replace(/(<li[^>]*>.*<\/li>\n?)+/g,"<ul style='padding-left:18px;margin:6px 0'>$&</ul>")
+              .replace(/\n\n/g,"</p><p style='color:#c8b07a;font-size:12px;line-height:1.8;margin:6px 0'>")
+              .replace(/\n/g,"<br>");
+            _outR.innerHTML =
+              "<div style='border-top:2px solid #d4a87a;padding-top:16px'>"+
+              "<div style='display:flex;justify-content:space-between;align-items:center;margin-bottom:14px'>"+
+              "<p style='color:#d4a87a;font-size:11px;font-weight:700;text-transform:uppercase;margin:0'>Análise gerada às "+_rHoraSalva+" · 💾 Restaurada</p>"+
+              "<button onclick='exportarRelatorioMensalPDF()' style='background:#1a1a2a;border:1px solid #3a3a6a;color:#6a9adf;padding:6px 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer'>📄 Exportar PDF</button>"+
+              "</div>"+
+              "<div style='line-height:1.8;font-size:12px;color:#c8b07a'>"+_htmlR+"</div>"+
+              "</div>";
+          }
+        }
+      }catch(e3){}
     }, 120);
   }
 }
@@ -5583,9 +5619,15 @@ async function gerarRelatorioMensalIA(){
     if(rj.error){ throw new Error(rj.error.message||"Erro na API"); }
     var texto = (rj.content||[]).map(function(c){return c.text||"";}).join("\n");
 
-    // Salvar no state para PDF
+    // Salvar no state e localStorage para PDF e restauração de tela
     state._relMensalTexto  = texto;
     state._relMensalNomeMes = nomeMes;
+    try{
+      localStorage.setItem("bcs_rel_mensal_texto",  texto);
+      localStorage.setItem("bcs_rel_mensal_nomemes", nomeMes);
+      localStorage.setItem("bcs_rel_mensal_mes",    mesISO);
+      localStorage.setItem("bcs_rel_mensal_hora",   new Date().toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit"}));
+    }catch(e2){}
 
     // Renderizar
     var htmlTexto = texto
